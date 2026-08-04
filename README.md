@@ -3,9 +3,21 @@
 Search Gmail, Slack and the web from one place, and send replies only after an
 explicit confirmation step.
 
-> **Status:** auth foundation. Clerk (identity) and Convex (backend + database)
-> are wired end to end. The provider adapters, the safe-send gate and the REST
+> **Status:** auth foundation plus the front end. Clerk (identity) and Convex
+> (backend + database) are wired end to end, and the unified-inbox UI is built
+> against local mock data. The provider adapters, the safe-send gate and the REST
 > API are not built yet.
+
+## Routes
+
+| Route      | What it is                                                        |
+| ---------- | ----------------------------------------------------------------- |
+| `/`        | The unified inbox. **UI only** — driven by local mock data.        |
+| `/sign-in` | The Clerk sign-in form and the Convex auth-status check.          |
+
+Each lives in its own route group with its own root layout
+(`app/(inbox)/layout.tsx`, `app/(auth)/layout.tsx`), so the inbox shell renders
+without the Clerk and Convex providers.
 
 ## Stack
 
@@ -83,10 +95,49 @@ pnpm dev                       # in a second terminal
 
 ## Verifying auth works
 
-Sign in on `/`. The **Auth status** panel calls the `users.viewer` Convex query
+Sign in on `/sign-in`. The **Auth status** panel calls the `users.viewer` Convex query
 and shows the Clerk user id resolved *by Convex*, not by the browser. If it
 reports "authenticated in Clerk but Convex saw no identity", the `aud` claim or
 `CLERK_JWT_ISSUER_DOMAIN` on the Convex deployment is wrong.
+
+## The interface (UI only)
+
+Everything under `app/(inbox)/` is presentation. It holds no network calls: the
+fan-out, the results, the connections and the sends are all local state seeded
+from `app/(inbox)/mock-data.ts`, and every mocked surface is badged as such in
+the UI itself.
+
+It is typed against the published contract rather than against anything
+provider-specific — `app/(inbox)/types.ts` restates the `Result` and `Draft`
+shapes from `convex/core/types.ts` — so wiring it to the real adapters means
+replacing one hook (`useMockSearch`) with the Convex subscription and leaving the
+components alone.
+
+What it demonstrates:
+
+- **The lift.** One search field. Idle, it sits centred with the heading above
+  it; on submit it rises to the top while the heading collapses, and the result
+  list fills in underneath.
+- **Streaming fan-out.** Each mock adapter returns on its own clock (Gmail
+  ~0.6s, Slack ~1.2s, web ~3.6s). Rows are appended in arrival order and never
+  re-sorted under the reader, and the source strip says which adapters are still
+  working.
+- **Honest failure states.** A revoked grant renders as its own
+  needs-reconnect state with a reconnect action; a rate limit renders as a
+  transient failure with a retry. Neither collapses into a generic error.
+- **The confirm gate.** Composing produces a draft; the primary action is
+  *review*, not *send*. Review shows the source, recipient, subject, exact body
+  and idempotency key, and the send button stays disabled until the recipient is
+  acknowledged. After sending, "Retry with the same key" shows the delivery count
+  staying at one.
+- **Search history.** Runs accumulate in the collapsible sidebar, can be
+  re-run, and can be archived or restored (with undo).
+- **Mobile.** Every surface, including the sidebar as a drawer and both dialogs.
+
+Keyboard: `⌘K` focuses the search field, `⌘\` collapses the sidebar, `Esc`
+dismisses a dialog or the mobile drawer.
+
+Screenshots of each state are in [`docs/screenshots/`](docs/screenshots).
 
 ## Not built yet
 

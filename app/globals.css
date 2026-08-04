@@ -3,10 +3,158 @@
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Surfaces, darkest to lightest. Kept as tokens so the whole shell can be
+     re-tinted from one place. */
+  --color-ink-950: #08090a;
+  --color-ink-900: #0c0e10;
+  --color-ink-850: #111316;
+  --color-ink-800: #16191d;
+  --color-line: #1e2227;
+  --color-line-strong: #2c3238;
+
+  /* One accent per source. Used for dots, chips and result rails. */
+  --color-gmail: #f0655a;
+  --color-slack: #a78bfa;
+  --color-web: #38bdf8;
 }
 
 body {
-  background: #000;
+  background: var(--color-ink-950);
   color: #fff;
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The shell owns all scrolling; the page itself never scrolls. */
+html,
+body {
+  overscroll-behavior: none;
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-clip: padding-box;
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-color: var(--color-line-strong);
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* --- Motion -------------------------------------------------------------- */
+
+/* Results land one at a time rather than as a block, so a streaming fan-out
+   reads as streaming. `--delay` is set per row from its index. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise-in {
+  animation: rise-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--delay, 0ms);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fade-in 200ms ease-out both;
+}
+
+/* Dialogs: a short scale-up reads as "this came from the thing I clicked". */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.pop-in {
+  animation: pop-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* The "still working" chip. A travelling highlight, not a spinner, so several
+   in-flight sources do not turn the header into a slot machine. */
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 0.09),
+    transparent
+  );
+  animation: sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 currentColor;
+    opacity: 0.6;
+  }
+  100% {
+    box-shadow: 0 0 0 6px currentColor;
+    opacity: 0;
+  }
+}
+
+.pulse-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  animation: pulse-ring 1.6s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise-in,
+  .fade-in,
+  .pop-in,
+  .sweep::after,
+  .pulse-ring::after {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+  }
 }

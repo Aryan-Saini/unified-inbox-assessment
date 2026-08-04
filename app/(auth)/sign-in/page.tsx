@@ -1,5 +1,5 @@
 import { Show } from "@clerk/nextjs";
-import { LoginForm } from "./LoginForm";
+import { LoginForm } from "../../LoginForm";
 
 export default function Home() {
   return (
