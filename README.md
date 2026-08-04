@@ -132,10 +132,11 @@ What it demonstrates:
   staying at one.
 - **Search history.** Runs accumulate in the collapsible sidebar, can be
   re-run, and can be archived or restored (with undo).
-- **Mobile.** Every surface, including the sidebar as a drawer and both dialogs.
+- **Mobile.** Every surface. Navigation is a full-screen sheet rather than a
+  drawer — picking a search closes it and lands on the results.
 
 Keyboard: `⌘K` focuses the search field, `⌘\` collapses the sidebar, `Esc`
-dismisses a dialog or the mobile drawer.
+dismisses a dialog or the mobile nav sheet.
 
 Screenshots of each state are in [`docs/screenshots/`](docs/screenshots).
 

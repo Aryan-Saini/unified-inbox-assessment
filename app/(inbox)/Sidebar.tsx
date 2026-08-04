@@ -9,6 +9,7 @@ import {
   AlertIcon,
   ArchiveIcon,
   ChevronDownIcon,
+  CloseIcon,
   PanelLeftIcon,
   PlusIcon,
   RerunIcon,
@@ -133,6 +134,8 @@ export function Sidebar({
   onArchiveToggle,
   onOpenSettings,
   needsAttention,
+  sheet = false,
+  onClose,
 }: {
   collapsed: boolean;
   onToggleCollapsed: () => void;
@@ -144,31 +147,54 @@ export function Sidebar({
   onOpenSettings: () => void;
   /** Connections needing a reconnect, surfaced on the settings entry point. */
   needsAttention: number;
+  /**
+   * Full-screen mobile sheet rather than the desktop rail. A phone has no room
+   * for a peek of the content behind, so the sheet takes the whole viewport and
+   * picking a search closes it.
+   */
+  sheet?: boolean;
+  onClose?: () => void;
 }) {
   const [archiveOpen, setArchiveOpen] = useState(false);
+
+  // Collapsing is a desktop-rail concept; the sheet is always full width.
+  const isCollapsed = collapsed && !sheet;
 
   const recent = history.filter((h) => !h.archived);
   const archived = history.filter((h) => h.archived);
 
   return (
     <aside
-      className={`flex h-full flex-col border-r border-line bg-ink-900 transition-[width] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-        collapsed ? "w-[64px]" : "w-[286px]"
+      className={`flex h-full flex-col bg-ink-900 ${
+        sheet
+          ? "w-screen"
+          : `border-r border-line transition-[width] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              isCollapsed ? "w-[64px]" : "w-[286px]"
+            }`
       }`}
     >
-      {/* Brand + collapse */}
+      {/* Brand + collapse (or close, in the sheet) */}
       <div className="flex h-14 shrink-0 items-center gap-2 px-3">
         <Logo className="h-7 w-7 shrink-0 text-white" />
         <span
           className={`min-w-0 flex-1 truncate text-[13px] font-semibold tracking-tight text-white transition-opacity duration-200 ${
-            collapsed ? "pointer-events-none opacity-0" : "opacity-100"
+            isCollapsed ? "pointer-events-none opacity-0" : "opacity-100"
           }`}
         >
           Unified Inbox
         </span>
-        {/* Collapsed, the toggle moves into the icon rail below — keeping a
-            zero-opacity copy here would sit on top of the logo. */}
-        {collapsed ? null : (
+
+        {sheet ? (
+          <button
+            onClick={onClose}
+            aria-label="Close navigation"
+            className="rounded-lg p-2 text-neutral-400 transition-colors hover:bg-white/5 hover:text-white"
+          >
+            <CloseIcon className="h-5 w-5" />
+          </button>
+        ) : /* Collapsed, the toggle moves into the icon rail below — keeping a
+              zero-opacity copy here would sit on top of the logo. */
+        isCollapsed ? null : (
           <button
             onClick={onToggleCollapsed}
             aria-label="Collapse sidebar"
@@ -182,7 +208,7 @@ export function Sidebar({
 
       {/* Primary actions */}
       <div className="shrink-0 space-y-1 px-3 pb-3">
-        {collapsed ? (
+        {isCollapsed ? (
           <>
             <button
               onClick={onToggleCollapsed}
@@ -217,7 +243,7 @@ export function Sidebar({
 
       {/* History */}
       <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3">
-        {collapsed ? null : (
+        {isCollapsed ? null : (
           <>
             <div className="flex items-center justify-between px-2.5 pt-1 pb-1.5">
               <span className="text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
@@ -290,7 +316,7 @@ export function Sidebar({
 
       {/* Footer */}
       <div className="shrink-0 border-t border-line p-3">
-        {collapsed ? null : (
+        {isCollapsed ? null : (
           <div className="mb-2 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-2.5 py-2">
             <p className="text-[11px] leading-relaxed text-amber-200/80">
               <span className="font-semibold text-amber-300">UI only.</span> All
@@ -303,7 +329,7 @@ export function Sidebar({
           onClick={onOpenSettings}
           title="Settings (mock)"
           className={`flex items-center gap-2 rounded-lg text-[13px] text-neutral-400 transition-colors hover:bg-white/5 hover:text-white ${
-            collapsed ? "h-9 w-9 justify-center" : "w-full px-2.5 py-2"
+            isCollapsed ? "h-9 w-9 justify-center" : "w-full px-2.5 py-2"
           }`}
         >
           <span className="relative shrink-0">
@@ -312,7 +338,7 @@ export function Sidebar({
               <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-ink-900" />
             ) : null}
           </span>
-          {collapsed ? null : (
+          {isCollapsed ? null : (
             <>
               <span className="flex-1 text-left">Settings</span>
               {needsAttention > 0 ? (

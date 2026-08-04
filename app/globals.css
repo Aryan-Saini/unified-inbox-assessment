@@ -101,6 +101,23 @@ body {
   animation: pop-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* The mobile navigation sheet takes the whole screen, so it slides rather than
+   scales — a full-screen scale reads as a glitch. */
+@keyframes slide-in-left {
+  from {
+    opacity: 0.4;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.slide-in-left {
+  animation: slide-in-left 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* The "still working" chip. A travelling highlight, not a spinner, so several
    in-flight sources do not turn the header into a slot machine. */
 @keyframes sweep {
@@ -148,6 +165,7 @@ body {
   .rise-in,
   .fade-in,
   .pop-in,
+  .slide-in-left,
   .sweep::after,
   .pulse-ring::after {
     animation: none;

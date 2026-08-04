@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ComposeDialog } from "./ComposeDialog";
 import { ResultsList } from "./ResultsList";
 import { SearchField } from "./SearchField";
@@ -230,40 +230,35 @@ export function InboxApp() {
     [toast],
   );
 
-  const sidebar = useMemo(
-    () => (
-      <Sidebar
-        collapsed={collapsed}
-        onToggleCollapsed={() => setCollapsed((v) => !v)}
-        history={history}
-        activeId={activeId}
-        onSelect={(record) => startSearch(record.query, record.id)}
-        onNewSearch={newSearch}
-        onArchiveToggle={toggleArchive}
-        onOpenSettings={() => {
-          setSettingsOpen(true);
-          setMobileNavOpen(false);
-        }}
-        needsAttention={needsAttention}
-      />
-    ),
-    [collapsed, history, activeId, startSearch, newSearch, toggleArchive, needsAttention],
+  const renderSidebar = (sheet: boolean) => (
+    <Sidebar
+      sheet={sheet}
+      onClose={() => setMobileNavOpen(false)}
+      collapsed={collapsed}
+      onToggleCollapsed={() => setCollapsed((v) => !v)}
+      history={history}
+      activeId={activeId}
+      onSelect={(record) => startSearch(record.query, record.id)}
+      onNewSearch={newSearch}
+      onArchiveToggle={toggleArchive}
+      onOpenSettings={() => {
+        setSettingsOpen(true);
+        setMobileNavOpen(false);
+      }}
+      needsAttention={needsAttention}
+    />
   );
 
   return (
     <div className="flex h-dvh overflow-hidden bg-ink-950">
       {/* Desktop rail */}
-      <div className="hidden md:block">{sidebar}</div>
+      <div className="hidden md:block">{renderSidebar(false)}</div>
 
-      {/* Mobile drawer */}
+      {/* Mobile: a full-screen sheet, not a drawer with the content peeking
+          behind it. Picking a search closes it and lands on the results. */}
       {mobileNavOpen ? (
-        <div className="fixed inset-0 z-40 md:hidden">
-          <button
-            aria-label="Close navigation"
-            onClick={() => setMobileNavOpen(false)}
-            className="fade-in absolute inset-0 cursor-default bg-black/70 backdrop-blur-sm"
-          />
-          <div className="pop-in absolute inset-y-0 left-0">{sidebar}</div>
+        <div className="slide-in-left fixed inset-0 z-40 bg-ink-900 md:hidden">
+          {renderSidebar(true)}
         </div>
       ) : null}
 
