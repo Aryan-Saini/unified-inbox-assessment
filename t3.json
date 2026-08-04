@@ -1,4 +1,33 @@
 {
   "$schema": "https://t3.codes/schema/t3.json",
-  "iconPath": "icon.png"
+  "iconPath": "icon.png",
+  "scripts": [
+    {
+      "name": "Dev",
+      "command": "pnpm dev",
+      "icon": "play",
+      "previewUrl": "http://localhost:3000",
+      "autoOpenPreview": true
+    },
+    {
+      "name": "Convex Dev",
+      "command": "pnpm exec convex ai-files install; pnpm dev:convex",
+      "icon": "configure"
+    },
+    {
+      "name": "Typecheck",
+      "command": "pnpm typecheck",
+      "icon": "test"
+    },
+    {
+      "name": "Lint",
+      "command": "pnpm lint",
+      "icon": "lint"
+    },
+    {
+      "name": "Build",
+      "command": "pnpm build",
+      "icon": "build"
+    }
+  ]
 }
