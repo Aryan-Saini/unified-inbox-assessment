@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider, Show, SignOutButton } from "@clerk/nextjs";
-import { ConvexClientProvider } from "./ConvexClientProvider";
-import { Logo } from "./Logo";
-import { StoreUser } from "./StoreUser";
-import "./globals.css";
+import { ConvexClientProvider } from "../ConvexClientProvider";
+import { Logo } from "../Logo";
+import { StoreUser } from "../StoreUser";
+import "../globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
