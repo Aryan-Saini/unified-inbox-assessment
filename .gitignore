@@ -40,3 +40,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# agent tooling (installed via `npx convex ai-files install`, not project code)
+/.agents/
+/.claude/
