@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { SOURCE_META } from "./mock-data";
 import type { Draft, UiResult } from "./types";
-import { Button, MockBadge, Modal, StatusPill } from "./ui";
+import { Button, Modal, StatusPill } from "./ui";
 import {
   AlertIcon,
   CheckIcon,
@@ -77,7 +77,7 @@ export function ComposeDialog({
 
   const draft: Draft = useMemo(
     () => ({
-      id: "draft_mock_01",
+      id: "draft_01",
       channel,
       to: result.replyTo ?? "",
       toLabel: result.replyTo ?? "",
@@ -142,7 +142,6 @@ export function ComposeDialog({
       open
       onClose={onClose}
       title={title}
-      badge={<MockBadge>Mock — nothing is sent</MockBadge>}
       subtitle={
         step === "compose"
           ? "Composing produces a draft. Nothing leaves until you confirm the exact payload on the next step."
@@ -198,7 +197,7 @@ export function ComposeDialog({
         <div className="space-y-4 px-5 py-4">
           <div className="flex flex-wrap items-center gap-2 text-[12px]">
             <span
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-medium ${meta.tint}`}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 font-medium ${meta.tint}`}
             >
               <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
               {meta.name}

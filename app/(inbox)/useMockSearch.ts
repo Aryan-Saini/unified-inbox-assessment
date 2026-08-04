@@ -97,16 +97,25 @@ export function useMockSearch(
   }, []);
 
   const run = useCallback(
-    (nextQuery: string) => {
+    /**
+     * `enabled` is the set of sources the user has switched on in the source
+     * bar. A disabled source is never dispatched, so it does not appear in
+     * `runs` at all — an excluded source and a source that returned nothing are
+     * different outcomes and must not look alike.
+     */
+    (nextQuery: string, enabled: Source[] = SOURCES) => {
       const q = nextQuery.trim();
       if (q.length === 0) return;
+
+      const active = SOURCES.filter((s) => enabled.includes(s));
+      if (active.length === 0) return;
 
       clearTimers();
       startedAt.current = performance.now();
       setElapsed(0);
       setQuery(q);
       setResults([]);
-      setRuns(SOURCES.map(pending));
+      setRuns(active.map(pending));
 
       // Tallied outside React so the summary is exact at the moment the last
       // adapter reports, with no dependency on a render having happened.
@@ -115,13 +124,13 @@ export function useMockSearch(
         degraded: false,
         resultCount: 0,
       };
-      let outstanding = SOURCES.length;
+      let outstanding = active.length;
       const settle = () => {
         outstanding -= 1;
         if (outstanding === 0) onSettled?.(summary);
       };
 
-      for (const source of SOURCES) {
+      for (const source of active) {
         const took = latencyFor(source, demo);
 
         after(START_DELAY, () => patch(source, { status: "running" }));

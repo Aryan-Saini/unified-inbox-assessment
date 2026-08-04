@@ -4,10 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ComposeDialog } from "./ComposeDialog";
 import { ResultsList } from "./ResultsList";
 import { SearchField } from "./SearchField";
+import { ConnectionsDialog } from "./ConnectionsDialog";
 import { SettingsDialog } from "./SettingsDialog";
 import { Sidebar } from "./Sidebar";
 import { SourceStatus } from "./SourceStatus";
-import { MOCK_CONNECTIONS, MOCK_HISTORY, SOURCE_META } from "./mock-data";
+import { TypedHeading } from "./TypedHeading";
+import { MOCK_CONNECTIONS, MOCK_HISTORY, SOURCES, SOURCE_META } from "./mock-data";
+import { SourceBar } from "./SourceBar";
 import type { Connection, Draft, SearchRecord, Source, UiResult } from "./types";
 import {
   DEFAULT_DEMO,
@@ -15,7 +18,6 @@ import {
   type DemoOptions,
   type RunSummary,
 } from "./useMockSearch";
-import { MockBadge } from "./ui";
 import {
   ArchiveIcon,
   CheckIcon,
@@ -34,6 +36,7 @@ export function InboxApp() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [demo, setDemo] = useState<DemoOptions>(DEFAULT_DEMO);
   const [connections, setConnections] = useState<Connection[]>(MOCK_CONNECTIONS);
   const [history, setHistory] = useState<SearchRecord[]>(MOCK_HISTORY);
@@ -41,8 +44,10 @@ export function InboxApp() {
   const [draftFor, setDraftFor] = useState<UiResult | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [text, setText] = useState("");
+  /** Which connectors a search fans out to, driven by the source bar. */
+  const [enabledSources, setEnabledSources] = useState<Source[]>(SOURCES);
 
-  const input = useRef<HTMLInputElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
   const nextId = useRef(0);
   /** Which history row the in-flight run belongs to, readable from a timer. */
   const activeIdRef = useRef<string | null>(null);
@@ -93,7 +98,14 @@ export function InboxApp() {
 
       setText(trimmed);
       setMobileNavOpen(false);
-      run(trimmed);
+
+      // A connector with every account switched off has nothing to query, so it
+      // is dropped from the fan-out as well — otherwise it would report an
+      // empty success and look like "no matches".
+      const dispatchable = enabledSources.filter(
+        (s) => s === "web" || connections.some((c) => c.provider === s && c.enabled),
+      );
+      run(trimmed, dispatchable.length > 0 ? dispatchable : enabledSources);
 
       if (existingId) {
         setActiveId(existingId);
@@ -123,7 +135,57 @@ export function InboxApp() {
         ...prev,
       ]);
     },
-    [run],
+    [run, enabledSources, connections],
+  );
+
+  // --- Connectors --------------------------------------------------------
+
+  /**
+   * Turning the last source off would make the search button a no-op with no
+   * explanation, so the final enabled source is held on and the attempt is
+   * explained instead.
+   */
+  const toggleSource = useCallback((source: Source) => {
+    setEnabledSources((prev) => {
+      if (!prev.includes(source)) return [...prev, source];
+      if (prev.length === 1) return prev;
+      return prev.filter((s) => s !== source);
+    });
+  }, []);
+
+  const addAccount = useCallback(
+    (provider: "gmail" | "slack") => {
+      const seq = (nextId.current += 1);
+      const label =
+        provider === "gmail"
+          ? `team-${seq}@northwind.test`
+          : `Northwind Workspace ${seq}`;
+
+      setConnections((prev) => [
+        ...prev,
+        {
+          id: `conn_${provider}_${seq}`,
+          provider,
+          label,
+          detail:
+            provider === "gmail" ? "Added from the source bar" : "ada@northwind.test",
+          status: "active",
+          scopes:
+            provider === "gmail"
+              ? ["gmail.readonly", "gmail.send"]
+              : ["search:read", "chat:write"],
+          lastUsed: "just now",
+          enabled: true,
+        },
+      ]);
+
+      // A newly connected account is useless if its source is still excluded.
+      setEnabledSources((prev) =>
+        prev.includes(provider) ? prev : [...prev, provider],
+      );
+      toast(`Connected ${label}`);
+    },
+    [toast],
   );
 
   const newSearch = useCallback(() => {
@@ -162,6 +224,12 @@ export function InboxApp() {
 
   // --- Connections -------------------------------------------------------
 
+  const toggleAccount = useCallback((id: string) => {
+    setConnections((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, enabled: !c.enabled } : c)),
+    );
+  }, []);
+
   const reconnect = useCallback(
     (id: string) => {
       setConnections((prev) =>
@@ -187,7 +255,7 @@ export function InboxApp() {
         });
         return;
       }
-      setSettingsOpen(true);
+      setConnectionsOpen(true);
     },
     [toast, query, activeId, startSearch],
   );
@@ -263,107 +331,48 @@ export function InboxApp() {
       ) : null}
 
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Top bar: mobile nav toggle plus the active-search context. */}
-        <div className="flex h-14 shrink-0 items-center gap-2 border-b border-line px-3 sm:px-5">
+        {/* Mobile only: the nav toggle has nowhere else to live. On desktop
+            there is no top bar — the search context and its controls sit in the
+            composer itself. */}
+        <div className="flex h-14 shrink-0 items-center px-3 sm:px-5 md:hidden">
           <button
             onClick={() => setMobileNavOpen(true)}
             aria-label="Open navigation"
-            className="rounded-lg p-2 text-neutral-400 transition-colors hover:bg-white/5 hover:text-white md:hidden"
+            className="rounded-lg p-2 text-neutral-400 transition-colors hover:bg-white/5 hover:text-white"
           >
             <MenuIcon className="h-5 w-5" />
           </button>
-
-          <div className="min-w-0 flex-1">
-            {hero ? (
-              <div className="flex items-center gap-2">
-                <span className="truncate text-[13px] font-medium text-neutral-300">
-                  Unified search
-                </span>
-                <MockBadge>UI only</MockBadge>
-              </div>
-            ) : (
-              <div className="fade-in flex min-w-0 items-center gap-2">
-                <span className="shrink-0 text-[13px] text-neutral-500">
-                  Results for
-                </span>
-                <span className="min-w-0 truncate text-[13px] font-medium text-white">
-                  “{query}”
-                </span>
-              </div>
-            )}
-          </div>
-
-          {!hero ? (
-            <div className="flex shrink-0 items-center gap-1">
-              <button
-                onClick={() => startSearch(query, activeId ?? undefined)}
-                title="Re-run this search"
-                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-neutral-400 transition-colors hover:bg-white/5 hover:text-white"
-              >
-                <RerunIcon className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Re-run</span>
-              </button>
-              {activeRecord ? (
-                <button
-                  onClick={() => toggleArchive(activeRecord.id)}
-                  title={
-                    activeRecord.archived
-                      ? "Restore this search"
-                      : "Archive this search"
-                  }
-                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-neutral-400 transition-colors hover:bg-white/5 hover:text-white"
-                >
-                  {activeRecord.archived ? (
-                    <UnarchiveIcon className="h-3.5 w-3.5" />
-                  ) : (
-                    <ArchiveIcon className="h-3.5 w-3.5" />
-                  )}
-                  <span className="hidden sm:inline">
-                    {activeRecord.archived ? "Restore" : "Archive"}
-                  </span>
-                </button>
-              ) : null}
-              <button
-                onClick={newSearch}
-                className="ml-1 rounded-lg border border-line-strong px-2.5 py-1.5 text-[12px] font-medium text-neutral-200 transition-colors hover:border-neutral-500 hover:text-white"
-              >
-                New search
-              </button>
-            </div>
-          ) : null}
         </div>
 
-        {/* The lift. One flex column: a collapsing spacer above the search
-            field pulls it from the vertical centre to the top, and the heading
-            collapses at the same time, so the two read as one motion. */}
+        {/* The lift. One flex column. In the hero state this spacer and the
+            (empty) results pane below both grow, so the free space splits
+            evenly and the field sits dead centre. On search the spacer's
+            flex-grow animates to 0 and the field rises to the top. */}
         <div className="flex min-h-0 flex-1 flex-col">
           <div
-            className={`shrink-0 transition-[height] duration-[600ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
-              hero ? "h-[20vh]" : "h-0"
+            className={`shrink-0 basis-0 transition-[flex-grow] duration-[600ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              hero ? "grow" : "grow-0"
             }`}
           />
 
+          {/* No rule under the docked composer: the field's own border already
+              separates it from the results, and a full-width line across the
+              pane read as a second, competing edge. */}
           <div
-            className={`shrink-0 px-4 transition-[padding,background-color,border-color] duration-500 sm:px-6 ${
-              hero ? "" : "border-b border-line bg-ink-950/95 py-3 backdrop-blur"
+            className={`shrink-0 px-4 transition-[padding] duration-500 sm:px-6 ${
+              hero ? "" : "pt-2 pb-1"
             }`}
           >
             <div className="mx-auto w-full max-w-3xl">
+              {/* The heading collapses on the same curve as the spacer above,
+                  so the lift to the docked state reads as one motion. */}
               <div
                 className={`grid transition-[grid-template-rows,opacity] duration-[600ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
                   hero ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
                 }`}
               >
                 <div className="overflow-hidden">
-                  <div className="pb-6 text-center">
-                    <h1 className="text-[26px] leading-tight font-semibold tracking-tight text-white sm:text-[34px]">
-                      One search. Every inbox.
-                    </h1>
-                    <p className="mx-auto mt-2.5 max-w-md text-[13.5px] leading-relaxed text-neutral-500">
-                      Gmail, Slack and the web answer at their own speed. Fast
-                      sources land first — nothing waits on the slowest.
-                    </p>
-                  </div>
+                  <div className="pb-8">{hero ? <TypedHeading /> : null}</div>
                 </div>
               </div>
 
@@ -373,8 +382,56 @@ export function InboxApp() {
                 onChange={setText}
                 onSubmit={() => startSearch(text, hero ? undefined : activeId ?? undefined)}
                 onClear={newSearch}
-                hero={hero}
                 working={working}
+                footer={
+                  <div className="flex items-center gap-0.5">
+                    <SourceBar
+                      enabled={enabledSources}
+                      connections={connections}
+                      onToggleSource={toggleSource}
+                      onToggleAccount={toggleAccount}
+                      onAddAccount={addAccount}
+                      onReconnect={reconnect}
+                    />
+
+                    {/* Run controls only exist once there is a run to act on. */}
+                    {hero ? null : (
+                      <>
+                        <span className="mx-1 h-4 w-px bg-line" />
+                        <button
+                          type="button"
+                          onClick={() => startSearch(query, activeId ?? undefined)}
+                          title="Re-run this search"
+                          className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[12.5px] font-medium text-neutral-400 transition-colors hover:bg-white/[0.05] hover:text-white"
+                        >
+                          <RerunIcon className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline">Re-run</span>
+                        </button>
+                        {activeRecord ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleArchive(activeRecord.id)}
+                            title={
+                              activeRecord.archived
+                                ? "Restore this search"
+                                : "Archive this search"
+                            }
+                            className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[12.5px] font-medium text-neutral-400 transition-colors hover:bg-white/[0.05] hover:text-white"
+                          >
+                            {activeRecord.archived ? (
+                              <UnarchiveIcon className="h-3.5 w-3.5" />
+                            ) : (
+                              <ArchiveIcon className="h-3.5 w-3.5" />
+                            )}
+                            <span className="hidden sm:inline">
+                              {activeRecord.archived ? "Restore" : "Archive"}
+                            </span>
+                          </button>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                }
               />
             </div>
           </div>
@@ -382,25 +439,18 @@ export function InboxApp() {
           {/* Results */}
           <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
             {hero ? null : (
-              <div className="mx-auto w-full max-w-3xl space-y-4 px-4 py-5 sm:px-6">
-                <SourceStatus
-                  runs={runs}
-                  resultCount={results.length}
-                  working={working}
-                  elapsed={elapsed}
-                  onReconnect={reconnectSource}
-                  onRetry={retrySource}
-                />
+              <div className="mx-auto w-full max-w-3xl space-y-3 px-4 pt-2 pb-6 sm:px-6">
+                <SourceStatus runs={runs} />
                 <ResultsList
                   query={query}
                   results={results}
+                  runs={runs}
                   working={working}
+                  elapsed={elapsed}
                   onReply={setDraftFor}
+                  onReconnect={reconnectSource}
+                  onRetry={retrySource}
                 />
-                <p className="pt-2 pb-6 text-center text-[11.5px] text-neutral-600">
-                  Mock results — generated locally from a fixed fixture set. No
-                  provider was contacted.
-                </p>
               </div>
             )}
           </div>
@@ -433,13 +483,22 @@ export function InboxApp() {
         ))}
       </div>
 
+      <ConnectionsDialog
+        open={connectionsOpen}
+        onClose={() => setConnectionsOpen(false)}
+        connections={connections}
+        enabledSources={enabledSources}
+        onToggleSource={toggleSource}
+        onToggleAccount={toggleAccount}
+        onAddAccount={addAccount}
+        onReconnect={reconnect}
+      />
+
       <SettingsDialog
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         connections={connections}
         onReconnect={reconnect}
-        demo={demo}
-        onDemoChange={setDemo}
       />
 
       {/* Keyed on the result: opening a reply to a different row remounts the

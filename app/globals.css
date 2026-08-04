@@ -161,13 +161,31 @@ body {
   animation: pulse-ring 1.6s ease-out infinite;
 }
 
+@keyframes type-caret {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  55%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* The caret trailing the typed heading. A hard on/off blink, like a terminal
+   cursor — easing it would read as a glow rather than a cursor. */
+.type-caret {
+  animation: type-caret 1.1s steps(1, end) infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rise-in,
   .fade-in,
   .pop-in,
   .slide-in-left,
   .sweep::after,
-  .pulse-ring::after {
+  .pulse-ring::after,
+  .type-caret {
     animation: none;
   }
   *,

@@ -1,29 +1,9 @@
 "use client";
 
-/** Shared primitives: the modal shell, the mock badge, chips and toggles. */
+/** Shared primitives: the modal shell, chips and toggles. */
 
 import { useEffect, useRef } from "react";
 import { CloseIcon } from "./icons";
-
-/**
- * Every panel in this build is fake, and says so. The badge is deliberately
- * loud — a reviewer should never have to guess whether a control does anything.
- */
-export function MockBadge({
-  children = "Mock",
-  className = "",
-}: {
-  children?: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <span
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-amber-300 uppercase ${className}`}
-    >
-      {children}
-    </span>
-  );
-}
 
 export function Modal({
   open,
@@ -33,6 +13,7 @@ export function Modal({
   badge,
   width = "max-w-3xl",
   footer,
+  mobileFullScreen = false,
   children,
 }: {
   open: boolean;
@@ -42,6 +23,8 @@ export function Modal({
   badge?: React.ReactNode;
   width?: string;
   footer?: React.ReactNode;
+  /** Take the whole viewport on a phone instead of sitting as a bottom sheet. */
+  mobileFullScreen?: boolean;
   children: React.ReactNode;
 }) {
   const panel = useRef<HTMLDivElement>(null);
@@ -64,7 +47,11 @@ export function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+    <div
+      className={`fixed inset-0 z-50 flex justify-center sm:items-center ${
+        mobileFullScreen ? "items-stretch" : "items-end"
+      }`}
+    >
       <button
         aria-label="Close dialog"
         onClick={onClose}
@@ -76,7 +63,13 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        className={`pop-in relative flex max-h-[92vh] w-full ${width} flex-col overflow-hidden rounded-t-2xl border border-line bg-ink-900 shadow-[0_-8px_60px_rgba(0,0,0,0.6)] outline-none sm:rounded-2xl sm:shadow-[0_24px_80px_rgba(0,0,0,0.7)]`}
+        className={`pop-in relative flex w-full ${width} flex-col overflow-hidden border-line bg-ink-900 outline-none sm:max-h-[92vh] sm:rounded-2xl sm:border sm:shadow-[0_24px_80px_rgba(0,0,0,0.7)] ${
+          mobileFullScreen
+            ? // `sm:h-auto` is load-bearing: without it the phone's full-height
+              // panel persists on desktop and the box towers over its content.
+              "h-dvh rounded-none sm:h-auto"
+            : "max-h-[92vh] rounded-t-2xl border shadow-[0_-8px_60px_rgba(0,0,0,0.6)]"
+        }`}
       >
         <header className="flex items-start gap-3 border-b border-line px-5 py-4">
           <div className="min-w-0 flex-1">
@@ -137,8 +130,8 @@ export function Toggle({
         }`}
       >
         <span
-          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${
-            checked ? "translate-x-4.5" : "translate-x-0.5"
+          className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${
+            checked ? "translate-x-4" : "translate-x-0"
           }`}
         />
       </button>
@@ -174,7 +167,10 @@ export function Button({
   }[variant];
 
   return (
+    // Defaults to type="button": these render inside the search <form>, where an
+    // unmarked button would submit it. Callers can still override.
     <button
+      type="button"
       {...props}
       className={`inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-[13px] font-medium transition-colors disabled:cursor-not-allowed ${styles} ${className}`}
     />
@@ -199,7 +195,7 @@ export function StatusPill({
 
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${tones}`}
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium ${tones}`}
     >
       {children}
     </span>

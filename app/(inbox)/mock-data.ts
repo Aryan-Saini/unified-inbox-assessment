@@ -53,6 +53,7 @@ export const MOCK_CONNECTIONS: Connection[] = [
     statusReason: undefined,
     scopes: ["gmail.readonly", "gmail.send"],
     lastUsed: "2m ago",
+    enabled: true,
   },
   {
     id: "conn_gmail_ops",
@@ -63,6 +64,7 @@ export const MOCK_CONNECTIONS: Connection[] = [
     statusReason: "Refresh token rejected — invalid_grant (access revoked)",
     scopes: ["gmail.readonly", "gmail.send"],
     lastUsed: "6h ago",
+    enabled: true,
   },
   {
     id: "conn_slack_hq",
@@ -72,6 +74,7 @@ export const MOCK_CONNECTIONS: Connection[] = [
     status: "active",
     scopes: ["search:read", "chat:write"],
     lastUsed: "4m ago",
+    enabled: true,
   },
   {
     id: "conn_slack_partners",
@@ -82,6 +85,7 @@ export const MOCK_CONNECTIONS: Connection[] = [
     statusReason: "ratelimited — Slack returned 429 on the last 3 attempts",
     scopes: ["search:read"],
     lastUsed: "1d ago",
+    enabled: true,
   },
 ];
 

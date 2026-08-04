@@ -1,27 +1,58 @@
 "use client";
 
-import { forwardRef } from "react";
-import { EXAMPLE_QUERIES } from "./mock-data";
-import { ArrowUpIcon, CloseIcon, SearchIcon } from "./icons";
+import { forwardRef, useEffect, useRef, type ReactNode } from "react";
+import { ArrowUpIcon, CloseIcon } from "./icons";
+
+/** How tall the composer may grow before it scrolls instead. */
+const MAX_LINES = 5;
 
 /**
- * The one input in the product. It is the same element in both states — hero
+ * The one input in the product, and the same element in both states — hero
  * (vertically centred, nothing else on screen) and docked (pinned above the
- * result list) — so the browser animates it rather than swapping it out. That
- * is what makes the Google-style lift read as one continuous motion instead of
- * a cut between two screens.
+ * result list). It looks identical in both: the field is the field, whether or
+ * not there are results behind it.
+ *
+ * It is a textarea, not an input, so a long query wraps and the composer grows
+ * with it instead of scrolling a single line you cannot read back. Enter
+ * submits; Shift+Enter takes a newline.
+ *
+ * `footer` (connectors, and the run controls once there is a search to act on)
+ * lives inside the same bordered box under a hairline, so the input and its
+ * controls read as one composer rather than as stacked widgets.
  */
 export const SearchField = forwardRef<
-  HTMLInputElement,
+  HTMLTextAreaElement,
   {
     value: string;
     onChange: (next: string) => void;
     onSubmit: () => void;
     onClear: () => void;
-    hero: boolean;
     working: boolean;
+    footer?: ReactNode;
   }
->(function SearchField({ value, onChange, onSubmit, onClear, hero, working }, ref) {
+>(function SearchField({ value, onChange, onSubmit, onClear, working, footer }, ref) {
+  const inner = useRef<HTMLTextAreaElement | null>(null);
+
+  /**
+   * Grow to fit the content, up to five lines, then scroll inside.
+   *
+   * The cap is not cosmetic: unbounded growth eventually pushes the composer
+   * taller than the centred column it sits in, at which point the pane's
+   * `overflow-hidden` clips it and the field appears to vanish.
+   *
+   * Height is reset to `auto` first so the box can shrink again when text is
+   * deleted, not only grow. The ceiling is measured from the element's own
+   * computed line-height rather than hard-coded, so it stays five lines if the
+   * type scale changes.
+   */
+  useEffect(() => {
+    const el = inner.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 28;
+    el.style.height = `${Math.min(el.scrollHeight, lineHeight * MAX_LINES)}px`;
+  }, [value]);
+
   return (
     <div className="w-full">
       <form
@@ -29,85 +60,64 @@ export const SearchField = forwardRef<
           e.preventDefault();
           onSubmit();
         }}
-        className={`group relative flex items-center gap-3 rounded-2xl border bg-ink-850 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] focus-within:border-indigo-500/60 focus-within:bg-ink-800 focus-within:shadow-[0_0_0_4px_rgba(99,102,241,0.10)] ${
-          hero
-            ? "border-line-strong px-5 py-4 shadow-[0_18px_60px_-20px_rgba(0,0,0,0.9)]"
-            : "border-line px-4 py-2.5"
-        }`}
+        className="group relative overflow-hidden rounded-2xl border border-line-strong bg-ink-850 shadow-[0_18px_60px_-20px_rgba(0,0,0,0.9)] transition-colors duration-500 focus-within:border-neutral-600"
       >
-        <SearchIcon
-          className={`shrink-0 text-neutral-500 transition-all duration-500 group-focus-within:text-indigo-300 ${
-            hero ? "h-5 w-5" : "h-4.5 w-4.5"
-          }`}
-        />
+        <div className="flex items-start gap-3 px-5 py-4">
+          <textarea
+            ref={(node) => {
+              inner.current = node;
+              if (typeof ref === "function") ref(node);
+              else if (ref) ref.current = node;
+            }}
+            rows={1}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter runs the search; a newline needs Shift, as in any composer.
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                onSubmit();
+              }
+            }}
+            placeholder="Search Gmail, Slack and the web…"
+            aria-label="Search across every connected source"
+            autoComplete="off"
+            spellCheck={false}
+            className="scrollbar-thin min-w-0 flex-1 resize-none bg-transparent text-[17px] leading-7 text-white outline-none placeholder:text-neutral-600"
+          />
 
-        <input
-          ref={ref}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Search Gmail, Slack and the web…"
-          aria-label="Search across every connected source"
-          autoComplete="off"
-          spellCheck={false}
-          className={`min-w-0 flex-1 bg-transparent text-white transition-all duration-500 outline-none placeholder:text-neutral-600 ${
-            hero ? "text-[17px]" : "text-[15px]"
-          }`}
-        />
+        </div>
 
-        {value.length > 0 ? (
-          <button
-            type="button"
-            onClick={onClear}
-            aria-label="Clear search"
-            className="shrink-0 rounded-md p-1 text-neutral-600 transition-colors hover:bg-white/5 hover:text-neutral-300"
-          >
-            <CloseIcon className="h-4 w-4" />
-          </button>
-        ) : null}
-
-        <button
-          type="submit"
-          disabled={value.trim().length === 0}
-          aria-label="Run search"
-          className={`relative flex shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white transition-all duration-300 hover:bg-indigo-400 disabled:bg-white/[0.06] disabled:text-neutral-600 ${
-            hero ? "h-9 w-9" : "h-8 w-8"
-          }`}
-        >
-          {working ? (
-            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-          ) : (
-            <ArrowUpIcon className={hero ? "h-4.5 w-4.5" : "h-4 w-4"} />
-          )}
-        </button>
-      </form>
-
-      {/* Suggestions only exist in the hero state; docked, the results are the
-          content and chips would just be noise. */}
-      <div
-        className={`grid transition-[grid-template-rows,opacity] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          hero ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
-        }`}
-      >
-        <div className="overflow-hidden">
-          <div className="flex flex-wrap items-center gap-2 pt-4">
-            <span className="text-[12px] text-neutral-600">Try</span>
-            {EXAMPLE_QUERIES.map((q) => (
+        {/* The bar: connectors and run controls on the left, actions right. */}
+        <div className="flex items-center justify-between gap-2 border-t border-line px-2 py-1.5">
+          <div className="min-w-0">{footer}</div>
+          <div className="flex shrink-0 items-center gap-1">
+            {value.length > 0 ? (
               <button
-                key={q}
                 type="button"
-                tabIndex={hero ? 0 : -1}
-                onClick={() => {
-                  onChange(q);
-                  onSubmit();
-                }}
-                className="rounded-full border border-line bg-white/[0.02] px-3 py-1.5 text-[12px] text-neutral-400 transition-colors hover:border-line-strong hover:bg-white/[0.05] hover:text-neutral-200"
+                onClick={onClear}
+                aria-label="Clear search"
+                className="shrink-0 rounded-lg p-1.5 text-neutral-600 transition-colors hover:bg-white/5 hover:text-neutral-300"
               >
-                {q}
+                <CloseIcon className="h-4 w-4" />
               </button>
-            ))}
+            ) : null}
+
+            <button
+              type="submit"
+              disabled={value.trim().length === 0}
+              aria-label="Run search"
+              className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white transition-colors duration-300 hover:bg-indigo-400 disabled:bg-white/[0.06] disabled:text-neutral-600"
+            >
+              {working ? (
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+              ) : (
+                <ArrowUpIcon className="h-4 w-4" />
+              )}
+            </button>
           </div>
         </div>
-      </div>
+      </form>
     </div>
   );
 });

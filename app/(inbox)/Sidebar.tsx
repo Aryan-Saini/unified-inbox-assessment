@@ -2,11 +2,8 @@
 
 import { useState } from "react";
 import { Logo } from "../Logo";
-import { SOURCE_META } from "./mock-data";
-import type { SearchRecord, Source } from "./types";
-import { MockBadge } from "./ui";
+import type { SearchRecord } from "./types";
 import {
-  AlertIcon,
   ArchiveIcon,
   ChevronDownIcon,
   CloseIcon,
@@ -17,20 +14,6 @@ import {
   SettingsIcon,
   UnarchiveIcon,
 } from "./icons";
-
-function SourceDots({ sources }: { sources: Source[] }) {
-  return (
-    <span className="flex items-center gap-1">
-      {sources.map((s) => (
-        <span
-          key={s}
-          title={SOURCE_META[s].name}
-          className={`h-1.5 w-1.5 rounded-full ${SOURCE_META[s].dot}`}
-        />
-      ))}
-    </span>
-  );
-}
 
 function HistoryRow({
   record,
@@ -49,10 +32,6 @@ function HistoryRow({
         active ? "bg-white/[0.07]" : "hover:bg-white/[0.04]"
       }`}
     >
-      {active ? (
-        <span className="absolute top-2 bottom-2 left-0 w-0.5 rounded-full bg-indigo-400" />
-      ) : null}
-
       <button
         onClick={onSelect}
         className="block w-full cursor-pointer px-2.5 py-2 text-left"
@@ -77,20 +56,8 @@ function HistoryRow({
               <span>searching…</span>
             </>
           ) : (
-            <>
-              <SourceDots sources={record.sources} />
-              <span>{record.resultCount} results</span>
-            </>
+            <span>{record.resultCount} results</span>
           )}
-          {record.degraded ? (
-            <span
-              title="A source ended in needs-reconnect on this run"
-              className="inline-flex items-center gap-1 text-amber-500/80"
-            >
-              <AlertIcon className="h-3 w-3" />
-              partial
-            </span>
-          ) : null}
         </span>
       </button>
 
@@ -249,7 +216,6 @@ export function Sidebar({
               <span className="text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
                 Searches
               </span>
-              <MockBadge>Mock</MockBadge>
             </div>
 
             {recent.length === 0 ? (
@@ -316,18 +282,9 @@ export function Sidebar({
 
       {/* Footer */}
       <div className="shrink-0 border-t border-line p-3">
-        {isCollapsed ? null : (
-          <div className="mb-2 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-2.5 py-2">
-            <p className="text-[11px] leading-relaxed text-amber-200/80">
-              <span className="font-semibold text-amber-300">UI only.</span> All
-              searches, results and sends on this screen are local mock data.
-            </p>
-          </div>
-        )}
-
         <button
           onClick={onOpenSettings}
-          title="Settings (mock)"
+          title="Settings"
           className={`flex items-center gap-2 rounded-lg text-[13px] text-neutral-400 transition-colors hover:bg-white/5 hover:text-white ${
             isCollapsed ? "h-9 w-9 justify-center" : "w-full px-2.5 py-2"
           }`}
@@ -342,7 +299,7 @@ export function Sidebar({
             <>
               <span className="flex-1 text-left">Settings</span>
               {needsAttention > 0 ? (
-                <span className="rounded-full bg-amber-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                <span className="rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
                   {needsAttention}
                 </span>
               ) : null}

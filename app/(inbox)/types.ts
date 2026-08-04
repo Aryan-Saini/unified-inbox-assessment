@@ -78,6 +78,12 @@ export interface Connection {
   statusReason?: string;
   scopes: string[];
   lastUsed: string;
+  /**
+   * Whether this individual account is included in searches. Distinct from
+   * `status`: a healthy account can be switched off by the user, and a broken
+   * one can still be switched on (it will just keep reporting its error).
+   */
+  enabled: boolean;
 }
 
 /** A composed, not-yet-sent message. Mirrors the `Draft` interface in the spec. */
