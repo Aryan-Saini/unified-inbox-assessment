@@ -6,7 +6,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { describeError, type AppErrorView } from "./appError";
 import { SOURCE_META } from "./mock-data";
-import type { Draft, UiResult } from "./types";
+import type { ComposePrefill, Draft, UiResult } from "./types";
 import { Button, Modal, StatusPill } from "./ui";
 import {
   AlertIcon,
@@ -85,10 +85,14 @@ function failureCopy(status: string, message: string | undefined) {
  */
 export function ComposeDialog({
   result,
+  prefill,
   onClose,
   onSent,
 }: {
   result: UiResult;
+  /** Carry a known payload in (e.g. resending an indeterminate delivery) instead
+   *  of the reply template. The idempotency key is still minted fresh. */
+  prefill?: ComposePrefill;
   onClose: () => void;
   onSent: (draft: Draft) => void;
 }) {
@@ -96,13 +100,17 @@ export function ComposeDialog({
 
   const [step, setStep] = useState<Step>("compose");
   const [acknowledged, setAcknowledged] = useState(false);
-  const [subject, setSubject] = useState(() =>
-    result.title.startsWith("Re: ") ? result.title : `Re: ${result.title}`,
+  const [subject, setSubject] = useState(
+    () =>
+      prefill?.subject ??
+      (result.title.startsWith("Re: ") ? result.title : `Re: ${result.title}`),
   );
   const [body, setBody] = useState(() =>
-    channel === "slack"
-      ? `Thanks for the ping — picking this up now.${quoted(result)}`
-      : `Hi,\n\nThanks for the note — confirming I've seen this and will follow up today.\n\nAda${quoted(result)}`,
+    prefill !== undefined
+      ? prefill.body
+      : channel === "slack"
+        ? `Thanks for the ping — picking this up now.${quoted(result)}`
+        : `Hi,\n\nThanks for the note — confirming I've seen this and will follow up today.\n\nAda${quoted(result)}`,
   );
   /**
    * Minted once with the draft and never regenerated. That is the whole point:

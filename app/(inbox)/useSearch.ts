@@ -169,6 +169,12 @@ export interface UseSearch {
   open: (searchId: Id<"searches">, query?: string) => void;
   /** Re-ask the same question as a NEW search, preserving the old one. */
   rerun: (demoOverride?: DemoOptions) => void;
+  /**
+   * `rerun`, but for a search that is not the one being watched — the history
+   * sidebar's re-run button. Query and sources come from the history row, so
+   * the optimistic strip is right before the server answers.
+   */
+  rerunFrom: (searchId: Id<"searches">, query: string, sources: Source[]) => void;
 }
 
 export function useSearch(demo: DemoOptions): UseSearch {
@@ -260,6 +266,19 @@ export function useSearch(demo: DemoOptions): UseSearch {
     [beginDispatch, data, demo, failDispatch, land, localQuery, rerunMutation, searchId],
   );
 
+  const rerunFrom = useCallback(
+    (id: Id<"searches">, query: string, sources: Source[]) => {
+      const token = beginDispatch(
+        query,
+        sources.length === 0 ? SOURCES : sources,
+      );
+      void rerunMutation({ searchId: id, demo: toDemoArgs(demo) })
+        .then(({ searchId: newId }) => land(token, newId))
+        .catch((err: unknown) => failDispatch(token, err));
+    },
+    [beginDispatch, demo, failDispatch, land, rerunMutation],
+  );
+
   const open = useCallback((id: Id<"searches">, knownQuery = "") => {
     dispatch.current += 1;
     setOptimisticRuns([]);
@@ -348,5 +367,6 @@ export function useSearch(demo: DemoOptions): UseSearch {
     searchId,
     open,
     rerun,
+    rerunFrom,
   };
 }

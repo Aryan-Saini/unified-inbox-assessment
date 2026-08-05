@@ -8,13 +8,14 @@ import { ComposeDialog } from "./ComposeDialog";
 import { ResultsList } from "./ResultsList";
 import { SearchField } from "./SearchField";
 import { ConnectionsDialog } from "./ConnectionsDialog";
+import { OutboxDialog, type OutboxSend } from "./OutboxDialog";
 import { SettingsDialog } from "./SettingsDialog";
 import { Sidebar } from "./Sidebar";
 import { SourceStatus } from "./SourceStatus";
 import { TypedHeading } from "./TypedHeading";
 import { SOURCES, SOURCE_META } from "./mock-data";
 import { SourceBar } from "./SourceBar";
-import type { Draft, SearchRecord, Source, UiResult } from "./types";
+import type { ComposePrefill, Draft, SearchRecord, Source, UiResult } from "./types";
 import { formatAge } from "./format";
 import { useClockMinute } from "./useClock";
 import { useConnections } from "./useConnections";
@@ -33,13 +34,21 @@ interface Toast {
   action?: { label: string; run: () => void };
 }
 
+/** What the compose dialog is opened on: the result being answered, plus an
+ *  optional payload to seed it with instead of the reply template. */
+interface ComposeTarget {
+  result: UiResult;
+  prefill?: ComposePrefill;
+}
+
 export function InboxApp() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
+  const [outboxOpen, setOutboxOpen] = useState(false);
   const [demo, setDemo] = useState<DemoOptions>(DEFAULT_DEMO);
-  const [draftFor, setDraftFor] = useState<UiResult | null>(null);
+  const [compose, setCompose] = useState<ComposeTarget | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [text, setText] = useState("");
   /** Which connectors a search fans out to, driven by the source bar. */
@@ -77,6 +86,7 @@ export function InboxApp() {
     searchId,
     open,
     rerun,
+    rerunFrom,
   } = useSearch(demo);
 
   /**
@@ -183,6 +193,20 @@ export function InboxApp() {
     [history, setArchived, toast],
   );
 
+  /**
+   * The sidebar's re-run action: a NEW search with `rerunOf` pointing at the
+   * old row, never an overwrite — the "14 results at 09:12" claim stays
+   * inspectable after today's answer arrives.
+   */
+  const rerunFromHistory = useCallback(
+    (record: SearchRecord) => {
+      setText(record.query);
+      setMobileNavOpen(false);
+      rerunFrom(record.id as Id<"searches">, record.query, record.sources);
+    },
+    [rerunFrom],
+  );
+
   const activeRecord = history.find((h) => h.id === searchId) ?? null;
 
   // --- Connections -------------------------------------------------------
@@ -263,9 +287,19 @@ export function InboxApp() {
         });
         return;
       }
+      // One dead grant is unambiguous, so go straight to the provider's consent
+      // screen. Anything less clear-cut goes through the connections dialog,
+      // where each account's status is visible.
+      const broken = connections.filter(
+        (c) => c.provider === source && c.status !== "active",
+      );
+      if (broken.length === 1) {
+        reconnect(broken[0].id);
+        return;
+      }
       setConnectionsOpen(true);
     },
-    [runs, demo, toast, rerun],
+    [runs, demo, toast, rerun, connections, reconnect],
   );
 
   /**
@@ -312,6 +346,31 @@ export function InboxApp() {
     [toast],
   );
 
+  // --- Outbox --------------------------------------------------------------
+
+  /**
+   * The only exit from an `unknown` send: the same payload under a *new*
+   * idempotency key, minted by the freshly-mounted compose dialog. The old key
+   * stays claimed by the indeterminate delivery, exactly as it should.
+   */
+  const composeAgain = useCallback((send: OutboxSend) => {
+    setOutboxOpen(false);
+    setCompose({
+      result: {
+        source: send.channel,
+        id: send.id,
+        title: send.subject ?? `Message to ${send.to}`,
+        snippet: send.body,
+        url: "",
+        age: "",
+        replyTo: send.to,
+        connectionId: send.connectionId,
+        threadId: send.threadId,
+      },
+      prefill: { subject: send.subject, body: send.body },
+    });
+  }, []);
+
   const renderSidebar = (sheet: boolean) => (
     <Sidebar
       sheet={sheet}
@@ -328,8 +387,13 @@ export function InboxApp() {
         setMobileNavOpen(false);
         open(record.id as Id<"searches">, record.query);
       }}
+      onRerun={rerunFromHistory}
       onNewSearch={newSearch}
       onArchiveToggle={toggleArchive}
+      onOpenOutbox={() => {
+        setOutboxOpen(true);
+        setMobileNavOpen(false);
+      }}
       onOpenSettings={() => {
         setSettingsOpen(true);
         setMobileNavOpen(false);
@@ -460,14 +524,14 @@ export function InboxApp() {
           <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
             {hero ? null : (
               <div className="mx-auto w-full max-w-3xl space-y-3 px-4 pt-2 pb-6 sm:px-6">
-                <SourceStatus runs={runs} />
+                <SourceStatus runs={runs} onReconnect={reconnectSource} />
                 <ResultsList
                   query={query}
                   results={results}
                   runs={runs}
                   working={working}
                   elapsed={elapsed}
-                  onReply={setDraftFor}
+                  onReply={(result) => setCompose({ result })}
                   onReconnect={reconnectSource}
                   onRetry={retrySource}
                 />
@@ -523,13 +587,23 @@ export function InboxApp() {
         onDisconnect={disconnect}
       />
 
+      <OutboxDialog
+        open={outboxOpen}
+        onClose={() => setOutboxOpen(false)}
+        connections={connections}
+        onReconnect={reconnect}
+        onComposeAgain={composeAgain}
+      />
+
       {/* Keyed on the result: opening a reply to a different row remounts the
-          dialog, which resets the draft without an effect to do it. */}
-      {draftFor ? (
+          dialog, which resets the draft — and mints a fresh idempotency key —
+          without an effect to do it. */}
+      {compose ? (
         <ComposeDialog
-          key={draftFor.id}
-          result={draftFor}
-          onClose={() => setDraftFor(null)}
+          key={compose.result.id}
+          result={compose.result}
+          prefill={compose.prefill}
+          onClose={() => setCompose(null)}
           onSent={onSent}
         />
       ) : null}

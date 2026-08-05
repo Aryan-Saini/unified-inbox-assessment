@@ -159,6 +159,13 @@ export const SlidersIcon = (p: Props) => (
   </Svg>
 );
 
+export const SendIcon = (p: Props) => (
+  <Svg {...p}>
+    <path d="M20.5 3.5 3.5 10.2l6.4 2.9 2.9 6.4 7.7-16Z" />
+    <path d="M9.9 13.1 20.5 3.5" />
+  </Svg>
+);
+
 export const ClockIcon = (p: Props) => (
   <Svg {...p}>
     <circle cx="12" cy="12" r="8.5" />

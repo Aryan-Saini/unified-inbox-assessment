@@ -97,6 +97,16 @@ export interface Connection {
   enabled: boolean;
 }
 
+/**
+ * Seed values for the compose dialog when it is not starting from a blank
+ * reply — e.g. "compose again with a new key" from the outbox, which carries
+ * the payload of an indeterminate send into a fresh draft.
+ */
+export interface ComposePrefill {
+  subject?: string;
+  body: string;
+}
+
 /** A composed, not-yet-sent message. Mirrors the `Draft` interface in the spec. */
 export interface Draft {
   id: string;
