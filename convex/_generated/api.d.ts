@@ -10,12 +10,16 @@
 
 import type * as adapters_gmail from "../adapters/gmail.js";
 import type * as clerk from "../clerk.js";
+import type * as connections from "../connections.js";
 import type * as core_crypto from "../core/crypto.js";
 import type * as core_faults from "../core/faults.js";
 import type * as core_http from "../core/http.js";
 import type * as core_sender from "../core/sender.js";
 import type * as core_types from "../core/types.js";
 import type * as http from "../http.js";
+import type * as oauth from "../oauth.js";
+import type * as oauth_google from "../oauth/google.js";
+import type * as oauth_slack from "../oauth/slack.js";
 import type * as users from "../users.js";
 
 import type {
@@ -27,12 +31,16 @@ import type {
 declare const fullApi: ApiFromModules<{
   "adapters/gmail": typeof adapters_gmail;
   clerk: typeof clerk;
+  connections: typeof connections;
   "core/crypto": typeof core_crypto;
   "core/faults": typeof core_faults;
   "core/http": typeof core_http;
   "core/sender": typeof core_sender;
   "core/types": typeof core_types;
   http: typeof http;
+  oauth: typeof oauth;
+  "oauth/google": typeof oauth_google;
+  "oauth/slack": typeof oauth_slack;
   users: typeof users;
 }>;
 
