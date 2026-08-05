@@ -204,6 +204,31 @@ function decodeEntities(text: string): string {
 }
 
 /**
+ * Everything after the `@` in the sending address, for the Message-ID domain.
+ * A Message-ID whose domain matches the sender is the well-behaved form, and some
+ * filters treat a mismatched one as a spam signal.
+ */
+function messageIdDomain(from: string): string {
+  const at = from.lastIndexOf("@");
+  const domain = at === -1 ? "" : from.slice(at + 1).trim().toLowerCase();
+  // `.invalid` is reserved by RFC 2606, so the fallback can never collide with a
+  // real domain.
+  return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain) ? domain : "unified-inbox.invalid";
+}
+
+/**
+ * A Message-ID derived from the idempotency key, and only from it.
+ *
+ * This is what makes an `unknown` send *reconcilable by reading*: Gmail indexes
+ * the header, so `rfc822msgid:` answers "did this exact claim already go out?"
+ * without sending anything. Random per attempt, it would answer nothing.
+ */
+function deterministicMessageId(key: string, from: string): string {
+  const safe = key.replace(/[^A-Za-z0-9._-]/g, "").slice(0, 96);
+  return `<uik.${safe}@${messageIdDomain(from)}>`;
+}
+
+/**
  * RFC 2822 message. Non-ASCII subjects are RFC 2047 encoded and the body is
  * declared UTF-8, so an em dash in a reply does not arrive as mojibake.
  */
@@ -217,9 +242,20 @@ function buildRawMessage(payload: SendPayload, from: string): string {
     "Content-Transfer-Encoding: 8bit",
   ];
 
+  // The idempotency key, twice: once in a header Gmail's search indexes
+  // (`rfc822msgid:`) and once in a header a human reading raw source can see.
+  if (payload.idempotencyKey !== undefined) {
+    lines.push(
+      `Message-ID: ${deterministicMessageId(payload.idempotencyKey, from)}`,
+      `X-Unified-Inbox-Key: ${payload.idempotencyKey}`,
+    );
+  }
+
   // Threading headers make the reply land in the original conversation rather
-  // than starting a new one.
-  if (payload.inReplyTo !== undefined) {
+  // than starting a new one. Only emitted for a real RFC Message-ID (which always
+  // contains an `@`): a Gmail *message id* here would be a malformed header, and
+  // `threadId` on the API call is what actually threads the reply anyway.
+  if (payload.inReplyTo !== undefined && payload.inReplyTo.includes("@")) {
     lines.push(`In-Reply-To: ${payload.inReplyTo}`, `References: ${payload.inReplyTo}`);
   }
 
@@ -227,8 +263,10 @@ function buildRawMessage(payload: SendPayload, from: string): string {
 }
 
 function encodeHeaderValue(value: string): string {
-  // eslint-disable-next-line no-control-regex -- matching non-ASCII is the point
-  if (!/[^\x00-\x7F]/.test(value)) return value;
+  // Anything outside printable ASCII forces RFC 2047 encoding: an 8-bit header
+  // value is not legal, and a raw CR/LF in a header is injection. Base64-encoding
+  // the whole value defuses both.
+  if (!/[^\x20-\x7E]/.test(value)) return value;
   const encoded = toBase64Url(new TextEncoder().encode(value))
     .replace(/-/g, "+")
     .replace(/_/g, "/");

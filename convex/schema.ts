@@ -301,6 +301,10 @@ export default defineSchema({
     to: v.string(),
     subject: v.optional(v.string()),
     body: v.string(),
+    /** Provider thread to deliver into, frozen with the rest of the payload. */
+    threadId: v.optional(v.string()),
+    /** Provider id of the message being replied to, for the threading headers. */
+    inReplyTo: v.optional(v.string()),
 
     status: v.union(
       v.literal("queued"),
@@ -335,7 +339,10 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_draft", ["draftId"])
-    .index("by_user_idempotency_key", ["userId", "idempotencyKey"]),
+    .index("by_user_idempotency_key", ["userId", "idempotencyKey"])
+    // The stale-`in_flight` sweeper asks "which sends are in flight and old?".
+    // Without this index that question is a full scan of every send ever made.
+    .index("by_status_updated", ["status", "updatedAt"]),
 
   /** One row per delivery attempt, so the detail view can show a real timeline. */
   sendAttempts: defineTable({

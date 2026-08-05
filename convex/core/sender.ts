@@ -18,6 +18,17 @@ export interface SendPayload {
   threadId?: string;
   /** Provider-side id of the message being replied to. */
   inReplyTo?: string;
+  /**
+   * The claim key this delivery belongs to.
+   *
+   * Passed to the provider where the protocol allows it (Gmail gets a
+   * deterministic `Message-ID` and an `X-Unified-Inbox-Key` header derived from
+   * it), so an `unknown` outcome can later be *reconciled by reading* — "is there
+   * already a sent message carrying this key?" — instead of resolved by a retry
+   * that might deliver a second copy. Neither provider offers real server-side
+   * idempotency; this is the next best thing.
+   */
+  idempotencyKey?: string;
 }
 
 export interface SendContext {
