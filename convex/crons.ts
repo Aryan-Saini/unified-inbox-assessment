@@ -22,6 +22,18 @@ crons.interval(
   {},
 );
 
+// Sends abandoned mid-attempt. Every minute, because `in_flight` is the one
+// status that blocks all further attempts: until this runs, such a send is both
+// unretryable and unexplained. It resolves them to `unknown` — never to
+// `failed_transient`, which would invite an auto-retry of a message that may
+// already have been delivered.
+crons.interval(
+  "sweep stale in-flight sends",
+  { minutes: 1 },
+  internal.sends.sweepStaleInFlight,
+  {},
+);
+
 // Spent OAuth states. Kept a full TTL past expiry first, so a replay is still
 // answered with "replayed" rather than "unknown" while it can be.
 crons.interval(
