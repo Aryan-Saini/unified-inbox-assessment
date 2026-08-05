@@ -677,6 +677,43 @@ export const deliver = internalAction({
  * under a new key, and quietly retrying would risk the second copy this whole
  * subsystem exists to prevent.
  */
+export async function retrySend(
+  ctx: MutationCtx,
+  args: { userId: Id<"users">; sendId: Id<"sends"> },
+) {
+  const send = await ctx.db.get("sends", args.sendId);
+  if (send === null || send.userId !== args.userId) {
+    throw appError("NOT_FOUND", "That send does not exist.");
+  }
+
+  if (send.status === "unknown") {
+    throw appError(
+      "INDETERMINATE",
+      "This send was dispatched but never acknowledged, so retrying it could deliver a second copy. Reconcile it against the provider, or clone the draft with a new idempotency key.",
+    );
+  }
+
+  if (send.status === "succeeded") {
+    return { retried: false, reason: "already_delivered", send: toSendView(send) };
+  }
+
+  if (send.status === "queued" || send.status === "in_flight") {
+    return { retried: false, reason: "attempt_in_progress", send: toSendView(send) };
+  }
+
+  const now = Date.now();
+  await ctx.db.patch("sends", args.sendId, { nextRetryAt: undefined, updatedAt: now });
+  await ctx.scheduler.runAfter(0, internal.sends.deliver, {
+    sendId: args.sendId,
+    trigger: "manual" as const,
+  });
+
+  const updated = await ctx.db.get("sends", args.sendId);
+  if (updated === null) throw appError("NOT_FOUND", "That send does not exist.");
+  return { retried: true, send: toSendView(updated) };
+}
+
+/** The Clerk-authenticated shell over `retrySend`. */
 export const retry = mutation({
   args: { sendId: v.id("sends") },
   returns: v.object({
@@ -686,36 +723,7 @@ export const retry = mutation({
   }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    const send = await ctx.db.get("sends", args.sendId);
-    if (send === null || send.userId !== user._id) {
-      throw appError("NOT_FOUND", "That send does not exist.");
-    }
-
-    if (send.status === "unknown") {
-      throw appError(
-        "INDETERMINATE",
-        "This send was dispatched but never acknowledged, so retrying it could deliver a second copy. Reconcile it against the provider, or clone the draft with a new idempotency key.",
-      );
-    }
-
-    if (send.status === "succeeded") {
-      return { retried: false, reason: "already_delivered", send: toSendView(send) };
-    }
-
-    if (send.status === "queued" || send.status === "in_flight") {
-      return { retried: false, reason: "attempt_in_progress", send: toSendView(send) };
-    }
-
-    const now = Date.now();
-    await ctx.db.patch("sends", args.sendId, { nextRetryAt: undefined, updatedAt: now });
-    await ctx.scheduler.runAfter(0, internal.sends.deliver, {
-      sendId: args.sendId,
-      trigger: "manual" as const,
-    });
-
-    const updated = await ctx.db.get("sends", args.sendId);
-    if (updated === null) throw appError("NOT_FOUND", "That send does not exist.");
-    return { retried: true, send: toSendView(updated) };
+    return await retrySend(ctx, { userId: user._id, sendId: args.sendId });
   },
 });
 
@@ -796,6 +804,11 @@ export const sweepStaleInFlight = internalMutation({
 
     let swept = 0;
     for (const send of stale) {
+      // Seeded fixtures are frozen illustrations, not abandoned work: the
+      // `in_flight` row exists so the outbox can show what that state looks like.
+      // Sweeping it would quietly delete the example a reviewer came to see.
+      if (send.isSeed) continue;
+
       // The attempt's own clock, not the send's, decides. `updatedAt` narrowed the
       // scan; this is the value the 90s promise is actually about.
       const attempts = await ctx.db

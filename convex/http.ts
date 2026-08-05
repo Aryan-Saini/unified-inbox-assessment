@@ -14,6 +14,7 @@ import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
+import { handleApiRequest } from "./api/routes";
 import { encryptToken } from "./core/crypto";
 import { toAdapterError } from "./core/types";
 import { redirectUriFor, sanitizeReturnTo } from "./oauth";
@@ -347,5 +348,29 @@ http.route({
   method: "GET",
   handler: httpAction(async (ctx, request) => await completeOAuth(ctx, "slack", request)),
 });
+
+/* -------------------------------------------------------------------- REST API */
+
+/**
+ * The API-key surface (`convex/api/routes.ts`).
+ *
+ * Convex routes an exact path or a path prefix, and `/searches/{id}/results` is
+ * neither — so the whole surface is mounted as prefixes and dispatched by the
+ * routing table inside the handler. `path` and `pathPrefix` are both registered
+ * because a prefix of `/api/v1/` does not match the bare `/api/v1`.
+ *
+ * The second mount point is the specification's literal `/drafts` and
+ * `/drafts/{id}/send`. Same table, same handler: the alias cannot behave
+ * differently from the versioned route because there is only one of it.
+ */
+for (const method of ["GET", "POST", "OPTIONS"] as const) {
+  http.route({ path: "/api/v1", method, handler: handleApiRequest });
+  http.route({ pathPrefix: "/api/v1/", method, handler: handleApiRequest });
+}
+
+for (const method of ["POST", "OPTIONS"] as const) {
+  http.route({ path: "/drafts", method, handler: handleApiRequest });
+  http.route({ pathPrefix: "/drafts/", method, handler: handleApiRequest });
+}
 
 export default http;
