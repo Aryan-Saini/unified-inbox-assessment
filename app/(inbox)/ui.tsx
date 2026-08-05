@@ -106,6 +106,56 @@ export function Modal({
   );
 }
 
+/**
+ * Confirmation for something destructive.
+ *
+ * A dialog rather than an inline "are you sure?" on the row it belongs to: a row
+ * already carries a label, a status pill and its own action, so a question plus
+ * two more buttons crowded in beside them wraps the label and leaves the
+ * destructive button a few pixels from an unrelated one. A dialog also has room
+ * to say what the action actually does, which an inline prompt never does.
+ */
+export function ConfirmDialog({
+  open,
+  onClose,
+  onConfirm,
+  title,
+  confirmLabel,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  confirmLabel: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Modal open={open} onClose={onClose} title={title} width="max-w-md">
+      <div className="px-5 py-4 text-[13px] leading-relaxed text-neutral-400">
+        {children}
+      </div>
+      <footer className="flex items-center justify-end gap-2.5 border-t border-line bg-ink-850/60 px-5 py-3.5">
+        <Button variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          variant="danger"
+          onClick={() => {
+            // Close first: the row this was opened for is about to disappear, and
+            // a dialog outliving its subject reads as a hang.
+            onClose();
+            onConfirm();
+          }}
+          autoFocus
+        >
+          {confirmLabel}
+        </Button>
+      </footer>
+    </Modal>
+  );
+}
+
 export function Toggle({
   checked,
   onChange,
