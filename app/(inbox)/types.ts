@@ -30,6 +30,17 @@ export interface UiResult extends Result {
   /** Where a reply would go, if this result is replyable. */
   replyTo?: string;
   unread?: boolean;
+  /**
+   * Which grant a reply would be sent through. Carried on the result because
+   * that is where the answer actually lives — the message was found by one
+   * specific account's worker, and replying from a different one of that user's
+   * accounts would be a different message.
+   */
+  connectionId?: string;
+  /** Provider thread, so a reply lands in the conversation it answers. */
+  threadId?: string;
+  /** Provider-side id of the message being replied to. */
+  externalId?: string;
 }
 
 /** Mirrors `searchSources.status` in the Convex schema. */

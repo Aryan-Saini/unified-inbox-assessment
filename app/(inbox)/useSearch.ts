@@ -300,6 +300,11 @@ export function useSearch(demo: DemoOptions): UseSearch {
       context: row.context,
       replyTo: row.replyTo,
       unread: row.unread,
+      // What a reply needs beyond the display fields: which grant to send
+      // through, and where in the conversation to land.
+      connectionId: row.connectionId,
+      threadId: row.threadId,
+      externalId: row.externalId,
     }));
   }, [data, now]);
 
