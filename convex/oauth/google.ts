@@ -212,10 +212,9 @@ export async function refresh(refreshToken: string): Promise<GoogleTokenGrant> {
 /**
  * Who the grant belongs to.
  *
- * `sub` is the stable identity and is what gets compared on reconnect; `email`
- * is carried alongside it purely as the human label, because an address the user
- * recognises is the only way "this connection is alice@, you signed in as bob@"
- * reads as an explanation rather than as an opaque id mismatch.
+ * Both fields are returned because the caller uses the email as the connection's
+ * identity and keeps `sub` available as the strictly-immutable fallback. That
+ * tradeoff is argued where it is acted on, in `convex/http.ts`.
  */
 export async function fetchIdentity(accessToken: string): Promise<GoogleIdentity> {
   const response = await fetch(USERINFO_ENDPOINT, {
