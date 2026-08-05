@@ -388,14 +388,20 @@ export const sweepStuckSearches = internalMutation({
       .take(25);
 
     let sources = 0;
+    let searches = 0;
     for (const search of stuck) {
+      // A seeded search that is still `running` is a fixture illustrating the
+      // mid-flight state, not a fan-out whose workers died. Settling it would
+      // erase the example.
+      if (search.isSeed) continue;
+      searches += 1;
       sources += await forceFailStalledSources(ctx, search._id);
       // A search whose sources are all terminal but which never flipped is
       // stuck for a different reason; settle it either way.
       await settleSearchIfDone(ctx, search._id);
     }
 
-    return { searches: stuck.length, sources };
+    return { searches, sources };
   },
 });
 
