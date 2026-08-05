@@ -91,7 +91,14 @@ export function matchRoute(pattern: string, path: string): RouteMatch | null {
     const actual = pathParts[i];
     if (expected.startsWith(":")) {
       if (actual === "") return null;
-      params[expected.slice(1)] = decodeURIComponent(actual);
+      // A malformed escape (`%ZZ`) makes decodeURIComponent throw a URIError.
+      // That is a bad path, not a server error: treat it as no-match so the
+      // caller gets the ordinary JSON 404 envelope instead of a bare 500.
+      try {
+        params[expected.slice(1)] = decodeURIComponent(actual);
+      } catch {
+        return null;
+      }
       continue;
     }
     if (expected !== actual) return null;

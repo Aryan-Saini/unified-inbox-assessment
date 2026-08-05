@@ -56,9 +56,12 @@ export const MAX_ATTEMPTS = 3;
  */
 export const RESULTS_PER_SOURCE = 20;
 
-/** When the watchdog runs. Past the last attempt's deadline plus a margin, so it
- *  only ever fires on a worker that genuinely stopped reporting. */
-export const SWEEP_DELAY_MS = 25_000;
+/** When the watchdog runs. Past the *whole retry budget* — three 20s attempts
+ *  plus `retryTransient`'s jittered backoffs (capped at 5s each) plus scheduler
+ *  latency — so it only ever fires on a worker that genuinely stopped reporting,
+ *  never on one that is legitimately mid-retry. */
+export const SWEEP_DELAY_MS =
+  MAX_ATTEMPTS * SOURCE_DEADLINE_MS + (MAX_ATTEMPTS - 1) * 5_000 + 5_000; // 75s
 
 /** How old a still-`running` search must be before the cron backstop sweeps it.
  *  Comfortably past every deadline above, so it never races a live worker. */
@@ -238,6 +241,11 @@ export const completeSourceRun = internalMutation({
   handler: async (ctx, args) => {
     const row = await ctx.db.get("searchSources", args.searchSourceId);
     if (row === null) return null;
+    // A row the sweeper already called failed is terminal: results arriving
+    // after the parent search settled would reopen a story the UI has finished
+    // telling. The (now generous) sweep delay makes this near-unreachable; the
+    // guard makes it impossible.
+    if (row.status !== "pending" && row.status !== "running") return null;
 
     const search = await ctx.db.get("searches", row.searchId);
     if (search === null) return null;
@@ -328,6 +336,9 @@ export const failSourceRun = internalMutation({
   handler: async (ctx, args) => {
     const row = await ctx.db.get("searchSources", args.searchSourceId);
     if (row === null) return null;
+    // Same terminal-state guard as `completeSourceRun`: never overwrite a row
+    // the sweeper (or an earlier outcome) has already settled.
+    if (row.status !== "pending" && row.status !== "running") return null;
 
     const now = Date.now();
     const message = redactError(args.message);
