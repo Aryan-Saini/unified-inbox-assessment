@@ -312,7 +312,10 @@ export function ResultsList({
   onRetry: (source: Source) => void;
 }) {
   const [filter, setFilter] = useState<Source | "all">("all");
-  const [newestFirst, setNewestFirst] = useState(false);
+  const [sort, setSort] = useState<"arrival" | "newest" | "rank">("arrival");
+
+  const SORT_LABEL = { arrival: "Arrival order", newest: "Newest first", rank: "Relevance" } as const;
+  const NEXT_SORT = { arrival: "newest", newest: "rank", rank: "arrival" } as const;
 
   const tokens = useMemo(
     () =>
@@ -332,13 +335,19 @@ export function ResultsList({
   const shown = useMemo(() => {
     const list =
       filter === "all" ? results : results.filter((r) => r.source === filter);
-    if (!newestFirst) return list;
     // Arrival order is the default *because* it is honest about streaming;
-    // sorting is opt-in and only offered once a run has settled.
-    return [...list].sort((a, b) =>
-      (b.timestamp ?? "").localeCompare(a.timestamp ?? ""),
-    );
-  }, [results, filter, newestFirst]);
+    // re-sorting is opt-in and only offered once a run has settled. Both sorts
+    // copy before sorting, and ties keep arrival order (Array.sort is stable).
+    if (sort === "newest") {
+      return [...list].sort((a, b) =>
+        (b.timestamp ?? "").localeCompare(a.timestamp ?? ""),
+      );
+    }
+    if (sort === "rank") {
+      return [...list].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+    }
+    return list;
+  }, [results, filter, sort]);
 
   const empty = results.length === 0;
 
@@ -374,16 +383,16 @@ export function ResultsList({
 
         <button
           type="button"
-          onClick={() => setNewestFirst((v) => !v)}
+          onClick={() => setSort((v) => NEXT_SORT[v])}
           disabled={working}
           title={
             working
               ? "Available once every source has returned"
-              : "Toggle sort order"
+              : "Cycle sort: arrival → newest → relevance"
           }
           className="ml-auto rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-neutral-500 transition-colors hover:bg-white/[0.04] hover:text-neutral-300 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {newestFirst ? "Newest first" : "Relevance"}
+          {SORT_LABEL[sort]}
         </button>
       </div>
 

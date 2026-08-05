@@ -11,6 +11,7 @@ import {
   PlusIcon,
   RerunIcon,
   SearchIcon,
+  SendIcon,
   SettingsIcon,
   UnarchiveIcon,
 } from "./icons";
@@ -19,11 +20,14 @@ function HistoryRow({
   record,
   active,
   onSelect,
+  onRerun,
   onArchiveToggle,
 }: {
   record: SearchRecord;
   active: boolean;
   onSelect: () => void;
+  /** Runs the query again as a NEW search (`rerunOf`); selecting only reads. */
+  onRerun: () => void;
   onArchiveToggle: () => void;
 }) {
   return (
@@ -63,7 +67,7 @@ function HistoryRow({
 
       <span className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
         <button
-          onClick={onSelect}
+          onClick={onRerun}
           title="Re-run this search"
           aria-label={`Re-run search: ${record.query}`}
           className="rounded-md p-1.5 text-neutral-400 transition-colors hover:bg-white/10 hover:text-white"
@@ -97,8 +101,10 @@ export function Sidebar({
   history,
   activeId,
   onSelect,
+  onRerun,
   onNewSearch,
   onArchiveToggle,
+  onOpenOutbox,
   onOpenSettings,
   sheet = false,
   onClose,
@@ -108,8 +114,10 @@ export function Sidebar({
   history: SearchRecord[];
   activeId: string | null;
   onSelect: (record: SearchRecord) => void;
+  onRerun: (record: SearchRecord) => void;
   onNewSearch: () => void;
   onArchiveToggle: (id: string) => void;
+  onOpenOutbox: () => void;
   onOpenSettings: () => void;
   /**
    * Full-screen mobile sheet rather than the desktop rail. A phone has no room
@@ -227,6 +235,7 @@ export function Sidebar({
                     record={record}
                     active={record.id === activeId}
                     onSelect={() => onSelect(record)}
+                    onRerun={() => onRerun(record)}
                     onArchiveToggle={() => onArchiveToggle(record.id)}
                   />
                 ))}
@@ -265,6 +274,7 @@ export function Sidebar({
                           record={record}
                           active={record.id === activeId}
                           onSelect={() => onSelect(record)}
+                          onRerun={() => onRerun(record)}
                           onArchiveToggle={() => onArchiveToggle(record.id)}
                         />
                       ))}
@@ -278,7 +288,17 @@ export function Sidebar({
       </div>
 
       {/* Footer */}
-      <div className="shrink-0 border-t border-line p-3">
+      <div className="shrink-0 space-y-1 border-t border-line p-3">
+        <button
+          onClick={onOpenOutbox}
+          title="Outbox"
+          className={`flex items-center gap-2 rounded-lg text-[13px] text-neutral-400 transition-colors hover:bg-white/5 hover:text-white ${
+            isCollapsed ? "h-9 w-9 justify-center" : "w-full px-2.5 py-2"
+          }`}
+        >
+          <SendIcon className="h-4.5 w-4.5 shrink-0" />
+          {isCollapsed ? null : <span className="flex-1 text-left">Outbox</span>}
+        </button>
         <button
           onClick={onOpenSettings}
           title="Settings"

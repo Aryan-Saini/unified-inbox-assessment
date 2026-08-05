@@ -14,13 +14,9 @@
 import { toBase64Url } from "../core/crypto";
 import { maybeDelay, maybeInjectFailure } from "../core/faults";
 import { fetchJson, withTimeout } from "../core/http";
+import type { EnrichedAdapter, EnrichedResult } from "../core/registry";
 import type { MessageSender, SendContext, SendPayload, SendReceipt } from "../core/sender";
-import {
-  AdapterError,
-  type AdapterContext,
-  type Result,
-  type SearchAdapter,
-} from "../core/types";
+import { AdapterError, type AdapterContext } from "../core/types";
 
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -39,6 +35,7 @@ interface MessageResponse {
   threadId: string;
   snippet?: string;
   internalDate?: string;
+  labelIds?: string[];
   payload?: { headers?: Array<{ name: string; value: string }> };
 }
 
@@ -130,10 +127,10 @@ export function emailAddress(from: string | undefined): string | undefined {
   return (match?.[1] ?? from).trim();
 }
 
-export const gmailAdapter: SearchAdapter = {
+export const gmailAdapter: EnrichedAdapter = {
   source: "gmail",
 
-  async search(query: string, ctx: AdapterContext): Promise<Result[]> {
+  async search(query: string, ctx: AdapterContext): Promise<EnrichedResult[]> {
     await maybeDelay(ctx.artificialDelayMs, ctx.signal);
 
     if (ctx.accessToken === undefined) {
@@ -182,7 +179,15 @@ export const gmailAdapter: SearchAdapter = {
         url:
           `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(ctx.externalAccountId ?? "")}` +
           `#all/${message.id}`,
-      } satisfies Result;
+
+        /* Enriched extras: stored as columns, stripped by the REST projection.
+           They exist so a reply can be threaded and addressed without the
+           compose path having to call Gmail again. */
+        externalId: message.id,
+        threadId: message.threadId,
+        replyTo: emailAddress(from),
+        unread: message.labelIds?.includes("UNREAD") ?? false,
+      } satisfies EnrichedResult;
     });
   },
 };
@@ -199,22 +204,70 @@ function decodeEntities(text: string): string {
 }
 
 /**
+ * Everything after the `@` in the sending address, for the Message-ID domain.
+ * A Message-ID whose domain matches the sender is the well-behaved form, and some
+ * filters treat a mismatched one as a spam signal.
+ */
+function messageIdDomain(from: string): string {
+  const at = from.lastIndexOf("@");
+  const domain = at === -1 ? "" : from.slice(at + 1).trim().toLowerCase();
+  // `.invalid` is reserved by RFC 2606, so the fallback can never collide with a
+  // real domain.
+  return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain) ? domain : "unified-inbox.invalid";
+}
+
+/**
+ * A Message-ID derived from the idempotency key, and only from it.
+ *
+ * This is what makes an `unknown` send *reconcilable by reading*: Gmail indexes
+ * the header, so `rfc822msgid:` answers "did this exact claim already go out?"
+ * without sending anything. Random per attempt, it would answer nothing.
+ */
+function deterministicMessageId(key: string, from: string): string {
+  const safe = key.replace(/[^A-Za-z0-9._-]/g, "").slice(0, 96);
+  return `<uik.${safe}@${messageIdDomain(from)}>`;
+}
+
+/**
  * RFC 2822 message. Non-ASCII subjects are RFC 2047 encoded and the body is
  * declared UTF-8, so an em dash in a reply does not arrive as mojibake.
  */
+/**
+ * Header values are interpolated into an RFC 2822 header block, where a CR/LF
+ * is not data but structure: `to = "a@x\r\nBcc: b@y"` would smuggle a hidden
+ * recipient past the confirm screen, and `\r\n\r\n` would terminate the header
+ * block entirely. The draft layer already refuses control characters in `to`;
+ * this strips them from *every* interpolated value so the property does not
+ * depend on every caller remembering to validate.
+ */
+function headerSafe(value: string): string {
+  return value.replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
+}
+
 function buildRawMessage(payload: SendPayload, from: string): string {
   const lines = [
-    `From: ${from}`,
-    `To: ${payload.to}`,
+    `From: ${headerSafe(from)}`,
+    `To: ${headerSafe(payload.to)}`,
     `Subject: ${encodeHeaderValue(payload.subject ?? "")}`,
     "MIME-Version: 1.0",
     'Content-Type: text/plain; charset="UTF-8"',
     "Content-Transfer-Encoding: 8bit",
   ];
 
+  // The idempotency key, twice: once in a header Gmail's search indexes
+  // (`rfc822msgid:`) and once in a header a human reading raw source can see.
+  if (payload.idempotencyKey !== undefined) {
+    lines.push(
+      `Message-ID: ${deterministicMessageId(payload.idempotencyKey, from)}`,
+      `X-Unified-Inbox-Key: ${payload.idempotencyKey}`,
+    );
+  }
+
   // Threading headers make the reply land in the original conversation rather
-  // than starting a new one.
-  if (payload.inReplyTo !== undefined) {
+  // than starting a new one. Only emitted for a real RFC Message-ID (which always
+  // contains an `@`): a Gmail *message id* here would be a malformed header, and
+  // `threadId` on the API call is what actually threads the reply anyway.
+  if (payload.inReplyTo !== undefined && payload.inReplyTo.includes("@")) {
     lines.push(`In-Reply-To: ${payload.inReplyTo}`, `References: ${payload.inReplyTo}`);
   }
 
@@ -222,8 +275,10 @@ function buildRawMessage(payload: SendPayload, from: string): string {
 }
 
 function encodeHeaderValue(value: string): string {
-  // eslint-disable-next-line no-control-regex -- matching non-ASCII is the point
-  if (!/[^\x00-\x7F]/.test(value)) return value;
+  // Anything outside printable ASCII forces RFC 2047 encoding: an 8-bit header
+  // value is not legal, and a raw CR/LF in a header is injection. Base64-encoding
+  // the whole value defuses both.
+  if (!/[^\x20-\x7E]/.test(value)) return value;
   const encoded = toBase64Url(new TextEncoder().encode(value))
     .replace(/-/g, "+")
     .replace(/_/g, "/");

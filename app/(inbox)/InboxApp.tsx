@@ -1,23 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { ComposeDialog } from "./ComposeDialog";
 import { ResultsList } from "./ResultsList";
 import { SearchField } from "./SearchField";
 import { ConnectionsDialog } from "./ConnectionsDialog";
+import { OutboxDialog, type OutboxSend } from "./OutboxDialog";
 import { SettingsDialog } from "./SettingsDialog";
 import { Sidebar } from "./Sidebar";
 import { SourceStatus } from "./SourceStatus";
 import { TypedHeading } from "./TypedHeading";
-import { MOCK_CONNECTIONS, MOCK_HISTORY, SOURCES, SOURCE_META } from "./mock-data";
+import { SOURCES, SOURCE_META } from "./mock-data";
 import { SourceBar } from "./SourceBar";
-import type { Connection, Draft, SearchRecord, Source, UiResult } from "./types";
-import {
-  DEFAULT_DEMO,
-  useMockSearch,
-  type DemoOptions,
-  type RunSummary,
-} from "./useMockSearch";
+import type { ComposePrefill, Draft, SearchRecord, Source, UiResult } from "./types";
+import { formatAge } from "./format";
+import { useClockMinute } from "./useClock";
+import { useConnections } from "./useConnections";
+import { DEFAULT_DEMO, useSearch, type DemoOptions } from "./useSearch";
 import {
   ArchiveIcon,
   CheckIcon,
@@ -32,51 +34,86 @@ interface Toast {
   action?: { label: string; run: () => void };
 }
 
+/** What the compose dialog is opened on: the result being answered, plus an
+ *  optional payload to seed it with instead of the reply template. */
+interface ComposeTarget {
+  result: UiResult;
+  prefill?: ComposePrefill;
+}
+
 export function InboxApp() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
+  const [outboxOpen, setOutboxOpen] = useState(false);
   const [demo, setDemo] = useState<DemoOptions>(DEFAULT_DEMO);
-  const [connections, setConnections] = useState<Connection[]>(MOCK_CONNECTIONS);
-  const [history, setHistory] = useState<SearchRecord[]>(MOCK_HISTORY);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [draftFor, setDraftFor] = useState<UiResult | null>(null);
+  const [compose, setCompose] = useState<ComposeTarget | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [text, setText] = useState("");
   /** Which connectors a search fans out to, driven by the source bar. */
   const [enabledSources, setEnabledSources] = useState<Source[]>(SOURCES);
 
+  /**
+   * Real connections, real OAuth. `addAccount` and `reconnect` navigate to the
+   * provider and come back through the Convex callback, so neither resolves — the
+   * "connected" feedback arrives as a URL param, handled below.
+   */
+  const {
+    connections,
+    addAccount,
+    reconnect,
+    toggleAccount,
+    disconnect: disconnectAccount,
+  } = useConnections();
+
   const input = useRef<HTMLTextAreaElement>(null);
   const nextId = useRef(0);
-  /** Which history row the in-flight run belongs to, readable from a timer. */
-  const activeIdRef = useRef<string | null>(null);
 
   /**
-   * Fold the settled outcome back into the history row. This is a callback from
-   * the last adapter finishing, not an effect watching state — the sidebar row
-   * is updated once, by the event that actually changed something.
+   * The live fan-out. Every run is a real search row on the server, so the
+   * sidebar below reads the same history a `curl` session would.
    */
-  const handleSettled = useCallback((summary: RunSummary) => {
-    const id = activeIdRef.current;
-    if (id === null) return;
-    setHistory((prev) =>
-      prev.map((h) =>
-        h.id === id
-          ? {
-              ...h,
-              resultCount: summary.resultCount,
-              sources: summary.returned,
-              degraded: summary.degraded,
-              pending: false,
-            }
-          : h,
-      ),
-    );
-  }, []);
+  const {
+    phase,
+    query,
+    runs,
+    results,
+    working,
+    elapsed,
+    run,
+    reset,
+    searchId,
+    open,
+    rerun,
+    rerunFrom,
+  } = useSearch(demo);
 
-  const { phase, query, runs, results, working, elapsed, run, reset } =
-    useMockSearch(demo, handleSettled);
+  /**
+   * History, straight from the server. The in-flight run is already in here —
+   * `searches.run` inserts the row before the workers are scheduled — so the
+   * sidebar reflects work in progress without a local optimistic copy to
+   * reconcile afterwards.
+   */
+  const historyRows = useQuery(api.searches.history);
+  const setArchived = useMutation(api.searches.setArchived);
+  const now = useClockMinute();
+
+  const history = useMemo<SearchRecord[]>(
+    () =>
+      (historyRows ?? []).map((row) => ({
+        id: row.id,
+        query: row.query,
+        age: formatAge(row.createdAt, now),
+        resultCount: row.resultCount,
+        sources: row.sources,
+        archived: row.archived,
+        isSeed: row.isSeed,
+        degraded: row.degraded,
+        pending: row.status === "running",
+      })),
+    [historyRows, now],
+  );
 
   const hero = phase === "idle";
 
@@ -92,7 +129,7 @@ export function InboxApp() {
   // --- Search ------------------------------------------------------------
 
   const startSearch = useCallback(
-    (q: string, existingId?: string) => {
+    (q: string) => {
       const trimmed = q.trim();
       if (trimmed.length === 0) return;
 
@@ -106,34 +143,6 @@ export function InboxApp() {
         (s) => s === "web" || connections.some((c) => c.provider === s && c.enabled),
       );
       run(trimmed, dispatchable.length > 0 ? dispatchable : enabledSources);
-
-      if (existingId) {
-        setActiveId(existingId);
-        activeIdRef.current = existingId;
-        setHistory((prev) =>
-          prev.map((h) => (h.id === existingId ? { ...h, pending: true } : h)),
-        );
-        return;
-      }
-
-      // A new run gets its own history row immediately, so the sidebar reflects
-      // in-flight work rather than only settled work.
-      const id = `s_live_${nextId.current += 1}`;
-      setActiveId(id);
-      activeIdRef.current = id;
-      setHistory((prev) => [
-        {
-          id,
-          query: trimmed,
-          age: "now",
-          resultCount: 0,
-          sources: [],
-          archived: false,
-          isSeed: false,
-          pending: true,
-        },
-        ...prev,
-      ]);
     },
     [run, enabledSources, connections],
   );
@@ -153,120 +162,160 @@ export function InboxApp() {
     });
   }, []);
 
-  const addAccount = useCallback(
-    (provider: "gmail" | "slack") => {
-      const seq = (nextId.current += 1);
-      const label =
-        provider === "gmail"
-          ? `team-${seq}@northwind.test`
-          : `Northwind Workspace ${seq}`;
-
-      setConnections((prev) => [
-        ...prev,
-        {
-          id: `conn_${provider}_${seq}`,
-          provider,
-          label,
-          detail:
-            provider === "gmail" ? "Added from the source bar" : "ada@northwind.test",
-          status: "active",
-          scopes:
-            provider === "gmail"
-              ? ["gmail.readonly", "gmail.send"]
-              : ["search:read", "chat:write"],
-          lastUsed: "just now",
-          enabled: true,
-        },
-      ]);
-
-      // A newly connected account is useless if its source is still excluded.
-      setEnabledSources((prev) =>
-        prev.includes(provider) ? prev : [...prev, provider],
-      );
-      toast(`Connected ${label}`);
-    },
-    [toast],
-  );
-
   const newSearch = useCallback(() => {
     reset();
     setText("");
-    setActiveId(null);
-    activeIdRef.current = null;
     setMobileNavOpen(false);
     requestAnimationFrame(() => input.current?.focus());
   }, [reset]);
 
   // --- History -----------------------------------------------------------
 
+  /**
+   * Archiving is a soft hide on the server — the search and its results are
+   * kept, because a "14 results at 09:12" claim you can no longer inspect is
+   * not history. Undo is the same mutation with the flag flipped back.
+   */
   const toggleArchive = useCallback(
     (id: string) => {
-      let restored = false;
-      setHistory((prev) =>
-        prev.map((h) => {
-          if (h.id !== id) return h;
-          restored = h.archived;
-          return { ...h, archived: !h.archived };
-        }),
-      );
-      toast(restored ? "Search restored" : "Search archived", {
+      const record = history.find((h) => h.id === id);
+      if (record === undefined) return;
+      const searchRef = id as Id<"searches">;
+
+      void setArchived({ searchId: searchRef, archived: !record.archived });
+      toast(record.archived ? "Search restored" : "Search archived", {
         label: "Undo",
-        run: () =>
-          setHistory((prev) =>
-            prev.map((h) => (h.id === id ? { ...h, archived: restored } : h)),
-          ),
+        run: () => {
+          void setArchived({ searchId: searchRef, archived: record.archived });
+        },
       });
     },
-    [toast],
+    [history, setArchived, toast],
   );
 
-  const activeRecord = history.find((h) => h.id === activeId) ?? null;
+  /**
+   * The sidebar's re-run action: a NEW search with `rerunOf` pointing at the
+   * old row, never an overwrite — the "14 results at 09:12" claim stays
+   * inspectable after today's answer arrives.
+   */
+  const rerunFromHistory = useCallback(
+    (record: SearchRecord) => {
+      setText(record.query);
+      setMobileNavOpen(false);
+      rerunFrom(record.id as Id<"searches">, record.query, record.sources);
+    },
+    [rerunFrom],
+  );
+
+  const activeRecord = history.find((h) => h.id === searchId) ?? null;
 
   // --- Connections -------------------------------------------------------
 
-  const toggleAccount = useCallback((id: string) => {
-    setConnections((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, enabled: !c.enabled } : c)),
-    );
-  }, []);
-
-  const reconnect = useCallback(
+  const disconnect = useCallback(
     (id: string) => {
-      setConnections((prev) =>
-        prev.map((c) =>
-          c.id === id
-            ? { ...c, status: "active", statusReason: undefined, lastUsed: "just now" }
-            : c,
-        ),
-      );
-      toast("Connection restored — identity preserved");
+      const label = connections.find((c) => c.id === id)?.label ?? "account";
+      disconnectAccount(id);
+      toast(`Disconnected ${label} — history kept`);
     },
-    [toast],
+    [connections, disconnectAccount, toast],
   );
 
-  /** The source strip's reconnect button routes to the matching connection. */
+  /**
+   * Report what the OAuth callback did, then strip the params.
+   *
+   * Without this the interesting outcomes are invisible: a reconnect rejected for
+   * being a different account, or a consent screen the user cancelled, would both
+   * look like a page that simply reloaded. `replaceState` clears the params so a
+   * refresh does not replay the toast.
+   */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("connected");
+    const error = params.get("oauth_error");
+    if (connected === null && error === null) return;
+
+    if (connected !== null) {
+      // The callback always names the account; the provider is the fallback.
+      toast(`Connected ${params.get("account") ?? connected}`);
+    } else if (error === "identity_mismatch") {
+      const expected = params.get("oauth_expected") ?? "the original account";
+      const actual = params.get("oauth_actual") ?? "a different account";
+      toast(
+        `This connection is ${expected}, but you signed in as ${actual}. Add it as another account instead.`,
+      );
+    } else if (error === "access_denied") {
+      toast("Connection cancelled — nothing was changed");
+    } else {
+      toast(`Could not connect: ${params.get("oauth_error_detail") ?? error}`);
+    }
+
+    for (const key of [
+      "connected",
+      "account",
+      "oauth_error",
+      "oauth_error_detail",
+      "oauth_expected",
+      "oauth_actual",
+    ]) {
+      params.delete(key);
+    }
+    const query = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${query === "" ? "" : `?${query}`}`,
+    );
+  }, [toast]);
+
+  /**
+   * The source strip's reconnect button.
+   *
+   * A *simulated* revocation is undone by turning the fault off; a real one is
+   * only fixed by re-granting, which lives in the connections dialog. The two
+   * are told apart by the marker the injector stamps on every simulated
+   * failure — a demo affordance must never be able to masquerade as a real one.
+   */
   const reconnectSource = useCallback(
     (source: Source) => {
-      if (source === "slack") {
-        setDemo((d) => ({ ...d, slackNeedsReconnect: false }));
-        toast("Slack grant restored — re-run the search to pick it up", {
+      const failing = runs.find((r) => r.source === source);
+      if (failing?.errorMessage?.includes("[simulated]") === true) {
+        const next = { ...demo, slackNeedsReconnect: false };
+        setDemo(next);
+        toast("Simulated revocation cleared — re-run to pick the grant back up", {
           label: "Re-run",
-          run: () => startSearch(query, activeId ?? undefined),
+          run: () => rerun(next),
         });
+        return;
+      }
+      // One dead grant is unambiguous, so go straight to the provider's consent
+      // screen. Anything less clear-cut goes through the connections dialog,
+      // where each account's status is visible.
+      const broken = connections.filter(
+        (c) => c.provider === source && c.status !== "active",
+      );
+      if (broken.length === 1) {
+        reconnect(broken[0].id);
         return;
       }
       setConnectionsOpen(true);
     },
-    [toast, query, activeId, startSearch],
+    [runs, demo, toast, rerun, connections, reconnect],
   );
 
+  /**
+   * Retry a failed source by re-running the search. A rerun is a *new* search
+   * row (with `rerunOf` set) rather than an overwrite, so the failure that
+   * prompted it stays in history where it can still be read.
+   */
   const retrySource = useCallback(
     (source: Source) => {
-      if (source === "gmail") setDemo((d) => ({ ...d, gmailTransientFailure: false }));
+      const next =
+        source === "gmail" ? { ...demo, gmailTransientFailure: false } : demo;
+      if (next !== demo) setDemo(next);
       toast(`Retrying ${SOURCE_META[source].name}…`);
-      startSearch(query, activeId ?? undefined);
+      rerun(next);
     },
-    [toast, query, activeId, startSearch],
+    [demo, toast, rerun],
   );
 
 
@@ -297,6 +346,31 @@ export function InboxApp() {
     [toast],
   );
 
+  // --- Outbox --------------------------------------------------------------
+
+  /**
+   * The only exit from an `unknown` send: the same payload under a *new*
+   * idempotency key, minted by the freshly-mounted compose dialog. The old key
+   * stays claimed by the indeterminate delivery, exactly as it should.
+   */
+  const composeAgain = useCallback((send: OutboxSend) => {
+    setOutboxOpen(false);
+    setCompose({
+      result: {
+        source: send.channel,
+        id: send.id,
+        title: send.subject ?? `Message to ${send.to}`,
+        snippet: send.body,
+        url: "",
+        age: "",
+        replyTo: send.to,
+        connectionId: send.connectionId,
+        threadId: send.threadId,
+      },
+      prefill: { subject: send.subject, body: send.body },
+    });
+  }, []);
+
   const renderSidebar = (sheet: boolean) => (
     <Sidebar
       sheet={sheet}
@@ -304,10 +378,22 @@ export function InboxApp() {
       collapsed={collapsed}
       onToggleCollapsed={() => setCollapsed((v) => !v)}
       history={history}
-      activeId={activeId}
-      onSelect={(record) => startSearch(record.query, record.id)}
+      activeId={searchId}
+      // Selecting a past search *reads* it rather than re-running it: the rows
+      // are still on the server, and silently re-querying five providers
+      // because someone clicked history would spend real quota.
+      onSelect={(record) => {
+        setText(record.query);
+        setMobileNavOpen(false);
+        open(record.id as Id<"searches">, record.query);
+      }}
+      onRerun={rerunFromHistory}
       onNewSearch={newSearch}
       onArchiveToggle={toggleArchive}
+      onOpenOutbox={() => {
+        setOutboxOpen(true);
+        setMobileNavOpen(false);
+      }}
       onOpenSettings={() => {
         setSettingsOpen(true);
         setMobileNavOpen(false);
@@ -378,7 +464,7 @@ export function InboxApp() {
                 ref={input}
                 value={text}
                 onChange={setText}
-                onSubmit={() => startSearch(text, hero ? undefined : activeId ?? undefined)}
+                onSubmit={() => startSearch(text)}
                 onClear={newSearch}
                 working={working}
                 footer={
@@ -398,7 +484,7 @@ export function InboxApp() {
                         <span className="mx-1 h-4 w-px bg-line" />
                         <button
                           type="button"
-                          onClick={() => startSearch(query, activeId ?? undefined)}
+                          onClick={() => rerun()}
                           title="Re-run this search"
                           className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[12.5px] font-medium text-neutral-400 transition-colors hover:bg-white/[0.05] hover:text-white"
                         >
@@ -438,14 +524,14 @@ export function InboxApp() {
           <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
             {hero ? null : (
               <div className="mx-auto w-full max-w-3xl space-y-3 px-4 pt-2 pb-6 sm:px-6">
-                <SourceStatus runs={runs} />
+                <SourceStatus runs={runs} onReconnect={reconnectSource} />
                 <ResultsList
                   query={query}
                   results={results}
                   runs={runs}
                   working={working}
                   elapsed={elapsed}
-                  onReply={setDraftFor}
+                  onReply={(result) => setCompose({ result })}
                   onReconnect={reconnectSource}
                   onRetry={retrySource}
                 />
@@ -497,15 +583,27 @@ export function InboxApp() {
         onClose={() => setSettingsOpen(false)}
         connections={connections}
         onReconnect={reconnect}
+        onAddAccount={addAccount}
+        onDisconnect={disconnect}
+      />
+
+      <OutboxDialog
+        open={outboxOpen}
+        onClose={() => setOutboxOpen(false)}
+        connections={connections}
+        onReconnect={reconnect}
+        onComposeAgain={composeAgain}
       />
 
       {/* Keyed on the result: opening a reply to a different row remounts the
-          dialog, which resets the draft without an effect to do it. */}
-      {draftFor ? (
+          dialog, which resets the draft — and mints a fresh idempotency key —
+          without an effect to do it. */}
+      {compose ? (
         <ComposeDialog
-          key={draftFor.id}
-          result={draftFor}
-          onClose={() => setDraftFor(null)}
+          key={compose.result.id}
+          result={compose.result}
+          prefill={compose.prefill}
+          onClose={() => setCompose(null)}
           onSent={onSent}
         />
       ) : null}

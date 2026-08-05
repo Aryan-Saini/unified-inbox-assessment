@@ -17,6 +17,31 @@ async function currentUser(ctx: QueryCtx | MutationCtx) {
     .unique();
 }
 
+/**
+ * The calling user's row, or a thrown error.
+ *
+ * Exported so every public function that needs an owner resolves it the same
+ * way. The two failure modes are kept distinct because they call for different
+ * reactions: signed out means "sign in", while a missing row means the Clerk
+ * webhook has not landed yet and retrying in a moment actually works.
+ */
+export async function requireUser(ctx: QueryCtx | MutationCtx) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (identity === null) throw new Error("Not signed in.");
+
+  const user = await currentUser(ctx);
+  if (user === null) {
+    throw new Error("Your account is still syncing. Try again in a moment.");
+  }
+  return user;
+}
+
+/** The signed-in user, or `null` when signed out or not yet synced. Safe to call
+ *  unauthenticated, for read paths that should render empty rather than throw. */
+export async function optionalUser(ctx: QueryCtx | MutationCtx) {
+  return await currentUser(ctx);
+}
+
 /** The signed-in user, or null when signed out. Safe to call unauthenticated. */
 export const viewer = query({
   args: {},

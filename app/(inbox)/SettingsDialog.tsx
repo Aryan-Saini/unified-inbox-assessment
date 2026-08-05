@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { BRAND_LOGO } from "./brand-icons";
+import { formatAge } from "./format";
 import type { Connection, ConnectionStatus } from "./types";
 import { Button, Modal, StatusPill } from "./ui";
-import { KeyIcon, PlugIcon } from "./icons";
+import { KeyIcon, PlugIcon, SlidersIcon } from "./icons";
 
 /** Section heading, matching the "ACCOUNTS" label in the connectors panel. */
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -15,11 +18,12 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-type Tab = "connections" | "api";
+type Tab = "connections" | "api" | "demo";
 
 const TABS: { id: Tab; label: string; icon: (p: { className?: string }) => React.ReactNode }[] = [
   { id: "connections", label: "Connections", icon: PlugIcon },
   { id: "api", label: "API keys", icon: KeyIcon },
+  { id: "demo", label: "Demo data", icon: SlidersIcon },
 ];
 
 const TONE: Record<ConnectionStatus, "ok" | "warn" | "bad"> = {
@@ -33,10 +37,12 @@ function ConnectionRow({
   connection,
   reconnecting,
   onReconnect,
+  onDisconnect,
 }: {
   connection: Connection;
   reconnecting: boolean;
   onReconnect: () => void;
+  onDisconnect: () => void;
 }) {
   const Logo = BRAND_LOGO[connection.provider];
   const healthy = connection.status === "active";
@@ -55,7 +61,11 @@ function ConnectionRow({
       </div>
 
       {healthy ? (
-        <Button variant="ghost" className="!px-2.5 !py-1.5 !text-[12px]">
+        <Button
+          variant="ghost"
+          onClick={onDisconnect}
+          className="!px-2.5 !py-1.5 !text-[12px]"
+        >
           Disconnect
         </Button>
       ) : (
@@ -87,23 +97,54 @@ export function SettingsDialog({
   onClose,
   connections,
   onReconnect,
+  onAddAccount,
+  onDisconnect,
 }: {
   open: boolean;
   onClose: () => void;
   connections: Connection[];
   onReconnect: (id: string) => void;
+  onAddAccount: (provider: "gmail" | "slack") => void;
+  onDisconnect: (id: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("connections");
   const [reconnecting, setReconnecting] = useState<string | null>(null);
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [demoNote, setDemoNote] = useState<string | null>(null);
 
+  const apiKeys = useQuery(api.apiKeys.list);
+  const createKey = useMutation(api.apiKeys.create);
+  const revokeKey = useMutation(api.apiKeys.revoke);
+  const loadDemoData = useMutation(api.seed.seed);
+  const clearDemoData = useMutation(api.seed.reset);
+
+  /**
+   * Wrap a mutation so the button can show its own pending state and any error
+   * lands in the panel rather than in the console. Convex throws structured
+   * errors; the message is written for a human, so it is shown verbatim.
+   */
+  async function run(label: string, action: () => Promise<string>) {
+    setBusy(label);
+    setDemoNote(null);
+    try {
+      setDemoNote(await action());
+    } catch (err) {
+      setDemoNote(err instanceof Error ? err.message : "That did not work.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * The spinner is not cleared: `onReconnect` starts a real OAuth flow, so the
+   * next thing that happens is the browser leaving this page. Keeping the row in
+   * its pending state until then is the honest rendering — the request has not
+   * completed, it has handed off.
+   */
   function reconnect(id: string) {
     setReconnecting(id);
-    // Stands in for the OAuth round trip.
-    setTimeout(() => {
-      onReconnect(id);
-      setReconnecting(null);
-    }, 1200);
+    onReconnect(id);
   }
 
   return (
@@ -141,13 +182,23 @@ export function SettingsDialog({
             <section className="space-y-2">
               <SectionTitle>Connected accounts</SectionTitle>
 
-              <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line">
+              {/* An empty bordered box reads as a loading failure, so zero
+                  connections gets the same dashed empty state the switchboard
+                  uses. */}
+              {connections.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-line-strong px-3.5 py-6 text-center text-[13px] text-neutral-500">
+                  No accounts connected yet. Connect one below to search it.
+                </p>
+              ) : null}
+
+              <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line empty:hidden">
                 {connections.map((connection) => (
                   <ConnectionRow
                     key={connection.id}
                     connection={connection}
                     reconnecting={reconnecting === connection.id}
                     onReconnect={() => reconnect(connection.id)}
+                    onDisconnect={() => onDisconnect(connection.id)}
                   />
                 ))}
               </ul>
@@ -159,6 +210,7 @@ export function SettingsDialog({
                     <Button
                       key={provider}
                       variant="outline"
+                      onClick={() => onAddAccount(provider)}
                       className="!px-2.5 !py-1.5 !text-[12px]"
                     >
                       <Logo className="h-3.5 w-3.5" />
@@ -183,19 +235,25 @@ export function SettingsDialog({
                     {revealedKey}
                   </code>
                   <p className="mt-2 text-[11px] text-indigo-200/70">
-                    This string is fabricated by the UI and authenticates
-                    nothing.
+                    Send it as{" "}
+                    <span className="font-mono">Authorization: Bearer …</span> to
+                    the REST API. Only its SHA-256 digest is stored, so this is
+                    the last time it can be read.
                   </p>
                 </div>
               ) : null}
 
-              <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-ink-850/60">
-                {[
-                  { prefix: "uik_a1b2c3", name: "local-dev script", used: "2m ago" },
-                  { prefix: "uik_9f8e7d", name: "reviewer walkthrough", used: "never" },
-                ].map((k) => (
+              {apiKeys !== undefined && apiKeys.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-line-strong px-3.5 py-6 text-center text-[13px] text-neutral-500">
+                  No keys yet. Create one to drive search and send over REST with
+                  no UI at all.
+                </p>
+              ) : null}
+
+              <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-ink-850/60 empty:hidden">
+                {(apiKeys ?? []).map((k) => (
                   <div
-                    key={k.prefix}
+                    key={k.id}
                     className="flex flex-wrap items-center gap-3 px-3.5 py-3"
                   >
                     <KeyIcon className="h-4 w-4 shrink-0 text-neutral-500" />
@@ -205,29 +263,108 @@ export function SettingsDialog({
                       </p>
                       <p className="font-mono text-[11px] text-neutral-500">
                         {k.prefix}…{" "}
-                        <span className="font-sans">· last used {k.used}</span>
+                        <span className="font-sans">
+                          ·{" "}
+                          {k.revokedAt !== undefined
+                            ? `revoked ${formatAge(k.revokedAt)}`
+                            : k.lastUsedAt === undefined
+                              ? "never used"
+                              : `last used ${formatAge(k.lastUsedAt)}`}
+                        </span>
                       </p>
                     </div>
-                    <Button variant="danger" className="px-2.5">
-                      Revoke
-                    </Button>
+                    {k.revokedAt === undefined ? (
+                      <Button
+                        variant="danger"
+                        className="px-2.5"
+                        disabled={busy === `revoke-${k.id}`}
+                        onClick={() =>
+                          void run(`revoke-${k.id}`, async () => {
+                            await revokeKey({ apiKeyId: k.id });
+                            return "Key revoked. Requests on it now get a 401.";
+                          })
+                        }
+                      >
+                        Revoke
+                      </Button>
+                    ) : (
+                      <StatusPill tone="warn">revoked</StatusPill>
+                    )}
                   </div>
                 ))}
               </div>
 
               <Button
                 variant="outline"
+                disabled={busy === "create-key"}
                 onClick={() =>
-                  setRevealedKey(
-                    `uik_${(globalThis.crypto?.randomUUID?.() ?? "0000000000000000")
-                      .replace(/-/g, "")
-                      .slice(0, 28)}`,
-                  )
+                  void run("create-key", async () => {
+                    const created = await createKey({ name: "REST client" });
+                    setRevealedKey(created.key);
+                    return "";
+                  })
                 }
               >
                 <KeyIcon className="h-3.5 w-3.5" />
                 Create key
               </Button>
+
+              {demoNote !== null && demoNote !== "" && tab === "api" ? (
+                <p className="text-[12px] text-neutral-400">{demoNote}</p>
+              ) : null}
+            </section>
+          ) : null}
+
+          {tab === "demo" ? (
+            <section className="space-y-3">
+              <SectionTitle>Demo data</SectionTitle>
+
+              <p className="text-[13px] leading-relaxed text-neutral-400">
+                Loads one set of fixtures onto your account: three connections,
+                four searches (including one still running and one with a revoked
+                grant), drafts in every status, and a delivery in each of the
+                seven send states with its full attempt timeline.
+              </p>
+              <p className="text-[12px] leading-relaxed text-neutral-500">
+                Seeded rows are badged as demo data and hold no OAuth grant, so
+                they can never cause a real provider call. Loading twice does
+                nothing the second time.
+              </p>
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  disabled={busy === "seed"}
+                  onClick={() =>
+                    void run("seed", async () => {
+                      const out = await loadDemoData({});
+                      return out.created
+                        ? `Loaded ${out.counts.searches} searches, ${out.counts.results} results, ${out.counts.drafts} drafts and ${out.counts.sends} sends.`
+                        : "Demo data is already loaded.";
+                    })
+                  }
+                >
+                  {busy === "seed" ? "Loading…" : "Load demo data"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  disabled={busy === "reset"}
+                  onClick={() =>
+                    void run("reset", async () => {
+                      const out = await clearDemoData({});
+                      return `Removed ${out.counts.searches} searches, ${out.counts.drafts} drafts and ${out.counts.sends} sends. Your real data is untouched.`;
+                    })
+                  }
+                >
+                  {busy === "reset" ? "Removing…" : "Remove demo data"}
+                </Button>
+              </div>
+
+              {demoNote !== null && demoNote !== "" ? (
+                <p className="fade-in rounded-xl border border-line bg-ink-850/60 px-3.5 py-2.5 text-[12px] text-neutral-300">
+                  {demoNote}
+                </p>
+              ) : null}
             </section>
           ) : null}
 
