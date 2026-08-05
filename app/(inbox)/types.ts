@@ -41,6 +41,12 @@ export interface UiResult extends Result {
   threadId?: string;
   /** Provider-side id of the message being replied to. */
   externalId?: string;
+  /**
+   * Merge-layer relevance score, computed at write time. Higher is better.
+   * Powers the opt-in "Relevance" sort; arrival order stays the default
+   * because it is honest about streaming.
+   */
+  score?: number;
 }
 
 /** Mirrors `searchSources.status` in the Convex schema. */

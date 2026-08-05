@@ -324,6 +324,7 @@ export function useSearch(demo: DemoOptions): UseSearch {
       connectionId: row.connectionId,
       threadId: row.threadId,
       externalId: row.externalId,
+      score: row.score,
     }));
   }, [data, now]);
 
