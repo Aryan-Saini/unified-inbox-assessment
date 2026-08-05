@@ -39,6 +39,8 @@ import type * as orchestrator from "../orchestrator.js";
 import type * as searches from "../searches.js";
 import type * as seed from "../seed.js";
 import type * as sends from "../sends.js";
+import type * as test_fakeProviders from "../test/fakeProviders.js";
+import type * as test_fixtures from "../test/fixtures.js";
 import type * as users from "../users.js";
 
 import type {
@@ -79,6 +81,8 @@ declare const fullApi: ApiFromModules<{
   searches: typeof searches;
   seed: typeof seed;
   sends: typeof sends;
+  "test/fakeProviders": typeof test_fakeProviders;
+  "test/fixtures": typeof test_fixtures;
   users: typeof users;
 }>;
 
