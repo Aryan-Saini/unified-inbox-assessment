@@ -14,13 +14,9 @@
 import { toBase64Url } from "../core/crypto";
 import { maybeDelay, maybeInjectFailure } from "../core/faults";
 import { fetchJson, withTimeout } from "../core/http";
+import type { EnrichedAdapter, EnrichedResult } from "../core/registry";
 import type { MessageSender, SendContext, SendPayload, SendReceipt } from "../core/sender";
-import {
-  AdapterError,
-  type AdapterContext,
-  type Result,
-  type SearchAdapter,
-} from "../core/types";
+import { AdapterError, type AdapterContext } from "../core/types";
 
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -39,6 +35,7 @@ interface MessageResponse {
   threadId: string;
   snippet?: string;
   internalDate?: string;
+  labelIds?: string[];
   payload?: { headers?: Array<{ name: string; value: string }> };
 }
 
@@ -130,10 +127,10 @@ export function emailAddress(from: string | undefined): string | undefined {
   return (match?.[1] ?? from).trim();
 }
 
-export const gmailAdapter: SearchAdapter = {
+export const gmailAdapter: EnrichedAdapter = {
   source: "gmail",
 
-  async search(query: string, ctx: AdapterContext): Promise<Result[]> {
+  async search(query: string, ctx: AdapterContext): Promise<EnrichedResult[]> {
     await maybeDelay(ctx.artificialDelayMs, ctx.signal);
 
     if (ctx.accessToken === undefined) {
@@ -182,7 +179,15 @@ export const gmailAdapter: SearchAdapter = {
         url:
           `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(ctx.externalAccountId ?? "")}` +
           `#all/${message.id}`,
-      } satisfies Result;
+
+        /* Enriched extras: stored as columns, stripped by the REST projection.
+           They exist so a reply can be threaded and addressed without the
+           compose path having to call Gmail again. */
+        externalId: message.id,
+        threadId: message.threadId,
+        replyTo: emailAddress(from),
+        unread: message.labelIds?.includes("UNREAD") ?? false,
+      } satisfies EnrichedResult;
     });
   },
 };

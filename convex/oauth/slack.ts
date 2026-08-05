@@ -85,13 +85,24 @@ export function classifySlackError(error: string): ErrorKind {
     case "not_authed":
     case "account_inactive":
     case "missing_scope":
+    case "no_permission":
       return "needs_reconnect";
     case "ratelimited":
     case "rate_limited":
     case "service_unavailable":
     case "internal_error":
     case "fatal_error":
+    case "request_timeout":
       return "transient";
+    // Listed explicitly rather than left to the default so the classification
+    // reads as a decision: these are all "the call was wrong", and repeating it
+    // unchanged cannot help.
+    case "channel_not_found":
+    case "not_in_channel":
+    case "is_archived":
+    case "msg_too_long":
+    case "invalid_arguments":
+      return "permanent";
     default:
       // Unrecognised errors are permanent on purpose: an unclassified failure
       // retrying forever is worse than one an operator has to look at.
