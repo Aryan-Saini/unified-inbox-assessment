@@ -975,6 +975,31 @@ nothing but `production`, `development` and `test` — a `.env.handin` would
 silently never load. Inline `process.env` sits at the top of Next's lookup order,
 so it wins over `.env.local`.
 
+### Before submitting
+
+Two things that only bite on the deployed URL, so local work never catches them:
+
+1. **Register the deployed frontend origin on the hand-in deployment.** A browser
+   on the deployed URL is not loopback, so the OAuth callback will not return to it
+   until its origin is named — otherwise a reviewer finishing a connect flow is
+   redirected to `APP_BASE_URL`, which is currently `http://localhost:3000`, i.e.
+   *their own* machine. See
+   [Which origin a callback returns to](#which-origin-a-callback-returns-to).
+
+   ```bash
+   npx convex env set APP_BASE_URL "https://<deployed-origin>" --prod
+   # or, to keep APP_BASE_URL as-is and add to the allowlist:
+   npx convex env set APP_ORIGIN_ALLOWLIST "https://<deployed-origin>" --prod
+   ```
+
+2. **Turn on Slack public distribution.** Until it is on, the Slack app can only be
+   installed into the workspace that created it, and any reviewer authorizing from
+   their own workspace gets `invalid_team_for_non_distributed_app` before the
+   consent screen even renders. api.slack.com/apps → the app → **Manage
+   Distribution** → tick the hard-coded-information review box → **Activate Public
+   Distribution**. Both deployments' callback URLs are already registered under
+   OAuth & Permissions, which is the other checklist item.
+
 ---
 
 ## Screenshots
