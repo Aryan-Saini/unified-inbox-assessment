@@ -25,9 +25,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { useAuthedQuery } from "@/app/useAuthedQuery";
 import { formatAge } from "./format";
 import { useClockMinute } from "./useClock";
 import type { Source, SourceRun, SourceRunStatus, UiResult } from "./types";
@@ -190,7 +191,10 @@ export function useSearch(demo: DemoOptions): UseSearch {
   const runMutation = useMutation(api.searches.run);
   const rerunMutation = useMutation(api.searches.rerun);
 
-  const data = useQuery(api.searches.watch, searchId === null ? "skip" : { searchId });
+  const data = useAuthedQuery(
+    api.searches.watch,
+    searchId === null ? "skip" : { searchId },
+  );
   const now = useClockMinute();
 
   /** Guards against an earlier dispatch resolving after a later one. */

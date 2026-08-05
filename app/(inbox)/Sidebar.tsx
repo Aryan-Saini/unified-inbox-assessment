@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SignOutButton } from "@clerk/nextjs";
 import { Logo } from "../Logo";
 import type { SearchRecord } from "./types";
 import {
@@ -13,6 +14,7 @@ import {
   SearchIcon,
   SendIcon,
   SettingsIcon,
+  SignOutIcon,
   UnarchiveIcon,
 } from "./icons";
 
@@ -311,6 +313,21 @@ export function Sidebar({
             <span className="flex-1 text-left">Settings</span>
           )}
         </button>
+        {/* The only way out: `/auth` redirects a signed-in visitor straight back
+            here, so signing out has to live inside the shell. */}
+        <SignOutButton redirectUrl="/auth">
+          <button
+            title="Sign out"
+            className={`flex items-center gap-2 rounded-lg text-[13px] text-neutral-400 transition-colors hover:bg-white/5 hover:text-white ${
+              isCollapsed ? "h-9 w-9 justify-center" : "w-full px-2.5 py-2"
+            }`}
+          >
+            <SignOutIcon className="h-4.5 w-4.5 shrink-0" />
+            {isCollapsed ? null : (
+              <span className="flex-1 text-left">Sign out</span>
+            )}
+          </button>
+        </SignOutButton>
       </div>
     </aside>
   );

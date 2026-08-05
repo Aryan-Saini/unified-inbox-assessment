@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { useAuthedQuery } from "@/app/useAuthedQuery";
 import { ComposeDialog } from "./ComposeDialog";
 import { ResultsList } from "./ResultsList";
 import { SearchField } from "./SearchField";
@@ -95,7 +96,7 @@ export function InboxApp() {
    * sidebar reflects work in progress without a local optimistic copy to
    * reconcile afterwards.
    */
-  const historyRows = useQuery(api.searches.history);
+  const historyRows = useAuthedQuery(api.searches.history, {});
   const setArchived = useMutation(api.searches.setArchived);
   const now = useClockMinute();
 

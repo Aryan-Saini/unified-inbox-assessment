@@ -17,13 +17,19 @@ them lives.
 | Auth     | Clerk (users) + `uik_…` API keys (REST)       |
 | Web search | Tavily, with a labelled deterministic mock fallback |
 
-| Route      | What it is                                              |
-| ---------- | ------------------------------------------------------- |
-| `/`        | The unified inbox: search, compose, connections, outbox |
-| `/sign-in` | The Clerk sign-in form and the Convex auth-status check |
+| Route        | What it is                                                        |
+| ------------ | ----------------------------------------------------------------- |
+| `/dashboard` | The unified inbox: search, compose, connections, outbox. Signed-in only |
+| `/auth`      | Sign in / sign up, one email-code flow. Signed-out only           |
+| `/`          | Redirects to whichever of the two you belong on                   |
 
 Each lives in its own route group with its own root layout
-(`app/(inbox)/layout.tsx`, `app/(auth)/layout.tsx`).
+(`app/(inbox)/layout.tsx`, `app/(auth)/layout.tsx`). The gate is two layers:
+`proxy.ts` redirects on the Clerk session before anything renders, and
+`app/AuthGate.tsx` / `app/GuestGate.tsx` hold the page on a loading splash
+through the window the server cannot see — Clerk resolving its session in the
+browser, then Convex trading it for its own token. See
+[Auth gating](#auth-gating).
 
 ---
 
@@ -400,18 +406,68 @@ npx convex env set ALLOW_FAULT_INJECTION true
    npx convex env set CLERK_JWT_ISSUER_DOMAIN https://<slug>.clerk.accounts.dev
    ```
 
-Sign in on `/sign-in`: the **Auth status** panel calls `users.viewer` and shows the
-Clerk user id resolved *by Convex*, not by the browser. "Authenticated in Clerk but
-Convex saw no identity" means the `aud` claim or `CLERK_JWT_ISSUER_DOMAIN` on the
-deployment is wrong.
+Sign in on `/auth`. If Convex rejects the session — the shell sits on "setting up
+your account", or a query throws — the `aud` claim or `CLERK_JWT_ISSUER_DOMAIN` on
+the deployment is wrong. `users.viewer` is the thing to check: it reports the
+Clerk user id resolved *by Convex*, not by the browser.
 
 Two Clerk/Next.js details that differ from most tutorials: Next.js 16 names the
-middleware file **`proxy.ts`**, and it runs a bare `clerkMiddleware()` with no
-route matching — pages use `<Show when="signed-in">` and every Convex function
-calls `ctx.auth.getUserIdentity()`, so a missed matcher entry cannot silently
-expose data. `@clerk/nextjs` v7 also removed
-`<SignedIn>`/`<SignedOut>`/`<Protect>` in favour of that single `<Show>`, and
-`ClerkProvider` goes *inside* `<body>`.
+middleware file **`proxy.ts`** (same API, new name), and `@clerk/nextjs` v7
+removed `<SignedIn>`/`<SignedOut>`/`<Protect>` in favour of a single `<Show>`,
+with `ClerkProvider` going *inside* `<body>`.
+
+### Auth gating
+
+Three checks, and each exists because the one outside it cannot cover the case:
+
+1. **`proxy.ts`** decides on the Clerk session cookie, before a route renders:
+   `/` and the legacy `/sign-in` go wherever you belong, `/dashboard` bounces to
+   `/auth` when signed out, and `/auth` bounces to `/dashboard` when signed in —
+   so the gate closes behind you and the sign-in form is unreachable once you are
+   in. No data is read here, which keeps it the optimistic check Next.js
+   documents rather than the authorization boundary.
+2. **`AuthGate` / `GuestGate`** cover the async window the server cannot see.
+   Clerk resolves its session in the browser and Convex then exchanges it for its
+   own token; until both land, the page shows `AuthSplash` instead of a shell
+   whose queries would throw. `AuthGate` also waits for `viewer.stored`, so a
+   brand-new user waits for their row rather than reading "your account is still
+   syncing". `GuestGate` is what finishes sign-in: `LoginForm` never navigates, so
+   the redirect happens the moment Clerk reports a session.
+
+   **Only Clerk sends anyone back to `/auth`**, and that rule is load-bearing:
+   Clerk is the only thing `proxy.ts` can see, so redirecting because *Convex*
+   rejected the session would bounce off a proxy that still sees a valid Clerk
+   cookie, and loop between the two forever. Clerk can disagree with itself the
+   same way — the proxy only *verifies* the session token, while clerk-js sees a
+   session revoked in the dashboard or ended in another tab seconds earlier — so a
+   client-driven bounce carries `?signed_out=1` (`app/authParams.ts`) and the proxy
+   takes the client's word for that one request. `useHardRedirect` strips the param
+   from anything it carries onward, so it never outlives the bounce. Signed into Clerk but not ready is
+   therefore an error state rather than a redirect — after a few seconds the splash
+   becomes `AuthTrouble`, which offers **Try again** (a reload, which retries the
+   upsert through `StoreUser`) and **Sign out** (which clears the Clerk cookie, and
+   so is what makes `/auth` reachable again). Without that panel the two dead ends
+   have no exit: the shell never mounts, so its own sign-out never renders.
+3. **`useAuthedQuery`** holds every query at `"skip"` until Convex reports an
+   authenticated identity. The gates already make an early call unlikely; this
+   makes it impossible, including during SSR and on the frame after a sign out.
+   Conditional skips compose with it, so `open ? {} : "skip"` still works.
+
+None of that is the authorization boundary. Every Convex function resolves its
+own owner through `requireUser`, so a route that slipped through all three still
+cannot read another user's row — the layers above only decide what the browser is
+asked to render.
+
+The one thing this arrangement demands: sign-out has to live *inside* the shell
+(the sidebar footer), because `/auth` is closed to a signed-in visitor. `AuthGate`
+carries its own copy for the same reason — it renders instead of the shell.
+
+One Next.js 16 detail worth knowing before changing a redirect here: `/auth` and
+`/dashboard` sit in route groups with **separate root layouts**, which the App
+Router only crosses with a full page load. `router.replace` between them leaves the
+browser on the old route, so both gates go through `useHardRedirect`
+(`window.location.replace`) instead. That also re-runs `proxy.ts` on the way in, so
+the server and the client can never disagree about where you belong.
 
 ### Clerk webhook (user sync)
 

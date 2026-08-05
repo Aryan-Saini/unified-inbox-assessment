@@ -173,6 +173,14 @@ export const ClockIcon = (p: Props) => (
   </Svg>
 );
 
+export const SignOutIcon = (p: Props) => (
+  <Svg {...p}>
+    <path d="M15 4.5h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-3" />
+    <path d="M11 8.5 7.5 12l3.5 3.5" />
+    <path d="M7.5 12H16" />
+  </Svg>
+);
+
 /** Source glyphs. Simplified marks, not the vendors' trademarks. */
 export const GmailGlyph = (p: Props) => (
   <Svg {...p}>

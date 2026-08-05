@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { ClerkProvider, Show, SignOutButton } from "@clerk/nextjs";
+import { ClerkProvider } from "@clerk/nextjs";
 import { ConvexClientProvider } from "../ConvexClientProvider";
 import { Logo } from "../Logo";
 import { StoreUser } from "../StoreUser";
@@ -36,15 +36,11 @@ export default function RootLayout({
         <ClerkProvider>
           <ConvexClientProvider>
             <StoreUser />
-            <header className="flex items-center justify-between px-6 py-5">
+            {/* No sign-out here any more: this group only serves `/auth`, and a
+                signed-in visitor is redirected off it before anything renders.
+                Signing out lives in the shell's sidebar instead. */}
+            <header className="flex items-center px-6 py-5">
               <Logo className="h-8 w-8 text-white" />
-              <Show when="signed-in">
-                <SignOutButton>
-                  <button className="rounded-md border border-neutral-800 px-3.5 py-2 text-sm font-medium text-neutral-200 transition-colors hover:border-neutral-600 hover:text-white">
-                    Sign Out
-                  </button>
-                </SignOutButton>
-              </Show>
             </header>
             {children}
           </ConvexClientProvider>

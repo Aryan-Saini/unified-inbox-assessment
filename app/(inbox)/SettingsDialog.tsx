@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useAuthedQuery } from "@/app/useAuthedQuery";
 import { BRAND_LOGO } from "./brand-icons";
 import { formatAge } from "./format";
 import type { Connection, ConnectionStatus } from "./types";
@@ -113,7 +114,9 @@ export function SettingsDialog({
   const [busy, setBusy] = useState<string | null>(null);
   const [demoNote, setDemoNote] = useState<string | null>(null);
 
-  const apiKeys = useQuery(api.apiKeys.list);
+  // Only while the dialog is up: it stays mounted when closed, so an unguarded
+  // subscription here would read keys on every page load.
+  const apiKeys = useAuthedQuery(api.apiKeys.list, open ? {} : "skip");
   const createKey = useMutation(api.apiKeys.create);
   const revokeKey = useMutation(api.apiKeys.revoke);
   const loadDemoData = useMutation(api.seed.seed);

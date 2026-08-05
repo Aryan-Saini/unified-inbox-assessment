@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { useAuthedQuery } from "@/app/useAuthedQuery";
 import { describeError, type AppErrorView } from "./appError";
 import { SOURCE_META } from "./mock-data";
 import type { ComposePrefill, Draft, UiResult } from "./types";
@@ -145,11 +146,14 @@ export function ComposeDialog({
   // The digest lives here and only here. It is a subscription rather than a
   // one-shot read so that an edit invalidating a confirmation is visible
   // immediately instead of on the next click.
-  const review = useQuery(
+  const review = useAuthedQuery(
     api.drafts.reviewPayload,
     draftId === null ? "skip" : { draftId },
   );
-  const watched = useQuery(api.sends.watch, sendId === null ? "skip" : { sendId });
+  const watched = useAuthedQuery(
+    api.sends.watch,
+    sendId === null ? "skip" : { sendId },
+  );
 
   const to = result.replyTo ?? "";
   const meta = SOURCE_META[channel];

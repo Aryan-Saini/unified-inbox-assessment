@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { useAuthedQuery } from "@/app/useAuthedQuery";
 import { describeError, type AppErrorView } from "./appError";
 import { BRAND_LOGO } from "./brand-icons";
 import { formatAge } from "./format";
@@ -255,8 +256,8 @@ export function OutboxDialog({
 
   // Subscriptions only while the dialog is up; the detail one keeps the
   // timeline live, so a retry's new attempt appears the moment it starts.
-  const sends = useQuery(api.sends.list, open ? {} : "skip");
-  const detail = useQuery(
+  const sends = useAuthedQuery(api.sends.list, open ? {} : "skip");
+  const detail = useAuthedQuery(
     api.sends.watch,
     open && selectedId !== null ? { sendId: selectedId } : "skip",
   );

@@ -11,9 +11,10 @@
  */
 
 import { useCallback, useMemo } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { useAuthedQuery } from "@/app/useAuthedQuery";
 import { formatAge } from "./format";
 import { useClockMinute } from "./useClock";
 import type { Connection } from "./types";
@@ -31,7 +32,7 @@ export interface UseConnections {
 }
 
 export function useConnections(): UseConnections {
-  const rows = useQuery(api.connections.list);
+  const rows = useAuthedQuery(api.connections.list, {});
   const begin = useMutation(api.oauth.begin);
   const setEnabled = useMutation(api.connections.setEnabled);
   const disconnectMutation = useMutation(api.connections.disconnect);
