@@ -150,7 +150,11 @@ export default defineSchema({
     isSeed: v.boolean(),
     createdAt: v.number(),
     completedAt: v.optional(v.number()),
-  }).index("by_user", ["userId"]),
+  })
+    .index("by_user", ["userId"])
+    // The stuck-search cron asks "which searches are still running and old?".
+    // Without this index that is a full table scan on a table that only grows.
+    .index("by_status_created", ["status", "createdAt"]),
 
   /**
    * Per-adapter run record — one per source per search. This is the table that
