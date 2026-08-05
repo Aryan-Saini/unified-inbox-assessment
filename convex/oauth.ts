@@ -78,6 +78,67 @@ export function sanitizeReturnTo(returnTo: string | undefined): string {
   return returnTo;
 }
 
+/** Hosts that can only ever mean the visitor's own machine. */
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+
+/**
+ * Reduce a caller-supplied origin to one this deployment is willing to return to.
+ *
+ * The frontend's origin is not something the backend can know: the port changes
+ * between `next dev` runs, and one deployment legitimately serves both a local
+ * browser and a deployed one. So the browser proposes its own origin — and because
+ * the callback redirects there, an unchecked value is a plain open redirect
+ * (`origin: "https://evil.test"` and Convex bounces the user to it). Hence propose
+ * and *check*, never trust:
+ *
+ * - a **loopback** origin is allowed on any port. It names the visitor's own
+ *   machine and nobody else's, which is what makes the dev port stop mattering.
+ * - anything else must appear in `APP_BASE_URL` or `APP_ORIGIN_ALLOWLIST`
+ *   (comma-separated), so a deployed frontend is registered exactly once.
+ *
+ * Returns `undefined` when nothing matches, which leaves the callback on
+ * `APP_BASE_URL` — the older behaviour, and the conservative one.
+ */
+export function resolveAppOrigin(proposed: string | undefined): string | undefined {
+  if (proposed === undefined || proposed === "" || proposed.length > 256) {
+    return undefined;
+  }
+
+  let url: URL;
+  try {
+    url = new URL(proposed);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+
+  if (LOOPBACK_HOSTS.has(url.hostname)) return url.origin;
+
+  return allowedOrigins().includes(url.origin) ? url.origin : undefined;
+}
+
+/**
+ * The registered origins, as origins rather than as whatever shape they were
+ * written in — `https://app.example/` and `https://app.example` have to compare
+ * equal. An entry that will not parse is dropped rather than repaired, so one
+ * typo in the list cannot widen what the rest of it allows.
+ */
+function allowedOrigins(): string[] {
+  return [
+    process.env.APP_BASE_URL,
+    ...(process.env.APP_ORIGIN_ALLOWLIST ?? "").split(","),
+  ]
+    .map((entry) => entry?.trim())
+    .filter((entry): entry is string => entry !== undefined && entry !== "")
+    .flatMap((entry) => {
+      try {
+        return [new URL(entry).origin];
+      } catch {
+        return [];
+      }
+    });
+}
+
 async function requireUser(ctx: MutationCtx) {
   const identity = await ctx.auth.getUserIdentity();
   if (identity === null) {
@@ -111,6 +172,11 @@ export const begin = mutation({
     reconnectConnectionId: v.optional(v.id("connections")),
     /** Path within the app to land on afterwards. Defaults to `/`. */
     returnTo: v.optional(v.string()),
+    /**
+     * The origin to come back to, normally `window.location.origin`. Honoured only
+     * if `resolveAppOrigin` allows it; otherwise the callback uses `APP_BASE_URL`.
+     */
+    origin: v.optional(v.string()),
   },
   returns: v.object({ url: v.string() }),
   handler: async (ctx, args) => {
@@ -138,6 +204,10 @@ export const begin = mutation({
       provider: args.provider,
       reconnectConnectionId: args.reconnectConnectionId,
       returnTo: sanitizeReturnTo(args.returnTo),
+      // Resolved now rather than at the callback: the flow's return origin is
+      // settled by the request that started it, and cannot be influenced by
+      // anything that arrives later.
+      appOrigin: resolveAppOrigin(args.origin),
       codeVerifier,
       expiresAt: Date.now() + STATE_TTL_MS,
     });
@@ -183,6 +253,7 @@ export const consumeState = internalMutation({
       provider: providerValidator,
       reconnectConnectionId: v.optional(v.id("connections")),
       returnTo: v.string(),
+      appOrigin: v.optional(v.string()),
       codeVerifier: v.optional(v.string()),
     }),
     v.object({ ok: v.literal(false), error: v.string() }),
@@ -208,6 +279,10 @@ export const consumeState = internalMutation({
       provider: row.provider,
       reconnectConnectionId: row.reconnectConnectionId,
       returnTo: sanitizeReturnTo(row.returnTo),
+      // Re-checked on the way out for the same reason `returnTo` is: the row was
+      // written by an earlier deploy's rules, and this is the last place the value
+      // can be stopped before it becomes a redirect.
+      appOrigin: resolveAppOrigin(row.appOrigin),
       codeVerifier: row.codeVerifier,
     };
   },

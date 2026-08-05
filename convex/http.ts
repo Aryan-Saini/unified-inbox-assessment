@@ -139,11 +139,21 @@ type Provider = Doc<"connections">["provider"];
  *
  * `returnTo` has already been reduced to a path (`sanitizeReturnTo`) and is
  * re-checked here, because this is the function that would turn a bad value into
- * an actual open redirect. Resolving it against `APP_BASE_URL` means the origin
+ * an actual open redirect. Resolving it against an origin we chose means the origin
  * is ours no matter what arrived.
+ *
+ * `appOrigin` is that origin when the flow recorded one — already run through
+ * `resolveAppOrigin`, so it is either loopback or registered. It exists so the
+ * frontend's port does not have to match a deployment env var. `APP_BASE_URL` is
+ * the fallback, and the only option for the two failures that happen before there
+ * is a state row to read.
  */
-function redirectIntoApp(returnTo: string, params: Record<string, string>): Response {
-  const base = process.env.APP_BASE_URL;
+function redirectIntoApp(
+  returnTo: string,
+  params: Record<string, string>,
+  appOrigin?: string,
+): Response {
+  const base = appOrigin ?? process.env.APP_BASE_URL;
   if (base === undefined || base === "") {
     // Nowhere safe to send them, and guessing an origin is how open redirects
     // get shipped. Fail visibly instead.
@@ -161,11 +171,20 @@ function redirectIntoApp(returnTo: string, params: Record<string, string>): Resp
 }
 
 /** Errors are surfaced to the user as a query param, never as a raw 500 page. */
-function oauthFailure(returnTo: string, error: string, detail?: string): Response {
-  return redirectIntoApp(returnTo, {
-    oauth_error: error,
-    ...(detail === undefined ? {} : { oauth_error_detail: detail.slice(0, 300) }),
-  });
+function oauthFailure(
+  returnTo: string,
+  error: string,
+  detail?: string,
+  appOrigin?: string,
+): Response {
+  return redirectIntoApp(
+    returnTo,
+    {
+      oauth_error: error,
+      ...(detail === undefined ? {} : { oauth_error_detail: detail.slice(0, 300) }),
+    },
+    appOrigin,
+  );
 }
 
 interface GrantDetails {
@@ -246,21 +265,23 @@ async function completeOAuth(
   const code = url.searchParams.get("code");
   const providerError = url.searchParams.get("error");
 
-  // Without a state there is no verified `returnTo`, so the only safe landing
-  // place is the app root.
+  // Without a state there is no verified `returnTo` and no verified origin, so
+  // the only safe landing place is `APP_BASE_URL` at the app root.
   if (state === null) return oauthFailure("/", "missing_state");
 
   const consumed = await ctx.runMutation(internal.oauth.consumeState, { state, provider });
   if (!consumed.ok) return oauthFailure("/", consumed.error);
 
-  const { returnTo, userId, reconnectConnectionId, codeVerifier } = consumed;
+  const { returnTo, appOrigin, userId, reconnectConnectionId, codeVerifier } = consumed;
 
   // The user pressed Cancel, or the provider refused. Their word for it is more
   // useful than ours, so it is passed through as-is.
-  if (providerError !== null) return oauthFailure(returnTo, providerError);
-  if (code === null) return oauthFailure(returnTo, "missing_code");
+  if (providerError !== null) {
+    return oauthFailure(returnTo, providerError, undefined, appOrigin);
+  }
+  if (code === null) return oauthFailure(returnTo, "missing_code", undefined, appOrigin);
   if (provider === "gmail" && codeVerifier === undefined) {
-    return oauthFailure(returnTo, "missing_code_verifier");
+    return oauthFailure(returnTo, "missing_code_verifier", undefined, appOrigin);
   }
 
   try {
@@ -286,11 +307,15 @@ async function completeOAuth(
     if (!upsert.ok) {
       // Reconnected as the wrong account. Both labels are handed back so the app
       // can say which is which instead of "something went wrong".
-      return redirectIntoApp(returnTo, {
-        oauth_error: upsert.error,
-        ...(upsert.expected === undefined ? {} : { oauth_expected: upsert.expected }),
-        ...(upsert.actual === undefined ? {} : { oauth_actual: upsert.actual }),
-      });
+      return redirectIntoApp(
+        returnTo,
+        {
+          oauth_error: upsert.error,
+          ...(upsert.expected === undefined ? {} : { oauth_expected: upsert.expected }),
+          ...(upsert.actual === undefined ? {} : { oauth_actual: upsert.actual }),
+        },
+        appOrigin,
+      );
     }
 
     const connectionId = upsert.connectionId;
@@ -315,15 +340,24 @@ async function completeOAuth(
       scopes: grant.scopes,
     });
 
-    return redirectIntoApp(returnTo, {
-      connected: provider,
-      account: grant.label,
-    });
+    return redirectIntoApp(
+      returnTo,
+      {
+        connected: provider,
+        account: grant.label,
+      },
+      appOrigin,
+    );
   } catch (err) {
     const error = toAdapterError(err);
     // Full detail to the deployment log; a trimmed message to the URL bar.
     console.error(`OAuth callback failed for ${provider}`, error);
-    return oauthFailure(returnTo, `exchange_failed_${error.kind}`, error.message);
+    return oauthFailure(
+      returnTo,
+      `exchange_failed_${error.kind}`,
+      error.message,
+      appOrigin,
+    );
   }
 }
 

@@ -66,11 +66,21 @@ export function useConnections(): UseConnections {
    * `returnTo` is the path we are on right now, so the callback lands the user
    * back where they started rather than at the app root — mid-search, with the
    * results still on screen.
+   *
+   * `origin` is the other half of that: the deployment cannot know which port
+   * `next dev` picked today, so the browser says where it is. The backend only
+   * honours it if it is loopback or registered (`resolveAppOrigin`), so proposing
+   * it is safe and being ignored is harmless.
    */
   const startFlow = useCallback(
     async (provider: "gmail" | "slack", reconnectConnectionId?: Id<"connections">) => {
       const returnTo = `${window.location.pathname}${window.location.search}`;
-      const { url } = await begin({ provider, reconnectConnectionId, returnTo });
+      const { url } = await begin({
+        provider,
+        reconnectConnectionId,
+        returnTo,
+        origin: window.location.origin,
+      });
       // `assign` rather than `href =` so the app page stays in history and Back
       // returns here instead of bouncing through the consent screen again.
       window.location.assign(url);

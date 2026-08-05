@@ -128,6 +128,14 @@ export default defineSchema({
     reconnectConnectionId: v.optional(v.id("connections")),
     /** Where to bounce the browser once the callback completes. */
     returnTo: v.optional(v.string()),
+    /**
+     * The origin `returnTo` is resolved against, fixed when the flow started.
+     *
+     * Set only when the browser proposed an origin this deployment allows
+     * (`resolveAppOrigin`), so the frontend's port can move without the callback
+     * losing track of it. Absent means fall back to `APP_BASE_URL`.
+     */
+    appOrigin: v.optional(v.string()),
     /** PKCE verifier; Google supports it and there is no reason not to use it. */
     codeVerifier: v.optional(v.string()),
     expiresAt: v.number(),

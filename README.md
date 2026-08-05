@@ -89,7 +89,7 @@ browser ──▶ accounts.google.com / slack.com   (consent)
 provider ─▶ https://<deployment>.convex.site/oauth/{google,slack}/callback  [httpAction]
                 └─ consumeState()  single-use, expiring, provider-bound, one transaction
                 └─ exchange code (PKCE for Google) → fetch identity → encrypt → upsert
-                └─ 302 to APP_BASE_URL + sanitized returnTo
+                └─ 302 to the flow's resolved origin + sanitized returnTo
 ```
 
 Four decisions worth naming:
@@ -111,6 +111,39 @@ Four decisions worth naming:
   and Slack both require a byte-exact match, and a hand-set env var is exactly
   the thing that drifts between deployments and fails with
   `redirect_uri_mismatch` at the worst moment.
+
+#### Which origin a callback returns to
+
+The callback has to send the browser back to the frontend, and the frontend's
+origin is not something a deployment can know: `next dev` picks a different port
+than you expect, and one deployment legitimately serves both a local browser and a
+deployed one. A single hardcoded `APP_BASE_URL` gets this wrong the moment those
+disagree — it will cheerfully redirect you to a *different app* running on the port
+it was told about.
+
+So the browser proposes its own origin (`window.location.origin`, passed to
+`begin`), and the backend **checks it rather than trusting it** — because this is a
+redirect, and an unchecked origin here is a plain open redirect:
+
+| Proposed origin | Allowed? | Why |
+|---|---|---|
+| `http://localhost:3001`, `http://127.0.0.1:5173`, `http://[::1]:3000` | yes, any port | Loopback names the visitor's own machine and nobody else's, so there is no one to redirect them *to*. This is what makes the dev port stop mattering. |
+| Anything in `APP_BASE_URL` or `APP_ORIGIN_ALLOWLIST` | yes | A deployed frontend, registered exactly once. Compared by *origin*, so a trailing slash is not a different site. |
+| Anything else, or not a parseable `http(s)` URL | no | Resolves to nothing, and the callback falls back to `APP_BASE_URL`. |
+
+The resolved origin is stored on the `oauthStates` row, so it is **fixed when the
+flow starts** and cannot be influenced by anything arriving at the callback later.
+It is re-checked on the way out for the same reason `returnTo` is: the row may have
+been written by an earlier deploy under a wider allowlist, and `consumeState` is
+the last place a stored value can be stopped before it becomes a `Location`
+header. The two failures that happen *before* there is a row to read
+(`missing_state`, `state_replayed`) have no origin to use and fall back to
+`APP_BASE_URL`.
+
+`resolveAppOrigin` is unit-tested against each row of that table in
+`convex/oauth.test.ts`, including the lookalike hosts (`localhost.evil.test`)
+that a substring check would wave through, plus integration tests that drive
+`begin` → `consumeState` to prove the value actually survives the flow.
 
 **Identity-preserving reconnect.** The upsert key is
 `(userId, provider, externalAccountId)`, so re-granting an existing account
@@ -375,7 +408,8 @@ console paths spelled out.
 | `GOOGLE_OAUTH_CLIENT_SECRET` | for Gmail | Same client. |
 | `SLACK_CLIENT_ID` | for Slack | Slack app → Basic Information. |
 | `SLACK_CLIENT_SECRET` | for Slack | Same app. |
-| `APP_BASE_URL` | yes | Origin the OAuth callback returns the browser to, e.g. `http://localhost:3000`. Every `returnTo` is resolved against it, which is what stops it being an open redirect. |
+| `APP_BASE_URL` | yes | **Fallback** origin the OAuth callback returns the browser to, e.g. `http://localhost:3000`. The browser proposes its own origin and that wins when allowed — see [Which origin a callback returns to](#which-origin-a-callback-returns-to). Resolving `returnTo` against an origin *we* chose is what stops it being an open redirect. |
+| `APP_ORIGIN_ALLOWLIST` | no | Comma-separated extra origins the callback may return to, for a deployed frontend that is not `APP_BASE_URL`. Localhost never needs listing. |
 | `WEB_SEARCH_PROVIDER` | no | `tavily`, or unset for the mock. |
 | `WEB_SEARCH_API_KEY` | no | Key for the chosen provider. Unset ⇒ mock. |
 | `ALLOW_FAULT_INJECTION` | no | `"true"` enables the demo failure switches. Inert otherwise. |
@@ -910,8 +944,9 @@ product**:
 
 Gmail and Slack still need their own OAuth apps (see
 [OAuth setup](#oauth-setup)); the redirect URIs point at `convex.site` rather than
-at the Codespace, so they work from a Codespace unchanged. Set `APP_BASE_URL` to
-the forwarded Codespace origin so the callback returns you to the right place.
+at the Codespace, so they work from a Codespace unchanged. A Codespace origin is
+not loopback, so it has to be registered — either as `APP_BASE_URL` above or added
+to `APP_ORIGIN_ALLOWLIST` — for the callback to return you to it.
 
 ---
 
