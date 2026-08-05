@@ -1,13 +1,17 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ClerkProvider } from "@clerk/nextjs";
+import { ConvexClientProvider } from "../ConvexClientProvider";
+import { StoreUser } from "../StoreUser";
 import "../globals.css";
 
 /**
  * A second root layout (Next.js allows one per route group).
  *
  * The inbox shell owns the full viewport and has no chrome of its own, so it
- * deliberately skips the auth header — and, being UI-only, skips the Clerk and
- * Convex providers too. `/sign-in` keeps those in `app/(auth)/layout.tsx`.
+ * deliberately skips the auth header that `app/(auth)/layout.tsx` renders — but
+ * it needs the same Clerk and Convex providers, because the shell reads its
+ * searches, connections and sends from live Convex subscriptions.
  */
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -38,7 +42,13 @@ export default function InboxLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="h-full overflow-hidden bg-ink-950 text-white">
-        {children}
+        {/* Clerk v7 places ClerkProvider inside <body>, not around <html>. */}
+        <ClerkProvider>
+          <ConvexClientProvider>
+            <StoreUser />
+            {children}
+          </ConvexClientProvider>
+        </ClerkProvider>
       </body>
     </html>
   );
