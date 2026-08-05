@@ -9,9 +9,10 @@ import { SettingsDialog } from "./SettingsDialog";
 import { Sidebar } from "./Sidebar";
 import { SourceStatus } from "./SourceStatus";
 import { TypedHeading } from "./TypedHeading";
-import { MOCK_CONNECTIONS, MOCK_HISTORY, SOURCES, SOURCE_META } from "./mock-data";
+import { MOCK_HISTORY, SOURCES, SOURCE_META } from "./mock-data";
 import { SourceBar } from "./SourceBar";
-import type { Connection, Draft, SearchRecord, Source, UiResult } from "./types";
+import type { Draft, SearchRecord, Source, UiResult } from "./types";
+import { useConnections } from "./useConnections";
 import {
   DEFAULT_DEMO,
   useMockSearch,
@@ -38,7 +39,6 @@ export function InboxApp() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [demo, setDemo] = useState<DemoOptions>(DEFAULT_DEMO);
-  const [connections, setConnections] = useState<Connection[]>(MOCK_CONNECTIONS);
   const [history, setHistory] = useState<SearchRecord[]>(MOCK_HISTORY);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draftFor, setDraftFor] = useState<UiResult | null>(null);
@@ -46,6 +46,19 @@ export function InboxApp() {
   const [text, setText] = useState("");
   /** Which connectors a search fans out to, driven by the source bar. */
   const [enabledSources, setEnabledSources] = useState<Source[]>(SOURCES);
+
+  /**
+   * Real connections, real OAuth. `addAccount` and `reconnect` navigate to the
+   * provider and come back through the Convex callback, so neither resolves — the
+   * "connected" feedback arrives as a URL param, handled below.
+   */
+  const {
+    connections,
+    addAccount,
+    reconnect,
+    toggleAccount,
+    disconnect: disconnectAccount,
+  } = useConnections();
 
   const input = useRef<HTMLTextAreaElement>(null);
   const nextId = useRef(0);
@@ -153,41 +166,6 @@ export function InboxApp() {
     });
   }, []);
 
-  const addAccount = useCallback(
-    (provider: "gmail" | "slack") => {
-      const seq = (nextId.current += 1);
-      const label =
-        provider === "gmail"
-          ? `team-${seq}@northwind.test`
-          : `Northwind Workspace ${seq}`;
-
-      setConnections((prev) => [
-        ...prev,
-        {
-          id: `conn_${provider}_${seq}`,
-          provider,
-          label,
-          detail:
-            provider === "gmail" ? "Added from the source bar" : "ada@northwind.test",
-          status: "active",
-          scopes:
-            provider === "gmail"
-              ? ["gmail.readonly", "gmail.send"]
-              : ["search:read", "chat:write"],
-          lastUsed: "just now",
-          enabled: true,
-        },
-      ]);
-
-      // A newly connected account is useless if its source is still excluded.
-      setEnabledSources((prev) =>
-        prev.includes(provider) ? prev : [...prev, provider],
-      );
-      toast(`Connected ${label}`);
-    },
-    [toast],
-  );
-
   const newSearch = useCallback(() => {
     reset();
     setText("");
@@ -224,25 +202,61 @@ export function InboxApp() {
 
   // --- Connections -------------------------------------------------------
 
-  const toggleAccount = useCallback((id: string) => {
-    setConnections((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, enabled: !c.enabled } : c)),
-    );
-  }, []);
-
-  const reconnect = useCallback(
+  const disconnect = useCallback(
     (id: string) => {
-      setConnections((prev) =>
-        prev.map((c) =>
-          c.id === id
-            ? { ...c, status: "active", statusReason: undefined, lastUsed: "just now" }
-            : c,
-        ),
-      );
-      toast("Connection restored — identity preserved");
+      const label = connections.find((c) => c.id === id)?.label ?? "account";
+      disconnectAccount(id);
+      toast(`Disconnected ${label} — history kept`);
     },
-    [toast],
+    [connections, disconnectAccount, toast],
   );
+
+  /**
+   * Report what the OAuth callback did, then strip the params.
+   *
+   * Without this the interesting outcomes are invisible: a reconnect rejected for
+   * being a different account, or a consent screen the user cancelled, would both
+   * look like a page that simply reloaded. `replaceState` clears the params so a
+   * refresh does not replay the toast.
+   */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("connected");
+    const error = params.get("oauth_error");
+    if (connected === null && error === null) return;
+
+    if (connected !== null) {
+      // The callback always names the account; the provider is the fallback.
+      toast(`Connected ${params.get("account") ?? connected}`);
+    } else if (error === "identity_mismatch") {
+      const expected = params.get("oauth_expected") ?? "the original account";
+      const actual = params.get("oauth_actual") ?? "a different account";
+      toast(
+        `This connection is ${expected}, but you signed in as ${actual}. Add it as another account instead.`,
+      );
+    } else if (error === "access_denied") {
+      toast("Connection cancelled — nothing was changed");
+    } else {
+      toast(`Could not connect: ${params.get("oauth_error_detail") ?? error}`);
+    }
+
+    for (const key of [
+      "connected",
+      "account",
+      "oauth_error",
+      "oauth_error_detail",
+      "oauth_expected",
+      "oauth_actual",
+    ]) {
+      params.delete(key);
+    }
+    const query = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${query === "" ? "" : `?${query}`}`,
+    );
+  }, [toast]);
 
   /** The source strip's reconnect button routes to the matching connection. */
   const reconnectSource = useCallback(
@@ -497,6 +511,8 @@ export function InboxApp() {
         onClose={() => setSettingsOpen(false)}
         connections={connections}
         onReconnect={reconnect}
+        onAddAccount={addAccount}
+        onDisconnect={disconnect}
       />
 
       {/* Keyed on the result: opening a reply to a different row remounts the

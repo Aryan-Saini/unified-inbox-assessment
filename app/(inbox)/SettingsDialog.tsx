@@ -33,10 +33,12 @@ function ConnectionRow({
   connection,
   reconnecting,
   onReconnect,
+  onDisconnect,
 }: {
   connection: Connection;
   reconnecting: boolean;
   onReconnect: () => void;
+  onDisconnect: () => void;
 }) {
   const Logo = BRAND_LOGO[connection.provider];
   const healthy = connection.status === "active";
@@ -55,7 +57,11 @@ function ConnectionRow({
       </div>
 
       {healthy ? (
-        <Button variant="ghost" className="!px-2.5 !py-1.5 !text-[12px]">
+        <Button
+          variant="ghost"
+          onClick={onDisconnect}
+          className="!px-2.5 !py-1.5 !text-[12px]"
+        >
           Disconnect
         </Button>
       ) : (
@@ -87,23 +93,29 @@ export function SettingsDialog({
   onClose,
   connections,
   onReconnect,
+  onAddAccount,
+  onDisconnect,
 }: {
   open: boolean;
   onClose: () => void;
   connections: Connection[];
   onReconnect: (id: string) => void;
+  onAddAccount: (provider: "gmail" | "slack") => void;
+  onDisconnect: (id: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("connections");
   const [reconnecting, setReconnecting] = useState<string | null>(null);
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
 
+  /**
+   * The spinner is not cleared: `onReconnect` starts a real OAuth flow, so the
+   * next thing that happens is the browser leaving this page. Keeping the row in
+   * its pending state until then is the honest rendering — the request has not
+   * completed, it has handed off.
+   */
   function reconnect(id: string) {
     setReconnecting(id);
-    // Stands in for the OAuth round trip.
-    setTimeout(() => {
-      onReconnect(id);
-      setReconnecting(null);
-    }, 1200);
+    onReconnect(id);
   }
 
   return (
@@ -141,13 +153,23 @@ export function SettingsDialog({
             <section className="space-y-2">
               <SectionTitle>Connected accounts</SectionTitle>
 
-              <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line">
+              {/* An empty bordered box reads as a loading failure, so zero
+                  connections gets the same dashed empty state the switchboard
+                  uses. */}
+              {connections.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-line-strong px-3.5 py-6 text-center text-[13px] text-neutral-500">
+                  No accounts connected yet. Connect one below to search it.
+                </p>
+              ) : null}
+
+              <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line empty:hidden">
                 {connections.map((connection) => (
                   <ConnectionRow
                     key={connection.id}
                     connection={connection}
                     reconnecting={reconnecting === connection.id}
                     onReconnect={() => reconnect(connection.id)}
+                    onDisconnect={() => onDisconnect(connection.id)}
                   />
                 ))}
               </ul>
@@ -159,6 +181,7 @@ export function SettingsDialog({
                     <Button
                       key={provider}
                       variant="outline"
+                      onClick={() => onAddAccount(provider)}
                       className="!px-2.5 !py-1.5 !text-[12px]"
                     >
                       <Logo className="h-3.5 w-3.5" />
