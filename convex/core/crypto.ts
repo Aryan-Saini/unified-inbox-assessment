@@ -93,41 +93,105 @@ async function importKey(): Promise<CryptoKey> {
 }
 
 /**
- * Encrypt a token. The IV is random per call and prepended to the ciphertext,
- * so encrypting the same token twice yields different output — an attacker
- * cannot tell which two connections share a token.
+ * Which token a ciphertext is, and which row it belongs to.
+ *
+ * This is bound into the ciphertext as GCM additional authenticated data, so a
+ * ciphertext is only decryptable in the exact position it was written to. Moving
+ * a row's `refreshTokenCipher` into another row's `accessTokenCipher` — or into
+ * another connection entirely — fails to decrypt rather than silently handing a
+ * worker somebody else's token.
+ *
+ * `connectionId` is the right binding rather than the identity triple because it
+ * survives a reconnect: a re-grant upserts the same row, so a kept refresh token
+ * still decrypts.
  */
-export async function encryptToken(plaintext: string): Promise<string> {
+export interface TokenAad {
+  /** `"gmail"` / `"slack"`. */
+  provider: string;
+  connectionId: string;
+  tokenType: "access" | "refresh";
+}
+
+/**
+ * Envelope version. Prefixed to every ciphertext so the format can change
+ * without a migration guessing game: a v1 blob is recognisably v1 forever, and
+ * a v2 reader can refuse (or upgrade) it deliberately.
+ */
+const ENVELOPE_VERSION = 1;
+
+/**
+ * The AAD string. Written out longhand rather than JSON-stringified so its bytes
+ * are stable regardless of key order or serialiser behaviour — the whole
+ * mechanism fails closed if the two sides ever disagree by one byte.
+ */
+function aadBytes(aad: TokenAad): Uint8Array {
+  return new TextEncoder().encode(
+    `v${ENVELOPE_VERSION}|${aad.provider}|${aad.connectionId}|${aad.tokenType}`,
+  );
+}
+
+/**
+ * Encrypt a token. The IV is random per call, so encrypting the same token twice
+ * yields different output — an attacker cannot tell which two connections share
+ * a token.
+ *
+ * Layout: `[version:1][iv:12][ciphertext+tag]`, base64.
+ */
+export async function encryptToken(
+  plaintext: string,
+  aad: TokenAad,
+): Promise<string> {
   const key = await importKey();
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
 
   const ciphertext = new Uint8Array(
     await crypto.subtle.encrypt(
-      { name: ALGORITHM, iv: iv as BufferSource },
+      {
+        name: ALGORITHM,
+        iv: iv as BufferSource,
+        additionalData: aadBytes(aad) as BufferSource,
+      },
       key,
       new TextEncoder().encode(plaintext) as BufferSource,
     ),
   );
 
-  const packed = new Uint8Array(iv.length + ciphertext.length);
-  packed.set(iv, 0);
-  packed.set(ciphertext, iv.length);
+  const packed = new Uint8Array(1 + iv.length + ciphertext.length);
+  packed[0] = ENVELOPE_VERSION;
+  packed.set(iv, 1);
+  packed.set(ciphertext, 1 + iv.length);
   return toBase64(packed);
 }
 
-export async function decryptToken(packedBase64: string): Promise<string> {
+/**
+ * Decrypt a token. Throws if the ciphertext was tampered with, if it was written
+ * for a different row or token slot, or if the envelope version is unknown.
+ */
+export async function decryptToken(
+  packedBase64: string,
+  aad: TokenAad,
+): Promise<string> {
   const key = await importKey();
   const packed = fromBase64(packedBase64);
 
-  if (packed.length <= IV_BYTES) {
+  if (packed.length <= 1 + IV_BYTES) {
     throw new Error("Token ciphertext is truncated or malformed.");
   }
+  if (packed[0] !== ENVELOPE_VERSION) {
+    throw new Error(
+      `Unsupported token envelope version ${packed[0]} (expected ${ENVELOPE_VERSION}).`,
+    );
+  }
 
-  const iv = packed.slice(0, IV_BYTES);
-  const ciphertext = packed.slice(IV_BYTES);
+  const iv = packed.slice(1, 1 + IV_BYTES);
+  const ciphertext = packed.slice(1 + IV_BYTES);
 
   const plaintext = await crypto.subtle.decrypt(
-    { name: ALGORITHM, iv: iv as BufferSource },
+    {
+      name: ALGORITHM,
+      iv: iv as BufferSource,
+      additionalData: aadBytes(aad) as BufferSource,
+    },
     key,
     ciphertext as BufferSource,
   );
@@ -143,6 +207,18 @@ export async function sha256Hex(input: string): Promise<string> {
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+/**
+ * Base64url SHA-256. This is exactly the PKCE `S256` code challenge transform,
+ * which needs the raw digest rather than the hex rendering above.
+ */
+export async function sha256Base64Url(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(input) as BufferSource,
+  );
+  return toBase64Url(new Uint8Array(digest));
 }
 
 /** A URL-safe random token of `bytes` entropy. */

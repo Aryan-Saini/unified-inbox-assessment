@@ -76,6 +76,13 @@ export default defineSchema({
     /** Why it is not active. Shown verbatim to the operator. */
     statusReason: v.optional(v.string()),
 
+    /**
+     * Whether this account participates in a fan-out. Deliberately independent
+     * of `status`: a healthy account can be switched off by its owner, and a
+     * broken one can stay switched on (it will keep reporting its error).
+     */
+    enabled: v.boolean(),
+
     scopes: v.array(v.string()),
 
     /** AES-GCM ciphertext. Plaintext tokens never touch the database. */
@@ -83,6 +90,14 @@ export default defineSchema({
     refreshTokenCipher: v.optional(v.string()),
     /** Epoch ms. Absent for tokens that do not expire (Slack user tokens). */
     tokenExpiresAt: v.optional(v.number()),
+
+    /**
+     * Single-flight refresh lease. Epoch ms until which one worker owns the
+     * right to exchange the refresh token; other workers wait and re-read
+     * instead of racing the provider (a rotating refresh token would be lost by
+     * the loser of that race).
+     */
+    refreshLockedUntil: v.optional(v.number()),
 
     lastRefreshedAt: v.optional(v.number()),
     lastUsedAt: v.optional(v.number()),
@@ -130,6 +145,8 @@ export default defineSchema({
     /** Set when this search is a re-run of an earlier one. */
     rerunOf: v.optional(v.id("searches")),
     resultCount: v.number(),
+    /** Soft-hide from the sidebar. Set rather than deleted so history is kept. */
+    archivedAt: v.optional(v.number()),
     isSeed: v.boolean(),
     createdAt: v.number(),
     completedAt: v.optional(v.number()),
@@ -185,12 +202,27 @@ export default defineSchema({
     timestamp: v.optional(v.string()),
     url: v.string(),
 
+    /**
+     * Arrival order within a search, assigned at write time. `_creationTime`
+     * is not enough: two results committed in the same mutation share it, and
+     * ties are not ordered, so "append, never re-sort" needs an explicit
+     * sequence to be stable.
+     */
+    seq: v.number(),
     /** Merge-layer ranking score. Higher sorts first. */
     score: v.number(),
     /** Lets "reply to this result" resolve which grant to send through. */
     connectionId: v.optional(v.id("connections")),
     /** Provider thread, when replying should stay in-thread. */
     threadId: v.optional(v.string()),
+
+    /* Adapter extras. Enriched columns the UI may render; the REST projection
+       strips them so the public `Result` stays exactly the spec's 7 fields. */
+    /** Where a reply would go — sender address, or Slack channel id. */
+    replyTo: v.optional(v.string()),
+    /** Thread/channel context line, e.g. "#deals · 12 replies". */
+    context: v.optional(v.string()),
+    unread: v.optional(v.boolean()),
   }).index("by_search", ["searchId"]),
 
   /**
@@ -221,8 +253,20 @@ export default defineSchema({
       v.literal("sent"),
       v.literal("failed"),
     ),
+    /**
+     * Bumped on every edit and folded into the confirmation digest. Without it,
+     * editing A → B → A would make a stale confirmation of "A" valid again.
+     */
+    revision: v.number(),
     confirmationHash: v.optional(v.string()),
     confirmedAt: v.optional(v.number()),
+
+    /**
+     * Demo affordance: make the next delivery attempt fail this way. Inert
+     * unless `ALLOW_FAULT_INJECTION=true`, and every injected failure is
+     * recorded with a `[simulated]` prefix.
+     */
+    injectFailure: v.optional(errorKind),
 
     /** Set when the draft is a reply to a search result. */
     replyToResultId: v.optional(v.id("searchResults")),
@@ -273,6 +317,12 @@ export default defineSchema({
     lastErrorMessage: v.optional(v.string()),
     /** Epoch ms of the next scheduled auto-retry; absent when not retrying. */
     nextRetryAt: v.optional(v.number()),
+
+    /**
+     * Copied from the draft at claim time so the injected fault survives
+     * retries — the frozen send, not the mutable draft, is what delivery reads.
+     */
+    injectFailure: v.optional(errorKind),
 
     isSeed: v.boolean(),
     createdAt: v.number(),
