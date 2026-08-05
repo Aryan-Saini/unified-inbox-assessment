@@ -43,7 +43,19 @@ export type AppErrorCode =
   /** Two different payloads presented under one idempotency key. */
   | "IDEMPOTENCY_KEY_REUSED"
   /** The outcome of a delivery is genuinely unknown; retrying may double-send. */
-  | "INDETERMINATE";
+  | "INDETERMINATE"
+  /**
+   * The REST caller did not echo the recipient back. The API's half of the
+   * confirm gate: a send has to name where it is going, in the caller's own
+   * words, before it happens.
+   */
+  | "DESTINATION_NOT_ACKNOWLEDGED"
+  /** A per-user rate limit is exhausted. Carries `retryAfterMs`. */
+  | "RATE_LIMITED"
+  /** The request itself is malformed — a missing field, a bad enum. */
+  | "BAD_REQUEST"
+  /** No credential, or one that has been revoked. */
+  | "UNAUTHENTICATED";
 
 /**
  * The payload carried by the error. It extends the `Value` index signature
@@ -55,6 +67,8 @@ export interface AppErrorData extends Record<string, Value | undefined> {
   message: string;
   /** What the REST layer should answer with. */
   httpStatus: number;
+  /** Set on `RATE_LIMITED`: milliseconds until a retry can succeed. */
+  retryAfterMs?: number;
 }
 
 const STATUS: Record<AppErrorCode, number> = {
@@ -66,6 +80,10 @@ const STATUS: Record<AppErrorCode, number> = {
   PAYLOAD_CHANGED_SINCE_CONFIRM: 409,
   IDEMPOTENCY_KEY_REUSED: 409,
   INDETERMINATE: 409,
+  DESTINATION_NOT_ACKNOWLEDGED: 409,
+  RATE_LIMITED: 429,
+  BAD_REQUEST: 400,
+  UNAUTHENTICATED: 401,
 };
 
 /**
@@ -78,6 +96,25 @@ export function appError(code: AppErrorCode, message: string): ConvexError<AppEr
     code,
     message: `${code}: ${message}`,
     httpStatus: STATUS[code],
+  });
+}
+
+/**
+ * A rate-limit refusal, carrying when a retry will actually work.
+ *
+ * Separate from `appError` because the retry-after is not decoration: the REST
+ * layer turns it into a `Retry-After` header, and a client that obeys it is the
+ * difference between a rate limit that sheds load and one that gets hammered.
+ */
+export function rateLimitError(
+  message: string,
+  retryAfterMs: number,
+): ConvexError<AppErrorData> {
+  return new ConvexError({
+    code: "RATE_LIMITED" as const,
+    message: `RATE_LIMITED: ${message}`,
+    httpStatus: STATUS.RATE_LIMITED,
+    retryAfterMs: Math.max(0, Math.round(retryAfterMs)),
   });
 }
 
@@ -94,9 +131,14 @@ export function asAppError(err: unknown): AppErrorData | null {
   ) {
     return null;
   }
-  const { code, httpStatus, message } = data as Record<string, unknown>;
+  const { code, httpStatus, message, retryAfterMs } = data as Record<string, unknown>;
   if (typeof code !== "string" || typeof httpStatus !== "number" || typeof message !== "string") {
     return null;
   }
-  return { code: code as AppErrorCode, httpStatus, message };
+  return {
+    code: code as AppErrorCode,
+    httpStatus,
+    message,
+    retryAfterMs: typeof retryAfterMs === "number" ? retryAfterMs : undefined,
+  };
 }

@@ -21,8 +21,10 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { webSourceLabel } from "./adapters/web";
+import { appError } from "./core/errors";
 import { faultInjectionEnabled } from "./core/faults";
 import type { Source } from "./core/types";
+import { consume } from "./limits";
 import { SWEEP_DELAY_MS } from "./orchestrator";
 import { errorKind as errorKindValidator, source as sourceValidator } from "./schema";
 import { optionalUser, requireUser } from "./users";
@@ -108,13 +110,43 @@ const resultView = v.object({
 
 /* -------------------------------------------------------------------- dispatch */
 
+/**
+ * Trim and bound a query string. Exported so the REST shell rejects the same
+ * inputs the UI does, with the same message — two validators would eventually
+ * disagree, and the one that disagreed by accepting would be the bug.
+ */
+export function normalizeQuery(raw: string): string {
+  const query = raw.trim();
+  if (query === "") throw appError("BAD_REQUEST", "A search needs a query.");
+  if (query.length > MAX_QUERY_LENGTH) {
+    throw appError(
+      "BAD_REQUEST",
+      `A query cannot be longer than ${MAX_QUERY_LENGTH} characters.`,
+    );
+  }
+  return query;
+}
+
+/** The sources a rerun should re-ask, taken from the original's own runs. */
+export async function sourcesOfSearch(
+  ctx: MutationCtx,
+  searchId: Id<"searches">,
+): Promise<Source[]> {
+  const rows = await ctx.db
+    .query("searchSources")
+    .withIndex("by_search", (q) => q.eq("searchId", searchId))
+    .take(50);
+  const sources = [...new Set(rows.map((row) => row.source))];
+  return sources.length > 0 ? sources : ALL_SOURCES;
+}
+
 /** Read one key out of a demo record without trusting the key to be present. */
 function demoValue<T>(record: Record<string, T> | undefined, key: string): T | undefined {
   if (record === undefined) return undefined;
   return Object.prototype.hasOwnProperty.call(record, key) ? record[key] : undefined;
 }
 
-interface DispatchArgs {
+export interface DispatchArgs {
   userId: Id<"users">;
   query: string;
   sources: Source[];
@@ -133,7 +165,7 @@ interface DispatchArgs {
  * path — a second dispatcher that drifted from this one would be the easiest
  * possible way to make reruns behave subtly differently from runs.
  */
-async function dispatchSearch(
+export async function dispatchSearch(
   ctx: MutationCtx,
   args: DispatchArgs,
 ): Promise<Id<"searches">> {
@@ -244,12 +276,11 @@ export const run = mutation({
   returns: v.object({ searchId: v.id("searches") }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
+    // Before any work: one search is up to five provider calls, and the quota it
+    // spends belongs to the user's real accounts.
+    await consume(ctx, "search", user._id);
 
-    const query = args.query.trim();
-    if (query === "") throw new Error("A search needs a query.");
-    if (query.length > MAX_QUERY_LENGTH) {
-      throw new Error(`A query cannot be longer than ${MAX_QUERY_LENGTH} characters.`);
-    }
+    const query = normalizeQuery(args.query);
 
     const searchId = await dispatchSearch(ctx, {
       userId: user._id,
@@ -276,24 +307,19 @@ export const rerun = mutation({
   returns: v.object({ searchId: v.id("searches") }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
+    await consume(ctx, "search", user._id);
 
     const original = await ctx.db.get("searches", args.searchId);
     if (original === null || original.userId !== user._id) {
-      throw new Error("That search does not exist.");
+      throw appError("NOT_FOUND", "That search does not exist.");
     }
 
     // The original's source list, not today's connections: a rerun re-asks the
     // same question, and which accounts answer it is settled by dispatch.
-    const rows = await ctx.db
-      .query("searchSources")
-      .withIndex("by_search", (q) => q.eq("searchId", args.searchId))
-      .take(50);
-    const sources = [...new Set(rows.map((row) => row.source))];
-
     const searchId = await dispatchSearch(ctx, {
       userId: user._id,
       query: original.query,
-      sources: sources.length > 0 ? sources : ALL_SOURCES,
+      sources: await sourcesOfSearch(ctx, args.searchId),
       origin: "ui",
       rerunOf: original._id,
       demo: args.demo,
