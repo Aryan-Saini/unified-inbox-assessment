@@ -101,7 +101,7 @@ async function settleSearchIfDone(
   const siblings = await ctx.db
     .query("searchSources")
     .withIndex("by_search", (q) => q.eq("searchId", searchId))
-    .take(50);
+    .take(128);
 
   if (siblings.some((s) => s.status === "pending" || s.status === "running")) return;
 
@@ -127,7 +127,7 @@ async function forceFailStalledSources(
   const rows = await ctx.db
     .query("searchSources")
     .withIndex("by_search", (q) => q.eq("searchId", searchId))
-    .take(50);
+    .take(128);
 
   const now = Date.now();
   let swept = 0;

@@ -485,6 +485,13 @@ export const failAttempt = internalMutation({
       finishedAt: now,
     });
 
+    // Compare-and-set: a send the sweeper has already called `unknown` (or one
+    // that succeeded) must never be moved back into a retryable state by a
+    // late-reporting worker — scheduling a retry from here would be an
+    // auto-retry of a possibly-delivered message. The attempt row above is
+    // still recorded; only the send's verdict is immutable.
+    if (send.status === "unknown" || send.status === "succeeded") return null;
+
     const common = {
       lastErrorKind: args.kind,
       lastErrorMessage: message,
@@ -596,10 +603,20 @@ function classifySendFailure(
   const aborted =
     signal.aborted ||
     causedByAbort(err);
-  if (!aborted) return error;
+
+  // Post-dispatch, only a failure the *provider actually answered* may keep its
+  // classification — and an answered failure always carries an HTTP status (the
+  // Slack 200-{ok:false} classifier attaches its 200 for exactly this reason).
+  // Everything else — our own deadline, a socket reset, a connection dropped
+  // mid-response-body after Gmail already accepted the message, a bare
+  // TypeError from fetch — says nothing about whether the message landed, so
+  // it is `unknown`, not the read-path's "a network error is transient".
+  if (!aborted && error.httpStatus !== undefined) return error;
 
   return AdapterError.unknown(
-    `The ${channel} send was cut off after ${Math.round(SEND_DEADLINE_MS / 1000)}s with no acknowledgement, so it is unknown whether the message was delivered. It will not be retried automatically.`,
+    aborted
+      ? `The ${channel} send was cut off after ${Math.round(SEND_DEADLINE_MS / 1000)}s with no acknowledgement, so it is unknown whether the message was delivered. It will not be retried automatically.`
+      : `The ${channel} send failed after dispatch with no provider response (${error.message}), so it is unknown whether the message was delivered. It will not be retried automatically.`,
     { detail: error.detail ?? error.message },
   );
 }
@@ -623,6 +640,7 @@ export const deliver = internalAction({
 
     const signal = AbortSignal.timeout(SEND_DEADLINE_MS);
     let dispatched = false;
+    let receipt: { providerMessageId: string; providerThreadId?: string } | undefined;
 
     try {
       // The only door to a credential. Refresh, leasing and revocation detection
@@ -631,7 +649,7 @@ export const deliver = internalAction({
       const token = await resolveToken(ctx, begin.connectionId);
 
       dispatched = true;
-      const receipt = await SENDERS[begin.channel].send(
+      receipt = await SENDERS[begin.channel].send(
         {
           to: begin.to,
           subject: begin.subject,
@@ -647,13 +665,6 @@ export const deliver = internalAction({
           injectFailure: begin.injectFailure,
         },
       );
-
-      await ctx.runMutation(internal.sends.finishAttempt, {
-        sendId: args.sendId,
-        attemptId: begin.attemptId,
-        providerMessageId: receipt.providerMessageId,
-        providerThreadId: receipt.providerThreadId,
-      });
     } catch (err) {
       const error = classifySendFailure(err, dispatched, signal, begin.channel);
       await ctx.runMutation(internal.sends.failAttempt, {
@@ -663,6 +674,31 @@ export const deliver = internalAction({
         message:
           error.detail === undefined ? error.message : `${error.message} — ${error.detail}`,
         httpStatus: error.httpStatus,
+      });
+      return null;
+    }
+
+    // Recording the receipt lives OUTSIDE the provider try. The message is
+    // delivered at this point; if this bookkeeping mutation itself fails, the
+    // one truthful classification is `unknown` — calling it `failed_permanent`
+    // (or transient) would hand the operator a retry button for a message that
+    // already arrived. The stale-in-flight sweeper is the final backstop if
+    // even the fallback write dies.
+    try {
+      await ctx.runMutation(internal.sends.finishAttempt, {
+        sendId: args.sendId,
+        attemptId: begin.attemptId,
+        providerMessageId: receipt.providerMessageId,
+        providerThreadId: receipt.providerThreadId,
+      });
+    } catch (err) {
+      await ctx.runMutation(internal.sends.failAttempt, {
+        sendId: args.sendId,
+        attemptId: begin.attemptId,
+        kind: "unknown",
+        message: `Delivered (provider message ${receipt.providerMessageId}) but recording the receipt failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
       });
     }
 

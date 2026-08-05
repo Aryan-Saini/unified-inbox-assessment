@@ -135,7 +135,7 @@ export async function sourcesOfSearch(
   const rows = await ctx.db
     .query("searchSources")
     .withIndex("by_search", (q) => q.eq("searchId", searchId))
-    .take(50);
+    .take(128);
   const sources = [...new Set(rows.map((row) => row.source))];
   return sources.length > 0 ? sources : ALL_SOURCES;
 }
@@ -380,7 +380,7 @@ export const watch = query({
     const sources = await ctx.db
       .query("searchSources")
       .withIndex("by_search", (q) => q.eq("searchId", args.searchId))
-      .take(50);
+      .take(128);
 
     const results = await ctx.db
       .query("searchResults")
@@ -477,7 +477,7 @@ export const history = query({
       const sources = await ctx.db
         .query("searchSources")
         .withIndex("by_search", (q) => q.eq("searchId", search._id))
-        .take(50);
+        .take(128);
 
       rows.push({
         id: search._id,

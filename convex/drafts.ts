@@ -155,6 +155,25 @@ function requireText(value: string, field: string, max: number): string {
   return trimmed;
 }
 
+/**
+ * The recipient additionally refuses control characters. `to` is interpolated
+ * into an RFC 2822 header on the Gmail path, where a CR/LF is structure, not
+ * data — `"a@x\r\nBcc: b@y"` would smuggle a hidden recipient past the confirm
+ * screen. The Gmail sender strips controls defensively too; rejecting here
+ * means the confirm screen can never show a recipient that differs from the
+ * one the wire will carry.
+ */
+function requireRecipient(value: string, max: number): string {
+  const trimmed = requireText(value, "recipient", max);
+  if (/[\u0000-\u001f\u007f]/.test(trimmed)) {
+    throw appError(
+      "INVALID_STATE",
+      "The recipient contains control characters, which could forge message headers.",
+    );
+  }
+  return trimmed;
+}
+
 /* -------------------------------------------------------------------- create */
 
 export interface CreateDraftArgs {
@@ -182,7 +201,7 @@ export interface CreateDraftArgs {
  * accepting it would mean the key no longer identifies anything.
  */
 export async function createDraft(ctx: MutationCtx, args: CreateDraftArgs) {
-  const to = requireText(args.to, "recipient", MAX_TO_LENGTH);
+  const to = requireRecipient(args.to, MAX_TO_LENGTH);
   const body = requireText(args.body, "body", MAX_BODY_LENGTH);
   const subject =
     args.subject === undefined
@@ -311,7 +330,7 @@ export async function updateDraft(ctx: MutationCtx, args: UpdateDraftArgs) {
   const next = {
     channel: draft.channel,
     connectionId: draft.connectionId,
-    to: args.to === undefined ? draft.to : requireText(args.to, "recipient", MAX_TO_LENGTH),
+    to: args.to === undefined ? draft.to : requireRecipient(args.to, MAX_TO_LENGTH),
     subject:
       args.subject === undefined
         ? draft.subject

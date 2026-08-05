@@ -122,3 +122,77 @@ describe("send failure policy", () => {
     expect(state.attempt).toMatchObject({ outcome: "unknown", errorKind: "unknown" });
   });
 });
+
+describe("post-dispatch failures without a provider answer (review findings)", () => {
+  it("treats a network error after dispatch as unknown, never retried", async () => {
+    const providers = fakeProviders().install();
+    // A TypeError from fetch is what a socket reset or a connection dropped
+    // mid-response-body looks like. Pre-fix this classified as the read path's
+    // "network errors are transient" and auto-retried — the double-send hole.
+    providers.on(...gmailSend).deferred().reject(new TypeError("fetch failed"));
+    const { t, userId, draftId } = await setup();
+    const claim = await t.mutation(internal.sends.claim, { userId, draftId });
+
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const state = await t.run(async (ctx) => ({
+      send: await ctx.db.get("sends", claim.sendId),
+      attempts: await ctx.db
+        .query("sendAttempts")
+        .withIndex("by_send", (q) => q.eq("sendId", claim.sendId))
+        .collect(),
+    }));
+
+    expect(providers.matching(...gmailSend)).toHaveLength(1);
+    expect(state.attempts).toHaveLength(1);
+    expect(state.send?.status).toBe("unknown");
+    expect(state.send?.nextRetryAt).toBeUndefined();
+  });
+
+  it("failAttempt cannot move a swept unknown send back into a retryable state", async () => {
+    fakeProviders().install();
+    const { t, userId, connectionId, draftId } = await setup();
+    const now = Date.now();
+
+    const { sendId, attemptId } = await t.run(async (ctx) => {
+      const sendId = await ctx.db.insert("sends", {
+        userId,
+        draftId,
+        idempotencyKey: "idem_swept_unknown",
+        channel: "gmail" as const,
+        connectionId,
+        to: "recipient@example.test",
+        body: "swept",
+        status: "unknown" as const,
+        attemptCount: 1,
+        maxAttempts: 4,
+        lastErrorKind: "unknown" as const,
+        isSeed: false,
+        createdAt: now,
+        updatedAt: now,
+        completedAt: now,
+      });
+      const attemptId = await ctx.db.insert("sendAttempts", {
+        sendId,
+        userId,
+        attemptNumber: 1,
+        trigger: "initial" as const,
+        startedAt: now,
+      });
+      return { sendId, attemptId };
+    });
+
+    // A late-reporting worker files its transient outcome after the sweeper
+    // already declared the send unknown. The verdict must not move.
+    await t.mutation(internal.sends.failAttempt, {
+      sendId,
+      attemptId,
+      kind: "transient",
+      message: "late 503",
+      httpStatus: 503,
+    });
+
+    const send = await t.run(async (ctx) => ctx.db.get("sends", sendId));
+    expect(send?.status).toBe("unknown");
+    expect(send?.nextRetryAt).toBeUndefined();
+  });
+});

@@ -51,6 +51,12 @@ export function fakeProviders() {
             resolvePromise = resolve;
             rejectPromise = reject;
           });
+          // A test may reject before the request under test has attached to the
+          // promise (e.g. simulating a socket reset scripted up front). This
+          // no-op observer keeps that window from tripping vitest's
+          // unhandled-rejection detector; the fetch caller still sees the
+          // rejection through its own await.
+          void promise.catch(() => undefined);
           enqueue(host, path, { promise });
           return {
             resolve: (status, body) => resolvePromise(response(status, body)),

@@ -1,11 +1,12 @@
 /// <reference types="vite/client" />
-import { afterEach, expect, expectTypeOf, it, vi } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { convexTest } from "convex-test";
 import { getFunctionName, type FunctionArgs } from "convex/server";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 import { fakeProviders } from "./test/fakeProviders";
+import { createDraft } from "./drafts";
 import { insertConnection, insertDraft, insertUser } from "./test/fixtures";
 
 const modules = import.meta.glob("./**/*.ts");
@@ -51,4 +52,28 @@ it("exposes delivery publicly only as sends.send(draftId)", () => {
   expect(Object.keys({ draftId: "only" } satisfies Record<keyof SendArgs, string>)).toEqual([
     "draftId",
   ]);
+});
+
+describe("recipient header integrity (review finding)", () => {
+  it("refuses a recipient carrying CR/LF header injection", async () => {
+    fakeProviders().install();
+    const t = convexTest(schema, modules);
+    const userId = await insertUser(t);
+    const connectionId = await insertConnection(t, userId);
+
+    // The gate every creation path funnels through (UI mutation and REST shell
+    // alike), exercised below the auth/rate-limit shells on purpose: the
+    // property belongs to the core, not to one entry point.
+    await expect(
+      t.run(async (ctx) =>
+        createDraft(ctx, {
+          userId,
+          channel: "gmail",
+          connectionId,
+          to: "victim@example.test\r\nBcc: harvest@evil.test",
+          body: "hello",
+        }),
+      ),
+    ).rejects.toThrow(/control characters/);
+  });
 });

@@ -232,10 +232,22 @@ function deterministicMessageId(key: string, from: string): string {
  * RFC 2822 message. Non-ASCII subjects are RFC 2047 encoded and the body is
  * declared UTF-8, so an em dash in a reply does not arrive as mojibake.
  */
+/**
+ * Header values are interpolated into an RFC 2822 header block, where a CR/LF
+ * is not data but structure: `to = "a@x\r\nBcc: b@y"` would smuggle a hidden
+ * recipient past the confirm screen, and `\r\n\r\n` would terminate the header
+ * block entirely. The draft layer already refuses control characters in `to`;
+ * this strips them from *every* interpolated value so the property does not
+ * depend on every caller remembering to validate.
+ */
+function headerSafe(value: string): string {
+  return value.replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
+}
+
 function buildRawMessage(payload: SendPayload, from: string): string {
   const lines = [
-    `From: ${from}`,
-    `To: ${payload.to}`,
+    `From: ${headerSafe(from)}`,
+    `To: ${headerSafe(payload.to)}`,
     `Subject: ${encodeHeaderValue(payload.subject ?? "")}`,
     "MIME-Version: 1.0",
     'Content-Type: text/plain; charset="UTF-8"',

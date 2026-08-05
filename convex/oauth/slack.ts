@@ -131,6 +131,7 @@ async function postAccess(
   let bodyText: string;
   try {
     response = await fetch(ACCESS_ENDPOINT, {
+    signal: AbortSignal.timeout(15_000),
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams(form).toString(),

@@ -124,6 +124,7 @@ async function postToken(
   let bodyText: string;
   try {
     response = await fetch(TOKEN_ENDPOINT, {
+    signal: AbortSignal.timeout(15_000),
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams(form).toString(),
@@ -218,6 +219,7 @@ export async function refresh(refreshToken: string): Promise<GoogleTokenGrant> {
  */
 export async function fetchIdentity(accessToken: string): Promise<GoogleIdentity> {
   const response = await fetch(USERINFO_ENDPOINT, {
+    signal: AbortSignal.timeout(15_000),
     headers: { authorization: `Bearer ${accessToken}` },
   });
   const bodyText = await response.text();
