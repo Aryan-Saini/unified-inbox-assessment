@@ -29,6 +29,9 @@ export interface UseConnections {
   reconnect: (id: string) => void;
   toggleAccount: (id: string) => void;
   disconnect: (id: string) => void;
+  /** Forgets the account. Resolves `true` when the row was actually deleted, and
+   *  `false` when it had history and was hidden instead. */
+  remove: (id: string) => Promise<boolean>;
 }
 
 export function useConnections(): UseConnections {
@@ -36,6 +39,7 @@ export function useConnections(): UseConnections {
   const begin = useMutation(api.oauth.begin);
   const setEnabled = useMutation(api.connections.setEnabled);
   const disconnectMutation = useMutation(api.connections.disconnect);
+  const removeMutation = useMutation(api.connections.remove);
 
   // Ticks once a minute, so "last used" ages instead of freezing at first paint.
   const now = useClockMinute();
@@ -120,6 +124,18 @@ export function useConnections(): UseConnections {
     [disconnectMutation],
   );
 
+  /** Awaited rather than fired-and-forgotten: the caller words its confirmation
+   *  differently depending on whether the row could actually be deleted. */
+  const remove = useCallback(
+    async (id: string) => {
+      const { deleted } = await removeMutation({
+        connectionId: id as Id<"connections">,
+      });
+      return deleted;
+    },
+    [removeMutation],
+  );
+
   return {
     connections,
     loading: rows === undefined,
@@ -127,5 +143,6 @@ export function useConnections(): UseConnections {
     reconnect,
     toggleAccount,
     disconnect,
+    remove,
   };
 }

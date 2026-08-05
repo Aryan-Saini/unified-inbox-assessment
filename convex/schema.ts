@@ -105,6 +105,15 @@ export default defineSchema({
 
     /** Seeded fixtures are marked so the UI can label them as demo data. */
     isSeed: v.boolean(),
+    /**
+     * Set when the user removed an account whose history cannot be deleted.
+     *
+     * `connections.remove` deletes the row outright when nothing points at it.
+     * When a draft or send does, the row has to survive to keep the outbox
+     * answerable, so it is emptied of tokens and hidden instead — absent from
+     * `connections.list`, and so indistinguishable from gone.
+     */
+    hiddenAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

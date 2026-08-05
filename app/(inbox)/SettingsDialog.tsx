@@ -8,7 +8,7 @@ import { BRAND_LOGO } from "./brand-icons";
 import { formatAge } from "./format";
 import type { Connection, ConnectionStatus } from "./types";
 import { Button, Modal, StatusPill } from "./ui";
-import { KeyIcon, PlugIcon, SlidersIcon } from "./icons";
+import { KeyIcon, PlugIcon, SlidersIcon, TrashIcon } from "./icons";
 
 /** Section heading, matching the "ACCOUNTS" label in the connectors panel. */
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -39,14 +39,18 @@ function ConnectionRow({
   reconnecting,
   onReconnect,
   onDisconnect,
+  onRemove,
 }: {
   connection: Connection;
   reconnecting: boolean;
   onReconnect: () => void;
   onDisconnect: () => void;
+  onRemove: () => void;
 }) {
   const Logo = BRAND_LOGO[connection.provider];
   const healthy = connection.status === "active";
+  /** Two-step, because removing is destructive and there is no undo. */
+  const [confirming, setConfirming] = useState(false);
 
   return (
     <li className="flex items-center gap-3 px-3 py-2.5">
@@ -60,6 +64,43 @@ function ConnectionRow({
           {connection.status}
         </StatusPill>
       </div>
+
+      {/* Remove sits beside the state-specific action rather than replacing it,
+          so a revoked account is not a dead end: before this, `healthy` false
+          meant Reconnect was the only button on the row and nothing could ever
+          be taken off the list. */}
+      {confirming ? (
+        <>
+          <span className="text-[12px] text-neutral-400">Remove?</span>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setConfirming(false);
+              onRemove();
+            }}
+            className="!border-red-900/70 !px-2.5 !py-1.5 !text-[12px] !text-red-300 hover:!border-red-700 hover:!text-red-200"
+          >
+            Remove
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => setConfirming(false)}
+            className="!px-2.5 !py-1.5 !text-[12px]"
+          >
+            Cancel
+          </Button>
+        </>
+      ) : (
+        <Button
+          variant="ghost"
+          onClick={() => setConfirming(true)}
+          title={`Remove ${connection.label}`}
+          aria-label={`Remove ${connection.label}`}
+          className="!px-2 !py-1.5 !text-[12px] !text-neutral-500 hover:!text-red-300"
+        >
+          <TrashIcon className="h-3.5 w-3.5" />
+        </Button>
+      )}
 
       {healthy ? (
         <Button
@@ -100,6 +141,7 @@ export function SettingsDialog({
   onReconnect,
   onAddAccount,
   onDisconnect,
+  onRemove,
 }: {
   open: boolean;
   onClose: () => void;
@@ -107,6 +149,7 @@ export function SettingsDialog({
   onReconnect: (id: string) => void;
   onAddAccount: (provider: "gmail" | "slack") => void;
   onDisconnect: (id: string) => void;
+  onRemove: (id: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("connections");
   const [reconnecting, setReconnecting] = useState<string | null>(null);
@@ -202,6 +245,7 @@ export function SettingsDialog({
                     reconnecting={reconnecting === connection.id}
                     onReconnect={() => reconnect(connection.id)}
                     onDisconnect={() => onDisconnect(connection.id)}
+                    onRemove={() => onRemove(connection.id)}
                   />
                 ))}
               </ul>

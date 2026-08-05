@@ -173,6 +173,15 @@ export const ClockIcon = (p: Props) => (
   </Svg>
 );
 
+export const TrashIcon = (p: Props) => (
+  <Svg {...p}>
+    <path d="M4.5 7h15" />
+    <path d="M9.5 7V4.8h5V7" />
+    <path d="M6.5 7l.9 11.3a1.8 1.8 0 0 0 1.8 1.7h5.6a1.8 1.8 0 0 0 1.8-1.7L17.5 7" />
+    <path d="M10.5 11v5.5M13.5 11v5.5" />
+  </Svg>
+);
+
 export const SignOutIcon = (p: Props) => (
   <Svg {...p}>
     <path d="M15 4.5h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-3" />

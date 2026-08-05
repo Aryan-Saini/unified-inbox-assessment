@@ -66,6 +66,7 @@ export function InboxApp() {
     reconnect,
     toggleAccount,
     disconnect: disconnectAccount,
+    remove: removeAccount,
   } = useConnections();
 
   const input = useRef<HTMLTextAreaElement>(null);
@@ -219,6 +220,25 @@ export function InboxApp() {
       toast(`Disconnected ${label} — history kept`);
     },
     [connections, disconnectAccount, toast],
+  );
+
+  /**
+   * The toast tells the truth about which of the two removals happened, because
+   * they differ in a way the user can later notice: a row with sends attached
+   * survives out of sight so the outbox can still explain them.
+   */
+  const removeConnection = useCallback(
+    (id: string) => {
+      const label = connections.find((c) => c.id === id)?.label ?? "account";
+      void removeAccount(id)
+        .then((deleted) =>
+          toast(deleted ? `Removed ${label}` : `Removed ${label} — past sends keep their history`),
+        )
+        .catch((err: unknown) =>
+          toast(err instanceof Error ? err.message : `Could not remove ${label}`),
+        );
+    },
+    [connections, removeAccount, toast],
   );
 
   /**
@@ -586,6 +606,7 @@ export function InboxApp() {
         onReconnect={reconnect}
         onAddAccount={addAccount}
         onDisconnect={disconnect}
+        onRemove={removeConnection}
       />
 
       <OutboxDialog

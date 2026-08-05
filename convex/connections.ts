@@ -132,6 +132,8 @@ export const list = query({
       .take(100);
 
     return rows
+      // Removed-but-undeletable rows are gone as far as the UI is concerned.
+      .filter((c) => c.hiddenAt === undefined)
       .sort((a, b) => a.createdAt - b.createdAt)
       .map((c) => ({
         id: c._id,
@@ -198,6 +200,69 @@ export const disconnect = mutation({
       updatedAt: now,
     });
     return null;
+  },
+});
+
+/**
+ * Forget an account entirely — the way out `disconnect` deliberately does not give.
+ *
+ * `disconnect` keeps the row, which is right for giving up a grant but leaves a
+ * dead connection on screen with nothing but a Reconnect button. This removes it,
+ * and has to respect the same constraint that made `disconnect` a soft revoke:
+ * `drafts.connectionId` and `sends.connectionId` are **required** references, so
+ * deleting a row they point at would orphan them and the outbox would lose the
+ * ability to explain what a past delivery went through.
+ *
+ * So there are two outcomes, and the caller is told which:
+ *
+ * - nothing references it — the common case for an account that never sent
+ *   anything — the row is **deleted**, ciphertext and all.
+ * - something does: tokens are cleared and the row is **hidden**. It leaves the
+ *   UI, holds no secret, and the history it anchors stays answerable.
+ *
+ * `searchSources` / `searchResults` also carry a `connectionId`, but theirs is
+ * optional and read through their search rather than through the connection, so a
+ * deleted row degrades them to "no connection recorded" rather than breaking them.
+ */
+export const remove = mutation({
+  args: { connectionId: v.id("connections") },
+  returns: v.object({ deleted: v.boolean() }),
+  handler: async (ctx, args) => {
+    const connection = await requireOwnConnection(ctx, args.connectionId);
+
+    // `first()` rather than a count: the question is only whether *any* row
+    // points here, and stopping at one keeps this cheap for a heavy sender.
+    const [draft, send] = await Promise.all([
+      ctx.db
+        .query("drafts")
+        .withIndex("by_user", (q) => q.eq("userId", connection.userId))
+        .filter((q) => q.eq(q.field("connectionId"), args.connectionId))
+        .first(),
+      ctx.db
+        .query("sends")
+        .withIndex("by_user", (q) => q.eq("userId", connection.userId))
+        .filter((q) => q.eq(q.field("connectionId"), args.connectionId))
+        .first(),
+    ]);
+
+    if (draft === null && send === null) {
+      await ctx.db.delete("connections", args.connectionId);
+      return { deleted: true };
+    }
+
+    await ctx.db.patch("connections", args.connectionId, {
+      hiddenAt: Date.now(),
+      status: "revoked",
+      statusReason: "Removed by you.",
+      // Same as `disconnect`: the tokens are the part that must not survive.
+      accessTokenCipher: "",
+      refreshTokenCipher: undefined,
+      tokenExpiresAt: undefined,
+      refreshLockedUntil: undefined,
+      enabled: false,
+      updatedAt: Date.now(),
+    });
+    return { deleted: false };
   },
 });
 
