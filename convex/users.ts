@@ -40,8 +40,12 @@ export const viewer = query({
 /**
  * Idempotently upsert the calling Clerk user into Convex.
  * Called on mount by the client once Clerk reports an authenticated session.
- * A Clerk webhook would be the more robust long-term sync; this keeps the
- * proof-of-concept to a single round trip.
+ *
+ * The Clerk webhook (`convex/http.ts` -> `convex/clerk.ts`) is the authoritative
+ * sync. This stays as the fallback that closes the gap the webhook cannot: a
+ * webhook is asynchronous, so a brand-new user can reach the app before
+ * `user.created` lands. Both paths upsert on `clerkUserId`, so whichever wins
+ * the race, the other is a no-op patch.
  */
 export const store = mutation({
   args: {},

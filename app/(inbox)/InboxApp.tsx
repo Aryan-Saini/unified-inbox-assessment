@@ -269,7 +269,6 @@ export function InboxApp() {
     [toast, query, activeId, startSearch],
   );
 
-  const needsAttention = connections.filter((c) => c.status !== "active").length;
 
   // --- Shortcuts ---------------------------------------------------------
 
@@ -313,7 +312,6 @@ export function InboxApp() {
         setSettingsOpen(true);
         setMobileNavOpen(false);
       }}
-      needsAttention={needsAttention}
     />
   );
 

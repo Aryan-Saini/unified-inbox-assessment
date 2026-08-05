@@ -100,7 +100,6 @@ export function Sidebar({
   onNewSearch,
   onArchiveToggle,
   onOpenSettings,
-  needsAttention,
   sheet = false,
   onClose,
 }: {
@@ -112,8 +111,6 @@ export function Sidebar({
   onNewSearch: () => void;
   onArchiveToggle: (id: string) => void;
   onOpenSettings: () => void;
-  /** Connections needing a reconnect, surfaced on the settings entry point. */
-  needsAttention: number;
   /**
    * Full-screen mobile sheet rather than the desktop rail. A phone has no room
    * for a peek of the content behind, so the sheet takes the whole viewport and
@@ -289,21 +286,9 @@ export function Sidebar({
             isCollapsed ? "h-9 w-9 justify-center" : "w-full px-2.5 py-2"
           }`}
         >
-          <span className="relative shrink-0">
-            <SettingsIcon className="h-4.5 w-4.5" />
-            {needsAttention > 0 ? (
-              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-ink-900" />
-            ) : null}
-          </span>
+          <SettingsIcon className="h-4.5 w-4.5 shrink-0" />
           {isCollapsed ? null : (
-            <>
-              <span className="flex-1 text-left">Settings</span>
-              {needsAttention > 0 ? (
-                <span className="rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
-                  {needsAttention}
-                </span>
-              ) : null}
-            </>
+            <span className="flex-1 text-left">Settings</span>
           )}
         </button>
       </div>

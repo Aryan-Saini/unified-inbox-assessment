@@ -83,15 +83,88 @@ pnpm dev                       # in a second terminal
    npx convex env set CLERK_JWT_ISSUER_DOMAIN https://<slug>.clerk.accounts.dev
    ```
 
+### Clerk webhook (user sync)
+
+`ctx.auth.getUserIdentity()` proves who is calling, but it only fires while
+someone is using the app — it never hears about a profile edit or a deletion
+made in Clerk. The webhook is what keeps `users` correct in between.
+
+It is served by Convex, not Next.js, at
+`https://<deployment>.convex.site/clerk-webhook` (`convex/http.ts`). That matters
+in development: a Convex deployment has a stable public URL, so Clerk can reach
+the webhook while the frontend is still only on `localhost`. A Next.js route
+handler would need a tunnel or a public deploy.
+
+1. In the Clerk dashboard, go to **Configure → Webhooks** and add an endpoint per
+   Convex deployment you want synced:
+
+   | Deployment      | Endpoint URL                                                  |
+   | --------------- | ------------------------------------------------------------- |
+   | dev             | `https://judicious-wildcat-326.convex.site/clerk-webhook`     |
+   | staging (prod)  | `https://scintillating-moose-307.convex.site/clerk-webhook`   |
+
+2. Subscribe each endpoint to `user.created`, `user.updated` and `user.deleted`.
+3. Copy that endpoint's **Signing Secret** onto the matching deployment. Each
+   endpoint has its own secret, so they are not interchangeable:
+
+   ```bash
+   npx convex env set        CLERK_WEBHOOK_SIGNING_SECRET whsec_...   # dev
+   npx convex env set --prod CLERK_WEBHOOK_SIGNING_SECRET whsec_...   # staging
+   ```
+
+Both Convex deployments point at the *same* Clerk development instance, so
+`CLERK_JWT_ISSUER_DOMAIN` is identical on both. Only the webhook secret differs.
+
+What the handler does, and why:
+
+- **Verifies every request** with Svix before reading it. An unverified body is
+  an unauthenticated write to the users table.
+- **`user.created` and `user.updated` share one upsert.** Svix retries on any
+  non-2xx and can deliver out of order, so the handler is idempotent by design
+  rather than by luck.
+- **Picks the *primary* email**, not the first — otherwise adding a second
+  address to an account could silently change the stored email.
+- **Answers unknown event types with 200.** Subscribing to an extra event in the
+  dashboard should not start failing deliveries.
+- **400 on a bad signature, 500 on a missing secret.** 400 stops Svix retrying
+  something that can never verify; 500 makes it retry a misconfiguration that a
+  human can still fix.
+
 ### Environment variables
 
-| Variable                            | Used by    | Purpose                          |
-| ----------------------------------- | ---------- | -------------------------------- |
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Next.js    | Clerk frontend                   |
-| `CLERK_SECRET_KEY`                  | Next.js    | Clerk backend                    |
-| `CLERK_JWT_ISSUER_DOMAIN`           | Convex     | Validates the incoming Clerk JWT |
-| `NEXT_PUBLIC_CONVEX_URL`            | Next.js    | Convex deployment URL            |
-| `CONVEX_DEPLOYMENT`                 | Convex CLI | Which deployment to push to      |
+| Variable                            | Used by    | Purpose                              |
+| ----------------------------------- | ---------- | ------------------------------------ |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Next.js    | Clerk frontend                       |
+| `CLERK_SECRET_KEY`                  | Next.js    | Clerk backend                        |
+| `CLERK_JWT_ISSUER_DOMAIN`           | Convex     | Validates the incoming Clerk JWT     |
+| `CLERK_WEBHOOK_SIGNING_SECRET`      | Convex     | Verifies the Clerk webhook signature |
+| `NEXT_PUBLIC_CONVEX_URL`            | Next.js    | Convex deployment URL                |
+| `NEXT_PUBLIC_CONVEX_SITE_URL`       | Next.js    | Convex HTTP-action base URL          |
+| `CONVEX_DEPLOYMENT`                 | Convex CLI | Which deployment to push to          |
+
+## Deployments
+
+Two Convex deployments, one Clerk instance:
+
+| Name              | Convex deployment            | Purpose                              |
+| ----------------- | ---------------------------- | ------------------------------------ |
+| dev               | `judicious-wildcat-326`      | `npx convex dev`, pushes on save     |
+| staging (`prod`)  | `scintillating-moose-307`    | Deployed build, seeded like the real thing |
+
+Convex only has the deployment types `dev` and `prod`, so staging *is* the `prod`
+deployment here. It is Convex's production tier, not a production application.
+
+```bash
+pnpm deploy:staging   # convex deploy -> scintillating-moose-307
+pnpm dev:staging      # next dev on localhost, pointed at the staging deployment
+```
+
+`dev:staging` sets the Convex URLs inline rather than through a `.env.staging`
+file on purpose: Next.js only auto-loads `.env.$(NODE_ENV)`, and `NODE_ENV`
+accepts nothing but `production`, `development` and `test` — a `.env.staging`
+would silently never load. Inline `process.env` sits at the top of Next's lookup
+order, so it wins over `.env.local`. The Clerk keys are deliberately *not*
+overridden; there is one Clerk instance and both deployments share it.
 
 ## Verifying auth works
 
