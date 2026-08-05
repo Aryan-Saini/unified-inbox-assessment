@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "dev:convex": "convex dev",
-    "dev:staging": "NEXT_PUBLIC_CONVEX_URL=https://scintillating-moose-307.convex.cloud NEXT_PUBLIC_CONVEX_SITE_URL=https://scintillating-moose-307.convex.site next dev",
-    "deploy:staging": "convex deploy",
+    "dev:handin": "NEXT_PUBLIC_CONVEX_URL=https://scintillating-moose-307.convex.cloud NEXT_PUBLIC_CONVEX_SITE_URL=https://scintillating-moose-307.convex.site next dev",
+    "deploy:handin": "convex deploy",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

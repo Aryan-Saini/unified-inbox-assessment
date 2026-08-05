@@ -356,7 +356,7 @@ set on the **Convex deployment**, which is a separate environment.
 
 ### Convex deployment env (`npx convex env set …`)
 
-Add `--prod` to set the same value on the production/staging deployment. The
+Add `--prod` to set the same value on the hand-in (`prod`) deployment. The
 commented block in [`.env.example`](.env.example) carries the same list with the
 console paths spelled out.
 
@@ -427,7 +427,7 @@ URL in development.
    | Deployment | Endpoint URL |
    | --- | --- |
    | dev | `https://judicious-wildcat-326.convex.site/clerk-webhook` |
-   | staging (prod) | `https://scintillating-moose-307.convex.site/clerk-webhook` |
+   | hand-in (prod) | `https://scintillating-moose-307.convex.site/clerk-webhook` |
 
 2. Subscribe each to `user.created`, `user.updated`, `user.deleted`.
 3. Copy that endpoint's **Signing Secret** onto the matching deployment — each
@@ -435,7 +435,7 @@ URL in development.
 
    ```bash
    npx convex env set        CLERK_WEBHOOK_SIGNING_SECRET whsec_...   # dev
-   npx convex env set --prod CLERK_WEBHOOK_SIGNING_SECRET whsec_...   # staging
+   npx convex env set --prod CLERK_WEBHOOK_SIGNING_SECRET whsec_...   # hand-in
    ```
 
 The handler verifies every request with Svix before reading it (an unverified body
@@ -866,21 +866,21 @@ Two Convex deployments, one Clerk instance:
 | Name | Convex deployment | Purpose |
 | --- | --- | --- |
 | dev | `judicious-wildcat-326` | `npx convex dev`, pushes on save |
-| staging (`prod`) | `scintillating-moose-307` | Deployed build, real OAuth |
+| hand-in (`prod`) | `scintillating-moose-307` | The submitted deployment: deployed build, real OAuth |
 
-Convex only has the deployment types `dev` and `prod`, so staging *is* the `prod`
-deployment here — Convex's production tier, not a production application.
-`CLERK_JWT_ISSUER_DOMAIN` is identical on both because they share one Clerk
-instance; the webhook secret and `TOKEN_ENCRYPTION_KEY` are per-deployment.
+Convex only has the deployment types `dev` and `prod`, so the hand-in deployment
+*is* the `prod` one here — Convex's production tier, not a production
+application. `CLERK_JWT_ISSUER_DOMAIN` is identical on both because they share one
+Clerk instance; the webhook secret and `TOKEN_ENCRYPTION_KEY` are per-deployment.
 
 ```bash
-pnpm deploy:staging   # convex deploy → scintillating-moose-307
-pnpm dev:staging      # next dev on localhost, pointed at the staging deployment
+pnpm deploy:handin   # convex deploy → scintillating-moose-307
+pnpm dev:handin      # next dev on localhost, pointed at the hand-in deployment
 ```
 
-`dev:staging` sets the Convex URLs inline rather than through a `.env.staging` file
+`dev:handin` sets the Convex URLs inline rather than through a `.env.handin` file
 on purpose: Next.js only auto-loads `.env.$(NODE_ENV)`, and `NODE_ENV` accepts
-nothing but `production`, `development` and `test` — a `.env.staging` would
+nothing but `production`, `development` and `test` — a `.env.handin` would
 silently never load. Inline `process.env` sits at the top of Next's lookup order,
 so it wins over `.env.local`.
 
