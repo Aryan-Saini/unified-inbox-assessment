@@ -14,6 +14,8 @@ import { describe, expect, it } from "vitest";
 import { stripMrkdwn, tsToIso } from "./slack";
 import { webAdapter, webProvider, webSourceLabel } from "./web";
 import { scoreResult } from "../core/rank";
+import { toPublicResult } from "../api/views";
+import type { Doc } from "../_generated/dataModel";
 
 const ctx = {
   limit: 20,
@@ -141,6 +143,62 @@ describe("scoreResult", () => {
   it("breaks ties by source", () => {
     expect(scoreResult(base, "pricing", now)).toBeGreaterThan(
       scoreResult({ ...base, source: "web" }, "pricing", now),
+    );
+  });
+});
+
+describe("REST result projection", () => {
+  it("emits only the public key set and strips every enriched column", () => {
+    const projected = toPublicResult({
+      _id: "result-id",
+      _creationTime: 1,
+      searchId: "search-id",
+      userId: "user-id",
+      source: "slack",
+      externalId: "1712345678.000200",
+      title: "#deals",
+      snippet: "pricing",
+      author: "Ada",
+      timestamp: "2024-04-05T19:34:38.000Z",
+      url: "https://slack.test/message",
+      seq: 7,
+      score: 99,
+      connectionId: "connection-id",
+      threadId: "thread-secret",
+      replyTo: "C123",
+      context: "#deals · 12 replies",
+      unread: true,
+    } as Doc<"searchResults">);
+
+    expect(Object.keys(projected).sort()).toEqual(
+      ["source", "id", "title", "snippet", "url", "author", "timestamp"].sort(),
+    );
+    expect(projected).not.toHaveProperty("externalId");
+    expect(projected).not.toHaveProperty("seq");
+    expect(projected).not.toHaveProperty("score");
+    expect(projected).not.toHaveProperty("connectionId");
+    expect(projected).not.toHaveProperty("threadId");
+    expect(projected).not.toHaveProperty("replyTo");
+    expect(projected).not.toHaveProperty("context");
+    expect(projected).not.toHaveProperty("unread");
+  });
+
+  it("omits absent optional keys from serialized output", () => {
+    const projected = toPublicResult({
+      _id: "result-id",
+      _creationTime: 1,
+      searchId: "search-id",
+      userId: "user-id",
+      source: "web",
+      externalId: "https://example.test",
+      title: "Example",
+      snippet: "Public",
+      url: "https://example.test",
+      seq: 0,
+      score: 1,
+    } as Doc<"searchResults">);
+    expect(Object.keys(JSON.parse(JSON.stringify(projected)) as object).sort()).toEqual(
+      ["source", "id", "title", "snippet", "url"].sort(),
     );
   });
 });

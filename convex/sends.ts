@@ -588,9 +588,14 @@ function classifySendFailure(
   const error = toAdapterError(err);
   if (!dispatched || error.kind === "unknown") return error;
 
+  const causedByAbort = (value: unknown): boolean => {
+    if (!(value instanceof Error)) return false;
+    if (value.name === "AbortError" || value.name === "TimeoutError") return true;
+    return causedByAbort(value.cause);
+  };
   const aborted =
     signal.aborted ||
-    (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError"));
+    causedByAbort(err);
   if (!aborted) return error;
 
   return AdapterError.unknown(

@@ -111,7 +111,7 @@ export function toAdapterError(err: unknown): AdapterError {
   // An aborted fetch means we hit our own deadline, not that the provider is
   // broken. Treated as transient so a re-run can succeed.
   if (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError")) {
-    return AdapterError.transient(`Timed out: ${message}`);
+    return new AdapterError("transient", `Timed out: ${message}`, { cause: err });
   }
 
   // `fetch` rejects with a TypeError on DNS/connection failure.
