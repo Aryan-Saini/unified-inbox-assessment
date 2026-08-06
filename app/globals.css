@@ -142,25 +142,6 @@ body {
   animation: sweep 1.4s ease-in-out infinite;
 }
 
-@keyframes pulse-ring {
-  0% {
-    box-shadow: 0 0 0 0 currentColor;
-    opacity: 0.6;
-  }
-  100% {
-    box-shadow: 0 0 0 6px currentColor;
-    opacity: 0;
-  }
-}
-
-.pulse-ring::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 999px;
-  animation: pulse-ring 1.6s ease-out infinite;
-}
-
 @keyframes type-caret {
   0%,
   45% {

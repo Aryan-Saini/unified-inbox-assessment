@@ -416,7 +416,15 @@ export const reviewPayload = query({
       revision: draft.revision,
       channel: draft.channel,
       connectionId: draft.connectionId,
-      accountLabel: connection?.label ?? "(disconnected account)",
+      // Member *and* workspace for Slack: the confirm step's whole job is to say
+      // exactly what is about to happen, and "aryan-test" does not say which of
+      // that workspace's members the message will appear to come from.
+      accountLabel:
+        connection === null
+          ? "(disconnected account)"
+          : connection.accountName === undefined
+            ? connection.label
+            : `${connection.accountName} at ${connection.label}`,
       to: draft.to,
       toLabel: draft.toLabel,
       subject: draft.subject,

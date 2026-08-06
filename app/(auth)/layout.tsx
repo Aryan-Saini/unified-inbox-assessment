@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Unified Inbox",
-  description: "Search Gmail, Slack and the web from one place.",
+  description: "Search Gmail, Slack and The Web from one place.",
 };
 
 export default function RootLayout({

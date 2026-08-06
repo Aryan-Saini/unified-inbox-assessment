@@ -89,6 +89,29 @@ export const WebLogo = ({ className }: Props) => (
   </svg>
 );
 
+/**
+ * The same globe, struck through — web search switched off. The slash is drawn
+ * twice: once thick in the surface colour to cut a gap through the globe
+ * beneath it, then thin on top. Without that gap the diagonal just reads as one
+ * more meridian.
+ */
+export const WebOffLogo = ({ className }: Props) => (
+  <svg
+    {...base(className)}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.7"
+    strokeLinecap="round"
+  >
+    <circle cx="12" cy="12" r="9.25" />
+    <path d="M2.9 9.4h18.2M2.9 14.6h18.2" />
+    <path d="M12 2.75c-2.5 2.4-3.9 5.8-3.9 9.25s1.4 6.85 3.9 9.25c2.5-2.4 3.9-5.8 3.9-9.25S14.5 5.15 12 2.75z" />
+    <path d="M4.2 19.8 19.8 4.2" stroke="var(--color-ink-850)" strokeWidth="3.4" />
+    <path d="M4.2 19.8 19.8 4.2" />
+  </svg>
+);
+
 export const BRAND_LOGO: Record<
   "gmail" | "slack" | "web",
   (p: Props) => React.ReactElement

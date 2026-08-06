@@ -54,7 +54,11 @@ import { redactError } from "./core/redact";
 import { SENDERS } from "./core/registry";
 import { AdapterError, toAdapterError } from "./core/types";
 import { draftContentKey, draftDigest, requireOwnDraft } from "./drafts";
-import { channel as channelValidator, errorKind as errorKindValidator } from "./schema";
+import {
+  channel as channelValidator,
+  errorKind as errorKindValidator,
+  source as sourceValidator,
+} from "./schema";
 import { requireUser } from "./users";
 
 /** Attempts an auto-retry may consume, including the first. Past this a human
@@ -812,6 +816,110 @@ export const list = query({
       .take(limit);
 
     return rows.map(toSendView);
+  },
+});
+
+/**
+ * The outbox as a page rather than a table: every send with the two things a
+ * bare row could never carry — the account it went out as, and the message it
+ * was a reply to.
+ *
+ * Both are joins rather than columns on `sends`. The send freezes its *payload*
+ * because history has to stay truthful when a draft is edited; the account's
+ * name and the original message are not payload, and reading them live means a
+ * renamed workspace or a re-fetched avatar is right everywhere at once.
+ *
+ * `connections.list` hides removed-but-undeletable rows, so the account is
+ * resolved here instead: a send whose grant was removed still has to say what it
+ * went out as, which is the entire reason those rows survive removal.
+ */
+export const listDetailed = query({
+  args: { limit: v.optional(v.number()) },
+  returns: v.array(
+    v.object({
+      send: sendView,
+      /** Friendly form of `send.to` — "#deals", or a person's name. */
+      toLabel: v.optional(v.string()),
+      account: v.optional(
+        v.object({
+          label: v.string(),
+          accountName: v.optional(v.string()),
+          removed: v.boolean(),
+        }),
+      ),
+      repliedTo: v.optional(
+        v.object({
+          source: sourceValidator,
+          title: v.string(),
+          snippet: v.string(),
+          author: v.optional(v.string()),
+          timestamp: v.optional(v.string()),
+          url: v.string(),
+          context: v.optional(v.string()),
+          avatarUrl: v.optional(v.string()),
+          replyTo: v.optional(v.string()),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const limit = Math.min(Math.max(args.limit ?? LIST_LIMIT, 1), LIST_LIMIT);
+
+    const rows = await ctx.db
+      .query("sends")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .order("desc")
+      .take(limit);
+
+    return await Promise.all(
+      rows.map(async (send) => {
+        const [draft, connection] = await Promise.all([
+          ctx.db.get("drafts", send.draftId),
+          ctx.db.get("connections", send.connectionId),
+        ]);
+
+        // Ownership is re-checked on both joins. They are reached through a row
+        // that is already the caller's, so a mismatch should be impossible —
+        // which is exactly why it is worth refusing to render rather than
+        // trusting the reachability argument.
+        const own = <T extends { userId: Id<"users"> }>(doc: T | null) =>
+          doc !== null && doc.userId === user._id ? doc : null;
+
+        const ownDraft = own(draft);
+        const result =
+          ownDraft?.replyToResultId === undefined
+            ? null
+            : own(await ctx.db.get("searchResults", ownDraft.replyToResultId));
+
+        return {
+          send: toSendView(send),
+          toLabel: ownDraft?.toLabel,
+          account:
+            own(connection) === null
+              ? undefined
+              : {
+                  label: connection!.label,
+                  accountName: connection!.accountName,
+                  removed: connection!.hiddenAt !== undefined,
+                },
+          repliedTo:
+            result === null
+              ? undefined
+              : {
+                  source: result.source,
+                  title: result.title,
+                  snippet: result.snippet,
+                  author: result.author,
+                  timestamp: result.timestamp,
+                  url: result.url,
+                  context: result.context,
+                  avatarUrl: result.avatarUrl,
+                  replyTo: result.replyTo,
+                },
+        };
+      }),
+    );
   },
 });
 

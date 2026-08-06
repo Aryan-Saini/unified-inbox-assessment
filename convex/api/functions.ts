@@ -20,6 +20,7 @@ import { internalMutation, internalQuery } from "../_generated/server";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { DataModel, Doc, Id, TableNames } from "../_generated/dataModel";
 import { appError } from "../core/errors";
+import { ALL_SOURCES } from "../core/registry";
 import { confirmDraft, createDraft, draftDigest, requireOwnDraft } from "../drafts";
 import { claimSend, retrySend } from "../sends";
 import { consume } from "../limits";
@@ -94,7 +95,7 @@ export const createSearch = internalMutation({
     const searchId = await dispatchSearch(ctx, {
       userId: args.userId,
       query: normalizeQuery(args.query),
-      sources: args.sources ?? ["gmail", "slack", "web"],
+      sources: args.sources ?? ALL_SOURCES,
       // Recorded as `api`, so history shows which searches a script ran.
       origin: "api",
     });

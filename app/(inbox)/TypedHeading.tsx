@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-/** The sources the heading cycles through: "Search Gmail" → "Search Slack" → … */
-const SOURCES = ["Gmail", "Slack", "the web"];
+/** The sources the heading cycles through: "Search Gmail" → "Search Slack" → …
+ *  Capitalised as the connectors are named everywhere else in the app. */
+const SOURCES = ["Gmail", "Slack", "The Web"];
 
 /** Longest label, used to reserve width so "Search" never shifts. */
 const WIDEST = SOURCES.reduce((a, b) => (b.length > a.length ? b : a), "");
@@ -63,11 +64,11 @@ export function TypedHeading() {
     // The accessible name is the stable full sentence: announcing the
     // mid-animation text would read out a new partial word every ~90ms.
     <h1
-      aria-label="Search Gmail, Slack and the web"
+      aria-label="Search Gmail, Slack and The Web"
       className="text-center text-[26px] leading-tight font-semibold tracking-tight text-white sm:text-[34px]"
     >
       {reduced ? (
-        "Search Gmail, Slack and the web"
+        "Search Gmail, Slack and The Web"
       ) : (
         <>
           Search{" "}
@@ -76,11 +77,14 @@ export function TypedHeading() {
               grows into reserved space instead of shoving "Search" sideways on
               every keystroke. */}
           <span className="relative inline-grid align-baseline">
-            {/* Must match the typed span's font and size exactly, or the
-                reserved width is wrong. The padding allows for the caret. */}
+            {/* Must match the typed span's font, size and word-spacing exactly,
+                or the reserved width is wrong. The padding allows for the caret.
+                Mono sets a space as a full character cell, which left "The Web"
+                looking like two separate words — hence the negative word-spacing
+                on both copies. */}
             <span
               aria-hidden
-              className="invisible col-start-1 row-start-1 pr-[0.13em] font-mono text-[0.94em] tracking-tight"
+              className="invisible col-start-1 row-start-1 pr-[0.13em] font-mono text-[0.94em] tracking-tight [word-spacing:-0.22em]"
             >
               {WIDEST}
             </span>
@@ -89,7 +93,7 @@ export function TypedHeading() {
                 Sized at 0.94em because mono runs optically larger than sans. */}
             <span
               aria-hidden
-              className="col-start-1 row-start-1 justify-self-start font-mono text-[0.94em] tracking-tight whitespace-pre"
+              className="col-start-1 row-start-1 justify-self-start font-mono text-[0.94em] tracking-tight whitespace-pre [word-spacing:-0.22em]"
             >
               {SOURCES[word].slice(0, chars)}
               <span className="type-caret ml-[0.06em] inline-block h-[0.82em] w-[0.06em] translate-y-[0.02em] rounded-full bg-white align-baseline" />

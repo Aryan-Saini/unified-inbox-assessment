@@ -5,12 +5,22 @@
 import { useEffect, useRef } from "react";
 import { CloseIcon } from "./icons";
 
+/**
+ * Every open dialog, innermost last.
+ *
+ * Escape belongs to the top one alone. A settings dialog opened *over* a draft
+ * is the case that makes this load-bearing: one keypress closing both would
+ * throw the draft away as a side effect of leaving settings.
+ */
+const OPEN_MODALS: object[] = [];
+
 export function Modal({
   open,
   onClose,
   title,
   subtitle,
   badge,
+  heading,
   width = "max-w-3xl",
   footer,
   mobileFullScreen = false,
@@ -21,6 +31,10 @@ export function Modal({
   title: string;
   subtitle?: string;
   badge?: React.ReactNode;
+  /** Replaces the title/subtitle block, for a dialog whose header is better
+   *  stated by the thing it is about than by a sentence describing it. `title` is
+   *  still required and still names the dialog to a screen reader. */
+  heading?: React.ReactNode;
   width?: string;
   footer?: React.ReactNode;
   /** Take the whole viewport on a phone instead of sitting as a bottom sheet. */
@@ -29,10 +43,21 @@ export function Modal({
 }) {
   const panel = useRef<HTMLDivElement>(null);
 
+  // Read through a ref so the effect below depends on `open` alone: callers pass
+  // an inline arrow, and re-running on every render would keep re-stacking this
+  // dialog over whatever was opened on top of it.
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     if (!open) return;
+    OPEN_MODALS.push(panel);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (OPEN_MODALS[OPEN_MODALS.length - 1] !== panel) return;
+      close.current();
     };
     document.addEventListener("keydown", onKey);
     const previous = document.body.style.overflow;
@@ -40,9 +65,11 @@ export function Modal({
     panel.current?.focus();
     return () => {
       document.removeEventListener("keydown", onKey);
+      const at = OPEN_MODALS.indexOf(panel);
+      if (at !== -1) OPEN_MODALS.splice(at, 1);
       document.body.style.overflow = previous;
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -73,15 +100,19 @@ export function Modal({
       >
         <header className="flex items-start gap-3 border-b border-line px-5 py-4">
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-[15px] font-semibold text-white">{title}</h2>
-              {badge}
-            </div>
-            {subtitle ? (
-              <p className="mt-1 text-[13px] leading-relaxed text-neutral-400">
-                {subtitle}
-              </p>
-            ) : null}
+            {heading ?? (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-[15px] font-semibold text-white">{title}</h2>
+                  {badge}
+                </div>
+                {subtitle ? (
+                  <p className="mt-1 text-[13px] leading-relaxed text-neutral-400">
+                    {subtitle}
+                  </p>
+                ) : null}
+              </>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -212,8 +243,11 @@ export function Button({
     outline:
       "border border-line-strong text-neutral-200 hover:border-neutral-500 hover:text-white",
     ghost: "text-neutral-300 hover:bg-white/5 hover:text-white",
+    // Filled, not just outlined: destructive actions should be recognisable as
+    // destructive before the label is read, and an outline alone put it in the
+    // same visual class as the neutral `outline` variant beside it.
     danger:
-      "border border-rose-500/40 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200",
+      "border border-rose-500/40 bg-rose-500/10 text-rose-300 hover:border-rose-500/60 hover:bg-rose-500/20 hover:text-rose-200",
   }[variant];
 
   return (

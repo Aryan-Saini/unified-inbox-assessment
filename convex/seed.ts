@@ -56,7 +56,37 @@ interface SeedConnections {
   activeGmail: Id<"connections">;
   expiredGmail: Id<"connections">;
   revokedSlack: Id<"connections">;
+  /** A healthy Slack, and the one carrying the awkward strings. */
+  activeSlack: Id<"connections">;
+  erroredGmail: Id<"connections">;
 }
+
+/**
+ * Strings at, or past, the length the UI has to survive.
+ *
+ * Every one of these is real in the sense that matters: an address can be 320
+ * characters, a Gmail subject 988, a Slack workspace can be named whatever its
+ * owner typed. A layout that only holds together on "demo.inbox@example.com" is
+ * a layout nobody has actually tested.
+ */
+const LONG = {
+  /** A Slack workspace name with no spaces to wrap on. */
+  workspace: "Northwind-Trading-International-Logistics-and-Freight-Forwarding",
+  member: "Alexandra Constantinopoulos-Featherstonehaugh",
+  /** 254 characters, the practical maximum for an address. */
+  address: `${"a".repeat(64)}@${"very-long-subdomain.".repeat(8)}example.com`,
+  channel: "#q3-planning-logistics-and-freight-forwarding-escalations",
+  /** At the 988-character subject cap. */
+  subject: `Re: ${"Escalation on the Q3 logistics review and the freight-forwarding contract renewal, including the outstanding invoice reconciliation. ".repeat(7)}`.slice(0, 988),
+  /** Long enough to prove the body clamps, wraps and scrolls everywhere it is
+   *  shown, with a line break in it so `whitespace-pre-wrap` is exercised too. */
+  body: `${"This paragraph exists to be long. ".repeat(40)}\n\n${"It has a second one, after a hard break, so the pre-wrap rendering is exercised as well as the clamping. ".repeat(20)}`,
+  /** At the 512-character query cap. */
+  query: `${"invoice reconciliation freight forwarding escalation ".repeat(12)}`.slice(0, 512),
+  /** A word that cannot break, which is what actually overflows a flex row. */
+  unbreakable:
+    "Reconciliation—Q3—Logistics—Freight—Forwarding—Escalation—Thread—2041—Final",
+} as const;
 
 async function seedConnections(
   ctx: MutationCtx,
@@ -113,21 +143,69 @@ async function seedConnections(
     provider: "slack",
     externalAccountId: "T0DEMO123:U0DEMO456",
     label: "Acme Demo Workspace",
+    accountName: "Demo User",
     teamName: "Acme Demo Workspace",
     status: "revoked",
     statusReason: `${SEED} Slack answered 200 {"ok":false,"error":"token_revoked"} — the grant was revoked in the workspace. Reconnect to restore it.`,
-    scopes: ["search:read", "chat:write", "users:read"],
+    scopes: ["search:read", "chat:write", "users:read", "channels:history"],
     createdAt: now - 4 * DAY,
     lastUsedAt: now - 40 * MINUTE,
     lastErrorAt: now - 40 * MINUTE,
   });
 
-  return { activeGmail, expiredGmail, revokedSlack };
+  /**
+   * The healthy Slack, and the one carrying every awkward string at once: a
+   * long workspace name, a long member name, and both shown together in the
+   * "George at aryan-test" line the connections list renders.
+   */
+  const activeSlack = await ctx.db.insert("connections", {
+    ...base,
+    enabled: true,
+    provider: "slack",
+    externalAccountId: "T0LONG456:U0LONG789",
+    label: LONG.workspace,
+    accountName: LONG.member,
+    teamName: LONG.workspace,
+    status: "active",
+    scopes: [
+      "search:read",
+      "chat:write",
+      "users:read",
+      "channels:history",
+      "groups:history",
+    ],
+    createdAt: now - 3 * DAY,
+    lastUsedAt: now - 3 * MINUTE,
+  });
+
+  /** The fourth connection status, which nothing else in the fixtures reaches. */
+  const erroredGmail = await ctx.db.insert("connections", {
+    ...base,
+    provider: "gmail",
+    externalAccountId: LONG.address,
+    label: LONG.address,
+    accountEmail: LONG.address,
+    status: "errored",
+    statusReason: `${SEED} gmail returned 403 Forbidden — {"error":{"code":403,"message":"Request had insufficient authentication scopes.","status":"PERMISSION_DENIED"}}. The grant is live but is missing a scope this app now requests; reconnect to re-grant it.`,
+    scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+    tokenExpiresAt: now + 2 * HOUR,
+    createdAt: now - 11 * DAY,
+    lastUsedAt: now - 3 * HOUR,
+    lastErrorAt: now - 3 * HOUR,
+  });
+
+  return { activeGmail, expiredGmail, revokedSlack, activeSlack, erroredGmail };
 }
 
 /* ------------------------------------------------------------------- searches */
 
 interface SeedResult {
+  /**
+   * Stable handle for a seeded result, so a seeded *send* can point at the
+   * message it answers. Without it the outbox's demo rows are replies to
+   * nothing, which is exactly the half of the record the page exists to show.
+   */
+  key?: string;
   source: Doc<"searchResults">["source"];
   title: string;
   snippet: string;
@@ -139,6 +217,11 @@ interface SeedResult {
   replyTo?: string;
   unread?: boolean;
   threadId?: string;
+  /** One of the user's own messages — a Sent-mail hit, which Gmail search
+   *  returns alongside received ones and the UI marks as yours. */
+  outgoing?: boolean;
+  recipient?: string;
+  recipientName?: string;
 }
 
 interface SeedSourceRun {
@@ -166,7 +249,7 @@ async function seedSearch(
   userId: Id<"users">,
   now: number,
   spec: SeedSearch,
-): Promise<{ results: number }> {
+): Promise<{ results: number; origins: Map<string, Id<"searchResults">> }> {
   const createdAt = now - spec.ageMs;
   const total = spec.runs.reduce((sum, run) => sum + (run.results?.length ?? 0), 0);
 
@@ -181,6 +264,8 @@ async function seedSearch(
     completedAt:
       spec.completedAfterMs === undefined ? undefined : createdAt + spec.completedAfterMs,
   });
+
+  const origins = new Map<string, Id<"searchResults">>();
 
   let seq = 0;
   for (const run of spec.runs) {
@@ -209,7 +294,7 @@ async function seedSearch(
 
     for (const result of results) {
       seq += 1;
-      await ctx.db.insert("searchResults", {
+      const resultId = await ctx.db.insert("searchResults", {
         searchId,
         userId,
         source: run.source,
@@ -226,11 +311,15 @@ async function seedSearch(
         replyTo: result.replyTo,
         context: result.context,
         unread: result.unread,
+        outgoing: result.outgoing,
+        recipient: result.recipient,
+        recipientName: result.recipientName,
       });
+      if (result.key !== undefined) origins.set(result.key, resultId);
     }
   }
 
-  return { results: total };
+  return { results: total, origins };
 }
 
 /** The four fan-outs: clean, one dead grant, one flaky account, one mid-flight. */
@@ -250,6 +339,7 @@ function searchSpecs(c: SeedConnections): SeedSearch[] {
           durationMs: 820,
           results: [
             {
+              key: "acme-invoice",
               source: "gmail",
               title: "Invoice INV-2041 from Acme Supply",
               snippet:
@@ -264,6 +354,7 @@ function searchSpecs(c: SeedConnections): SeedSearch[] {
               threadId: "seed-thread-invoice",
             },
             {
+              key: "acme-terms",
               source: "gmail",
               title: "Re: Acme invoice — payment terms",
               snippet:
@@ -298,6 +389,7 @@ function searchSpecs(c: SeedConnections): SeedSearch[] {
           durationMs: 1_150,
           results: [
             {
+              key: "finance-invoice",
               source: "slack",
               title: "#finance — invoice INV-2041",
               snippet:
@@ -512,6 +604,164 @@ function searchSpecs(c: SeedConnections): SeedSearch[] {
         },
       ],
     },
+
+    /* ------------------------------------------------ the awkward fixtures */
+
+    {
+      // Everything at its limit at once: a 512-character query, a subject at
+      // the 988-character cap, an address at 254, an unbreakable word, a
+      // four-figure reply count, and a result the user sent rather than
+      // received. If the layout survives this row it survives real mail.
+      query: LONG.query,
+      ageMs: 11 * MINUTE,
+      completedAfterMs: 4_120,
+      runs: [
+        {
+          source: "gmail",
+          connectionId: c.activeGmail,
+          label: "demo.inbox@example.com",
+          status: "succeeded",
+          attemptCount: 1,
+          durationMs: 1_240,
+          results: [
+            {
+              key: "long-email",
+              source: "gmail",
+              title: LONG.subject,
+              snippet: LONG.body,
+              author: LONG.address,
+              ageMs: 90 * MINUTE,
+              url: "https://mail.google.com/mail/u/0/#inbox/seed-long-everything",
+              score: 91,
+              replyTo: LONG.address,
+              context: LONG.unbreakable,
+              unread: true,
+            },
+            {
+              // One of your own, so the "Sent" mark on the right edge has
+              // something to sit on.
+              source: "gmail",
+              title: "Re: Freight forwarding escalation — my reply",
+              snippet:
+                "Confirming the numbers below are the ones payments will work from. Anything not on this list is out of scope for Q3.",
+              author: "demo.inbox@example.com",
+              ageMs: 70 * MINUTE,
+              url: "https://mail.google.com/mail/u/0/#sent/seed-outgoing",
+              score: 80,
+              outgoing: true,
+              recipient: LONG.address,
+              recipientName: "Alexandra Constantinopoulos-Featherstonehaugh",
+              replyTo: "demo.inbox@example.com",
+            },
+            {
+              // No author and no context: every optional field absent at once.
+              source: "gmail",
+              title: "No sender name, no thread context",
+              snippet: "Bare minimum row — the fields the UI must not assume.",
+              ageMs: 5 * DAY,
+              url: "https://mail.google.com/mail/u/0/#inbox/seed-bare",
+              score: 12,
+            },
+          ],
+        },
+        {
+          source: "slack",
+          connectionId: c.activeSlack,
+          label: LONG.workspace,
+          status: "succeeded",
+          attemptCount: 1,
+          durationMs: 2_890,
+          results: [
+            {
+              key: "long-slack",
+              source: "slack",
+              title: `${LONG.channel} — escalation`,
+              snippet: LONG.body,
+              author: LONG.member,
+              ageMs: 25 * MINUTE,
+              url: "https://northwind.slack.com/archives/C0LONGCHANNEL/p1700000000000900",
+              score: 88,
+              replyTo: "C0LONGCHANNEL",
+              context: `${LONG.channel} · 1284 replies`,
+              threadId: "1700000000.000900",
+            },
+          ],
+        },
+        {
+          // The fourth source-run state: attempted, failed permanently, and
+          // not retried. The chip has to say so without a result to show.
+          source: "web",
+          label: "Web (mock)",
+          status: "failed",
+          attemptCount: 1,
+          durationMs: 410,
+          errorKind: "permanent",
+          errorMessage: `${SEED} The web search provider returned 400 Bad Request — the query exceeded its own length limit at 512 characters. Not retried: the same query would be rejected the same way.`,
+        },
+      ],
+    },
+    {
+      // A search that found nothing anywhere. The empty state is a state.
+      query: "zzz nothing matches this query zzz",
+      ageMs: 6 * MINUTE,
+      completedAfterMs: 1_890,
+      runs: [
+        {
+          source: "gmail",
+          connectionId: c.activeGmail,
+          label: "demo.inbox@example.com",
+          status: "succeeded",
+          attemptCount: 1,
+          durationMs: 640,
+          results: [],
+        },
+        {
+          source: "slack",
+          connectionId: c.activeSlack,
+          label: LONG.workspace,
+          status: "succeeded",
+          attemptCount: 1,
+          durationMs: 880,
+          results: [],
+        },
+        {
+          source: "web",
+          label: "Web (mock)",
+          status: "succeeded",
+          attemptCount: 1,
+          durationMs: 1_780,
+          results: [],
+        },
+      ],
+    },
+    {
+      // Queued and not yet started: the source chip's `pending` state, which
+      // nothing else in the fixtures reaches.
+      query: "just dispatched",
+      ageMs: 20_000,
+      runs: [
+        {
+          source: "gmail",
+          connectionId: c.activeGmail,
+          label: "demo.inbox@example.com",
+          status: "running",
+          attemptCount: 1,
+        },
+        {
+          source: "slack",
+          connectionId: c.activeSlack,
+          label: LONG.workspace,
+          status: "pending",
+          attemptCount: 0,
+        },
+        {
+          source: "web",
+          label: "Web (mock)",
+          status: "pending",
+          attemptCount: 0,
+        },
+      ],
+    },
   ];
 }
 
@@ -539,6 +789,8 @@ interface SeedSend {
 }
 
 interface SeedDraft {
+  /** `SeedResult.key` of the message this is a reply to, when it is one. */
+  repliesTo?: string;
   channel: Doc<"drafts">["channel"];
   connectionId: Id<"connections">;
   to: string;
@@ -554,10 +806,12 @@ interface SeedDraft {
 function draftSpecs(c: SeedConnections): SeedDraft[] {
   const gmail = c.activeGmail;
   const slack = c.revokedSlack;
+  const longSlack = c.activeSlack;
 
   return [
     /* Two drafts with no send: the two pre-delivery statuses. */
     {
+      repliesTo: "acme-invoice",
       channel: "gmail",
       connectionId: gmail,
       to: "billing@acme-supply.example",
@@ -567,6 +821,7 @@ function draftSpecs(c: SeedConnections): SeedDraft[] {
       ageMs: 9 * MINUTE,
     },
     {
+      repliesTo: "finance-invoice",
       channel: "slack",
       connectionId: slack,
       to: "C0FINANCE",
@@ -577,7 +832,65 @@ function draftSpecs(c: SeedConnections): SeedDraft[] {
     },
 
     /* One draft per send status. Seven statuses, seven timelines. */
+    /* ------------------------------------------------ the awkward fixtures */
     {
+      // A delivered send with everything at its cap: 988-character subject,
+      // long body with a hard break in it, 254-character recipient, and the
+      // long email above quoted as the message it answers.
+      repliesTo: "long-email",
+      channel: "gmail",
+      connectionId: gmail,
+      to: LONG.address,
+      subject: LONG.subject,
+      body: LONG.body,
+      status: "sent",
+      ageMs: 12 * MINUTE,
+      send: {
+        status: "succeeded",
+        providerMessageId: "seed-gmail-msg-long-4c81",
+        completed: true,
+        attempts: [
+          {
+            trigger: "initial",
+            startedAgoMs: 12 * MINUTE,
+            durationMs: 1_320,
+            outcome: "succeeded",
+            providerMessageId: "seed-gmail-msg-long-4c81",
+          },
+        ],
+      },
+    },
+    {
+      // The same treatment on Slack: long channel label, long body, and a
+      // failure whose provider text is long enough to wrap several lines.
+      repliesTo: "long-slack",
+      channel: "slack",
+      connectionId: longSlack,
+      to: "C0LONGCHANNEL",
+      toLabel: LONG.channel,
+      body: LONG.body,
+      status: "confirmed",
+      ageMs: 18 * MINUTE,
+      send: {
+        status: "failed_transient",
+        nextRetryInMs: 27_000,
+        lastErrorKind: "transient",
+        lastErrorMessage: `${SEED} Slack returned HTTP 200 with {"ok":false,"error":"ratelimited","retry_after":30} on chat.postMessage to ${LONG.channel} in ${LONG.workspace}. The workspace is over its per-minute posting limit, which clears on its own, so this is transient and the same idempotency key is reused on every retry.`,
+        attempts: [
+          {
+            trigger: "initial",
+            startedAgoMs: 18 * MINUTE,
+            durationMs: 320,
+            outcome: "failed",
+            errorKind: "transient",
+            httpStatus: 200,
+            errorMessage: `${SEED} Slack returned HTTP 200 with {"ok":false,"error":"ratelimited","retry_after":30}. Backing off before attempt 2 — the message was not posted.`,
+          },
+        ],
+      },
+    },
+    {
+      repliesTo: "acme-terms",
       channel: "gmail",
       connectionId: gmail,
       to: "kate@acme-supply.example",
@@ -710,6 +1023,7 @@ function draftSpecs(c: SeedConnections): SeedDraft[] {
       },
     },
     {
+      repliesTo: "finance-invoice",
       channel: "slack",
       connectionId: slack,
       to: "C0FINANCE",
@@ -769,6 +1083,7 @@ async function seedDrafts(
   userId: Id<"users">,
   now: number,
   specs: SeedDraft[],
+  origins: Map<string, Id<"searchResults">>,
 ): Promise<{ drafts: number; sends: number; attempts: number }> {
   let sends = 0;
   let attempts = 0;
@@ -786,6 +1101,10 @@ async function seedDrafts(
       // Deterministic and obviously seeded, so a reviewer can see the key that
       // guards the send without having to dig it out.
       idempotencyKey: `seed-${userId}-${index}`,
+      // The result this answers, so the outbox can show the exchange rather
+      // than a reply with nothing above it.
+      replyToResultId:
+        spec.repliesTo === undefined ? undefined : origins.get(spec.repliesTo),
       status: spec.status,
       revision: 1,
       isSeed: true,
@@ -909,18 +1228,28 @@ export async function seedForUser(ctx: MutationCtx, userId: Id<"users">) {
   const connections = await seedConnections(ctx, userId, now);
 
   let results = 0;
+  const origins = new Map<string, Id<"searchResults">>();
   const specs = searchSpecs(connections);
   for (const spec of specs) {
     const outcome = await seedSearch(ctx, userId, now, spec);
     results += outcome.results;
+    for (const [key, id] of outcome.origins) origins.set(key, id);
   }
 
-  const drafts = await seedDrafts(ctx, userId, now, draftSpecs(connections));
+  // Searches first, deliberately: a seeded reply points at a seeded result, so
+  // the results have to exist before the drafts that answer them.
+  const drafts = await seedDrafts(
+    ctx,
+    userId,
+    now,
+    draftSpecs(connections),
+    origins,
+  );
 
   return {
     created: true,
     counts: {
-      connections: 3,
+      connections: 5,
       searches: specs.length,
       results,
       drafts: drafts.drafts,

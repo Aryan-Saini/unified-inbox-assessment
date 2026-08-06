@@ -30,6 +30,16 @@ export interface UiResult extends Result {
   /** Where a reply would go, if this result is replyable. */
   replyTo?: string;
   unread?: boolean;
+  /** Sender's provider avatar, when the provider exposes one (Slack). */
+  avatarUrl?: string;
+  /** The user sent this rather than received it — a Sent-mail hit. */
+  outgoing?: boolean;
+  recipient?: string;
+  recipientName?: string;
+  /** Replies hanging off this message's thread (Slack). */
+  replyCount?: number;
+  /** Pre-formatted age of the newest reply, e.g. "8m". Empty when unknown. */
+  lastReplyAge?: string;
   /**
    * Which grant a reply would be sent through. Carried on the result because
    * that is where the answer actually lives — the message was found by one
@@ -41,6 +51,13 @@ export interface UiResult extends Result {
   threadId?: string;
   /** Provider-side id of the message being replied to. */
   externalId?: string;
+  /**
+   * The stored `searchResults` row this came from, when it is one. A reply
+   * records it so the outbox can show the message it answered — and it is
+   * deliberately absent on results synthesised in the client (the outbox's
+   * "compose again", which has no stored result behind it).
+   */
+  resultId?: string;
   /**
    * Merge-layer relevance score, computed at write time. Higher is better.
    * Powers the opt-in "Relevance" sort; arrival order stays the default
@@ -90,6 +107,12 @@ export interface Connection {
   id: string;
   provider: "gmail" | "slack";
   label: string;
+  /**
+   * The identity inside `label`, when the label is not one itself: the Slack
+   * member the workspace is connected as. Undefined for Gmail, whose label is
+   * already the account.
+   */
+  accountName?: string;
   detail: string;
   status: ConnectionStatus;
   statusReason?: string;

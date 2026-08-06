@@ -12,28 +12,14 @@ import type { Connection, SearchRecord, Source, UiResult } from "./types";
 
 export const SOURCES: Source[] = ["gmail", "slack", "web"];
 
-export const SOURCE_META: Record<
-  Source,
-  { name: string; color: string; dot: string; tint: string }
-> = {
-  gmail: {
-    name: "Gmail",
-    color: "text-[#f0655a]",
-    dot: "bg-[#f0655a]",
-    tint: "bg-[#f0655a]/10 border-[#f0655a]/25 text-[#f7a39b]",
-  },
-  slack: {
-    name: "Slack",
-    color: "text-[#a78bfa]",
-    dot: "bg-[#a78bfa]",
-    tint: "bg-[#a78bfa]/10 border-[#a78bfa]/25 text-[#c4b2fd]",
-  },
-  web: {
-    name: "Web",
-    color: "text-[#38bdf8]",
-    dot: "bg-[#38bdf8]",
-    tint: "bg-[#38bdf8]/10 border-[#38bdf8]/25 text-[#8bd6fb]",
-  },
+/**
+ * Just the display name. Telling sources apart is the brand logo's job, so the
+ * per-source colours this used to carry — dot, tint, rail — are all gone.
+ */
+export const SOURCE_META: Record<Source, { name: string }> = {
+  gmail: { name: "Gmail" },
+  slack: { name: "Slack" },
+  web: { name: "Web" },
 };
 
 /** The connection label each adapter run reports, per source. */
@@ -72,7 +58,7 @@ export const MOCK_CONNECTIONS: Connection[] = [
     label: "Northwind HQ",
     detail: "ada@northwind.test · 41 channels",
     status: "active",
-    scopes: ["search:read", "chat:write"],
+    scopes: ["search:read", "chat:write", "users:read", "channels:history"],
     lastUsed: "4m ago",
     enabled: true,
   },
@@ -266,52 +252,58 @@ const GMAIL_POOL: PoolItem[] = [
 const SLACK_POOL: PoolItem[] = [
   {
     source: "slack",
-    title: "#finance-ops — \"Ledgerly invoice is in, who approves?\"",
+    title: "Ledgerly invoice is in, who approves?",
     snippet:
       "@ada the Ledgerly invoice landed this morning. It's over the $2k auto-approve threshold so it needs a manual sign-off before Thursday's run.",
     author: "Dana Whitfield",
-    context: "#finance-ops · 4 replies",
+    context: "#finance-ops",
     timestamp: "2026-07-30T09:31:00Z",
     age: "8m",
     url: "https://northwind.slack.test/archives/C01FINOPS/p1753861860",
     replyTo: "#finance-ops",
+    replyCount: 4,
+    lastReplyAge: "6m",
     unread: true,
     terms: ["invoice", "ledgerly", "approve", "billing", "finance", "payment"],
   },
   {
     source: "slack",
-    title: "#deploys — \"rolling staging back to 2288\"",
+    title: "rolling staging back to 2288",
     snippet:
       "Migration blew up on send_attempts. I've pinned the rollback command in the channel. Don't re-run the deploy until the migration is made idempotent.",
     author: "Sam Okonkwo",
-    context: "#deploys · 11 replies",
+    context: "#deploys",
     timestamp: "2026-07-29T08:12:00Z",
     age: "1d",
     url: "https://northwind.slack.test/archives/C01DEPLOY/p1753776720",
     replyTo: "#deploys",
+    replyCount: 11,
+    lastReplyAge: "22h",
     terms: ["deploy", "staging", "rollback", "migration", "build", "failed"],
   },
   {
     source: "slack",
-    title: "#design-review — \"pricing deck v7 is up\"",
+    title: "pricing deck v7 is up",
     snippet:
       "v7 drops the comparison table Marcus flagged and reworks slide 12. Comments open until Thursday 10:00, then I'm freezing it for the board packet.",
     author: "Iris Chen",
-    context: "#design-review · 7 replies",
+    context: "#design-review",
     timestamp: "2026-07-30T07:44:00Z",
     age: "2h",
     url: "https://northwind.slack.test/archives/C01DESIGN/p1753854240",
     replyTo: "#design-review",
+    replyCount: 7,
+    lastReplyAge: "1h",
     unread: true,
     terms: ["pricing", "deck", "q3", "feedback", "slides", "design"],
   },
   {
     source: "slack",
-    title: "#eng-platform — \"who owns the billing webhook?\"",
+    title: "who owns the billing webhook?",
     snippet:
       "Nobody's in the CODEOWNERS for services/billing-webhook. It's been paging on 429s from the provider for two days and the retries have no backoff.",
     author: "Tomás Rivera",
-    context: "#eng-platform · 9 replies",
+    context: "#eng-platform",
     timestamp: "2026-07-29T13:02:00Z",
     age: "20h",
     url: "https://northwind.slack.test/archives/C01PLAT/p1753794120",
@@ -320,11 +312,11 @@ const SLACK_POOL: PoolItem[] = [
   },
   {
     source: "slack",
-    title: "#general — \"Priya starts Monday 🎉\"",
+    title: "Priya starts Monday 🎉",
     snippet:
       "Joining the platform team. Ada is running her through the deploy runbook on day two — if you own a service she'll touch, drop your docs in the thread.",
     author: "Dana Whitfield",
-    context: "#general · 23 replies",
+    context: "#general",
     timestamp: "2026-07-28T15:30:00Z",
     age: "2d",
     url: "https://northwind.slack.test/archives/C01GEN/p1753716600",

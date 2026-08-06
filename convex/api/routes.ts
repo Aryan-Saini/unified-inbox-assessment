@@ -35,6 +35,7 @@ import type { Id } from "../_generated/dataModel";
 import { sha256Hex } from "../core/crypto";
 import { asAppError } from "../core/errors";
 import { sleep } from "../core/http";
+import { ALL_SOURCES } from "../core/registry";
 import type { Source } from "../core/types";
 import {
   API_PREFIX,
@@ -82,15 +83,14 @@ const runSearch: Handler = async (ctx, rc) => {
   }
 
   const requested = readStringArray(rc.body, "sources");
-  const allowed: Source[] = ["gmail", "slack", "web"];
   const sources = requested?.filter((s): s is Source =>
-    (allowed as string[]).includes(s),
+    (ALL_SOURCES as string[]).includes(s),
   );
   if (requested !== undefined && (sources === undefined || sources.length === 0)) {
     return errorResponse(
       400,
       "BAD_REQUEST",
-      `\`sources\` must contain at least one of ${allowed.join(", ")}.`,
+      `\`sources\` must contain at least one of ${ALL_SOURCES.join(", ")}.`,
     );
   }
 

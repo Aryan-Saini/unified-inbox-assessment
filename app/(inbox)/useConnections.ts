@@ -51,6 +51,10 @@ export function useConnections(): UseConnections {
       id: row.id,
       provider: row.provider,
       label: row.label,
+      // Who the grant is *as*. For Gmail the label already is the address, so
+      // this is empty; for Slack the label is only the workspace, and the member
+      // is the half that says whose Slack is being searched.
+      accountName: row.provider === "slack" ? row.accountName : undefined,
       detail:
         row.statusReason ??
         (row.provider === "gmail"

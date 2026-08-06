@@ -50,6 +50,22 @@ interface SearchMessagesResponse extends SlackEnvelope {
   messages?: { matches?: SlackMatch[] };
 }
 
+interface UserInfoResponse extends SlackEnvelope {
+  user?: {
+    real_name?: unknown;
+    profile?: {
+      display_name?: unknown;
+      real_name?: unknown;
+      image_72?: unknown;
+      image_48?: unknown;
+    };
+  };
+}
+
+interface RepliesResponse extends SlackEnvelope {
+  messages?: Array<{ reply_count?: unknown; latest_reply?: unknown }>;
+}
+
 interface PostMessageResponse extends SlackEnvelope {
   ts?: unknown;
   channel?: unknown;
@@ -158,6 +174,88 @@ export function stripMrkdwn(text: string): string {
   );
 }
 
+/**
+ * Enrichment is best-effort by construction.
+ *
+ * A profile lookup or a thread count is a nicety; a search that returns results
+ * is the product. So every enrichment call is swallowed on failure — a missing
+ * scope, a channel the token cannot read, a rate limit — and the row is
+ * returned without the extra rather than the whole search failing for it. This
+ * is also what lets a connection authorised before `channels:history` was
+ * requested keep working: it simply shows no reply counts until it reconnects.
+ */
+async function optional<T>(work: Promise<T>): Promise<T | undefined> {
+  try {
+    return await work;
+  } catch {
+    return undefined;
+  }
+}
+
+interface SlackProfile {
+  name?: string;
+  avatarUrl?: string;
+}
+
+/**
+ * Resolve user ids to names and avatars, one call per *distinct* id.
+ *
+ * `search.messages` gives a handle (`username`) at best, and often only a `U…`
+ * id. Neither is what a person is called in the workspace, and neither has a
+ * face — so a Slack row read nothing like Slack. Deduplicating first matters:
+ * a search that returns ten messages from one person is one lookup, not ten.
+ */
+async function fetchProfiles(
+  userIds: string[],
+  auth: { accessToken: string; signal: AbortSignal },
+): Promise<Map<string, SlackProfile>> {
+  const entries = await Promise.all(
+    userIds.map(async (id): Promise<[string, SlackProfile] | undefined> => {
+      const body = await optional(
+        slackFetch<UserInfoResponse>("users.info", auth, { query: { user: id } }),
+      );
+      if (body === undefined) return undefined;
+      const profile = body.user?.profile;
+      return [
+        id,
+        {
+          name:
+            str(profile?.display_name) ??
+            str(profile?.real_name) ??
+            str(body.user?.real_name),
+          avatarUrl: str(profile?.image_72) ?? str(profile?.image_48),
+        },
+      ];
+    }),
+  );
+
+  return new Map(entries.filter((e): e is [string, SlackProfile] => e !== undefined));
+}
+
+/**
+ * The thread hanging off a message: how many replies, and when the last one
+ * landed. Undefined when the message is not a thread parent.
+ *
+ * `limit: 1` because the replies themselves are never read — Slack puts both
+ * facts on the *parent*, so one page of one message answers the whole question
+ * and the thread body never leaves the workspace.
+ */
+async function fetchThread(
+  channelId: string,
+  ts: string,
+  auth: { accessToken: string; signal: AbortSignal },
+): Promise<{ replyCount: number; lastReplyAt?: string } | undefined> {
+  const body = await optional(
+    slackFetch<RepliesResponse>("conversations.replies", auth, {
+      query: { channel: channelId, ts, limit: "1" },
+    }),
+  );
+  const parent = body?.messages?.[0];
+  const count = parent?.reply_count;
+  if (typeof count !== "number" || count <= 0) return undefined;
+  return { replyCount: count, lastReplyAt: tsToIso(str(parent?.latest_reply)) };
+}
+
 export const slackAdapter: EnrichedAdapter = {
   source: "slack",
 
@@ -167,10 +265,11 @@ export const slackAdapter: EnrichedAdapter = {
     if (ctx.accessToken === undefined) {
       throw AdapterError.needsReconnect("No access token for this Slack connection.");
     }
+    const auth = { accessToken: ctx.accessToken, signal: ctx.signal };
 
     const body = await slackFetch<SearchMessagesResponse>(
       "search.messages",
-      { accessToken: ctx.accessToken, signal: ctx.signal },
+      auth,
       {
         query: {
           query,
@@ -184,8 +283,28 @@ export const slackAdapter: EnrichedAdapter = {
     );
 
     const matches = body.messages?.matches ?? [];
+    if (matches.length === 0) return [];
 
-    return matches.flatMap((match): EnrichedResult[] => {
+    // Both enrichments run concurrently with each other, and each is a fan-out
+    // of its own — the whole batch sits inside the orchestrator's per-source
+    // deadline, so serialising them would be the thing that made Slack the slow
+    // source in a partial-results demo.
+    const [profiles, threads] = await Promise.all([
+      fetchProfiles(
+        [...new Set(matches.map((m) => str(m.user)).filter((id): id is string => id !== undefined))],
+        auth,
+      ),
+      Promise.all(
+        matches.map(async (m) => {
+          const channelId = str(m.channel?.id);
+          const ts = str(m.ts);
+          if (channelId === undefined || ts === undefined) return undefined;
+          return await fetchThread(channelId, ts, auth);
+        }),
+      ),
+    ]);
+
+    return matches.flatMap((match, index): EnrichedResult[] => {
       const ts = str(match.ts);
       // `search.messages` has been observed returning matches with no `ts` for
       // messages in channels the token lost access to mid-page. Without a `ts`
@@ -195,20 +314,42 @@ export const slackAdapter: EnrichedAdapter = {
 
       const channelName = str(match.channel?.name);
       const channelId = str(match.channel?.id);
-      const channel = channelName !== undefined ? `#${channelName}` : (channelId ?? "Slack");
+      /**
+       * Where it was posted, for a reader.
+       *
+       * Only ever a name. `search.messages` sometimes returns a match with no
+       * `channel.name`, and the id it does return — `C0BN94H19L2` — is not the
+       * answer to "where was this posted": it is an internal handle that means
+       * nothing to the person reading the row and cannot be looked up without a
+       * scope this grant does not hold. Absent beats meaningless, so the row
+       * simply omits the channel and still names the workspace it came from.
+       */
+      const channel = channelName === undefined ? undefined : `#${channelName}`;
+      const permalink = str(match.permalink);
+      const text = stripMrkdwn(str(match.text) ?? "");
+      const userId = str(match.user);
+      const profile = userId !== undefined ? profiles.get(userId) : undefined;
 
       return [
         {
           source: "slack",
           id: ts,
-          // Slack messages have no subject, so the channel *is* the title —
-          // it is what a reader scans by, and it is what makes a Slack row
-          // legible next to an email row.
-          title: channel,
-          snippet: stripMrkdwn(str(match.text) ?? ""),
-          author: str(match.username) ?? str(match.user),
+          // A Slack message has no subject, and the channel was already said on
+          // the line above, so the *message* is the headline — the same thing
+          // an email subject is: the bit you scan to decide whether to open it.
+          // Only a message with no text at all (a bare file share) falls back,
+          // so the row is never headed by an empty string.
+          title: text !== "" ? text : (channel ?? "Slack message"),
+          // Never left empty: the spec's normalization check wants `title` and
+          // `snippet` populated on every result whatever the source, and a bare
+          // file share has no text of its own to put here.
+          snippet: text !== "" ? text : (channel ?? "Slack message"),
+          // The workspace display name first, the handle only as a fallback:
+          // "Aryan Saini" is who a reader is looking for, "aryansaini1005" is
+          // what is left when the profile lookup could not run.
+          author: profile?.name ?? str(match.username) ?? userId,
           timestamp: tsToIso(ts),
-          url: str(match.permalink) ?? `https://slack.com/archives/${channelId ?? ""}/p${ts.replace(".", "")}`,
+          url: permalink ?? `https://slack.com/archives/${channelId ?? ""}/p${ts.replace(".", "")}`,
 
           /* Enriched extras. Stored as columns, stripped by the REST projection. */
           externalId: ts,
@@ -218,7 +359,13 @@ export const slackAdapter: EnrichedAdapter = {
           // Slack sends to a *channel*, not to a person, so the channel id is
           // where a reply goes.
           replyTo: channelId,
+          // Where it was posted. The workspace is not repeated here — the UI
+          // already names the connected account a result arrived at, and for
+          // Slack that account *is* the workspace.
           context: channel,
+          avatarUrl: profile?.avatarUrl,
+          replyCount: threads[index]?.replyCount,
+          lastReplyAt: threads[index]?.lastReplyAt,
         },
       ];
     });

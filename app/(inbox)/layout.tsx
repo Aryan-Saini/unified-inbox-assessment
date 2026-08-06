@@ -21,8 +21,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Unified Inbox — one search, every inbox",
-  description: "Search Gmail, Slack and the web from one place.",
+  title: "Unified Inbox: one search, every inbox",
+  description: "Search Gmail, Slack and The Web from one place.",
 };
 
 export const viewport: Viewport = {

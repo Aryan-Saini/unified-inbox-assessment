@@ -25,6 +25,63 @@ const STATUS: Record<
   revoked: { tone: "bad", label: "Revoked" },
 };
 
+/**
+ * How many scopes a grant holds, with the list itself on hover.
+ *
+ * A count answers the question the row is actually asking — "is this grant
+ * narrow, and does it still match what the app requests?" — in one short line,
+ * where five printed scopes wrapped the row and buried the account label they
+ * belong to. The names are one hover away for anyone auditing them.
+ *
+ * Google's `https://www.googleapis.com/auth/` prefix is dropped in the tooltip:
+ * it is the same on every Gmail scope, so it is noise in a vertical list.
+ */
+export function ScopeSummary({ scopes }: { scopes: string[] }) {
+  if (scopes.length === 0) return null;
+
+  const names = scopes.map((scope) =>
+    scope.replace(/^https:\/\/www\.googleapis\.com\/auth\//, ""),
+  );
+
+  return (
+    <span
+      title={names.join("\n")}
+      className="mt-0.5 inline-block cursor-help text-[11.5px] text-neutral-500 underline decoration-dotted decoration-neutral-700 underline-offset-2"
+    >
+      {scopes.length} {scopes.length === 1 ? "scope" : "scopes"}
+    </span>
+  );
+}
+
+/**
+ * What a row is called: the account first, then where it lives.
+ *
+ * Slack's label is the *workspace*, and a workspace has many members whose
+ * searches differ — so "aryan-test" alone never said whose Slack this is. The
+ * member leads and the workspace qualifies it: "George at aryan-test". Gmail is
+ * just its address, which is already both halves.
+ */
+export function AccountName({
+  account,
+}: {
+  account: { label: string; accountName?: string };
+}) {
+  if (account.accountName === undefined || account.accountName === "") {
+    return (
+      <span className="truncate text-[13px] font-medium text-neutral-100">
+        {account.label}
+      </span>
+    );
+  }
+
+  return (
+    <span className="min-w-0 truncate text-[13px] font-medium text-neutral-100">
+      {account.accountName}
+      <span className="font-normal text-neutral-400"> at {account.label}</span>
+    </span>
+  );
+}
+
 /** The row-level switch. Label-less; the row it sits in is the label. */
 export function Switch({
   checked,
@@ -181,13 +238,18 @@ export function ConnectorSwitchboard({
                       connectorOn ? "" : "opacity-50"
                     }`}
                   >
-                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                      <span className="truncate text-[13px] font-medium text-neutral-100">
-                        {account.label}
-                      </span>
-                      <StatusPill tone={STATUS[account.status].tone}>
-                        {STATUS[account.status].label}
-                      </StatusPill>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <AccountName account={account} />
+                        <StatusPill tone={STATUS[account.status].tone}>
+                          {STATUS[account.status].label}
+                        </StatusPill>
+                      </div>
+                      {/* What this grant can actually do. Narrow scopes are a
+                          claim worth being able to check rather than trust, and
+                          it is also how you tell a stale grant from a current
+                          one after the requested set changes. */}
+                      <ScopeSummary scopes={account.scopes} />
                     </div>
 
                     {account.status !== "active" ? (

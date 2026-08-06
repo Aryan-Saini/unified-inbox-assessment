@@ -323,11 +323,21 @@ export function useSearch(demo: DemoOptions): UseSearch {
       context: row.context,
       replyTo: row.replyTo,
       unread: row.unread,
+      avatarUrl: row.avatarUrl,
+      outgoing: row.outgoing,
+      recipient: row.recipient,
+      recipientName: row.recipientName,
+      replyCount: row.replyCount,
+      lastReplyAge:
+        row.lastReplyAt === undefined
+          ? undefined
+          : formatAge(Date.parse(row.lastReplyAt), now),
       // What a reply needs beyond the display fields: which grant to send
       // through, and where in the conversation to land.
       connectionId: row.connectionId,
       threadId: row.threadId,
       externalId: row.externalId,
+      resultId: row.id,
       score: row.score,
     }));
   }, [data, now]);

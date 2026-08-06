@@ -45,7 +45,12 @@ it("re-derives the digest and refuses a payload changed after confirmation", asy
 it("exposes delivery publicly only as sends.send(draftId)", () => {
   type SendArgs = FunctionArgs<typeof api.sends.send>;
   type RetryArgs = FunctionArgs<typeof api.sends.retry>;
-  expectTypeOf<keyof typeof api.sends>().toEqualTypeOf<"send" | "retry" | "watch" | "list">();
+  // The read-only views may grow; what this pins is that the only ways to *move*
+  // a message are `send(draftId)` and `retry(sendId)`, both of which name a row
+  // that already exists rather than taking a payload.
+  expectTypeOf<keyof typeof api.sends>().toEqualTypeOf<
+    "send" | "retry" | "watch" | "list" | "listDetailed"
+  >();
   expectTypeOf<SendArgs>().toEqualTypeOf<{ draftId: Id<"drafts"> }>();
   expectTypeOf<RetryArgs>().toEqualTypeOf<{ sendId: Id<"sends"> }>();
   expect(getFunctionName(api.sends.send)).toBe("sends:send");
