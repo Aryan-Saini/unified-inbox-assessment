@@ -30,12 +30,22 @@ const USERINFO_ENDPOINT = "https://openidconnect.googleapis.com/v1/userinfo";
  * `openid`/`email` identify the account; the two Gmail scopes are the narrowest
  * pair that can search a mailbox and send from it. Notably absent:
  * `gmail.modify`, `gmail.compose`, and anything that could delete mail.
+ *
+ * `contacts.readonly` buys exactly one thing: the sender's profile photo on a
+ * result row, read through People API and never written. It is the narrowest
+ * scope Google offers that returns a contact photo at all — the `contacts.other`
+ * variant excludes `photos` from its allowed read mask — and it is still a
+ * purpose-specific read grant rather than blanket access. Everything that uses
+ * it is written to degrade: `contactPhotos` in the Gmail adapter swallows its own
+ * failures, so a grant issued before this scope existed keeps searching and just
+ * falls back to a domain favicon or initials.
  */
 export const GOOGLE_SCOPES = [
   "openid",
   "email",
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/gmail.send",
+  "https://www.googleapis.com/auth/contacts.readonly",
 ];
 
 /** The result of a code exchange or a refresh, normalised. */

@@ -191,6 +191,8 @@ interface GrantDetails {
   externalAccountId: string;
   label: string;
   accountEmail?: string;
+  /** Who the grant belongs to inside the workspace — Slack's member name. */
+  accountName?: string;
   teamName?: string;
   scopes: string[];
   accessToken: string;
@@ -236,9 +238,17 @@ async function slackGrant(code: string): Promise<GrantDetails> {
     redirectUri: redirectUriFor("slack"),
   });
 
+  // The workspace names the connection; the member says whose view of it this
+  // is. Read after the exchange because only the user token can ask.
+  const accountName = await slack.fetchUserName({
+    accessToken: grant.accessToken,
+    userId: grant.slackUserId,
+  });
+
   return {
     externalAccountId: grant.externalAccountId,
     label: grant.teamName,
+    accountName,
     teamName: grant.teamName,
     scopes: grant.scopes,
     accessToken: grant.accessToken,
@@ -299,6 +309,7 @@ async function completeOAuth(
       externalAccountId: grant.externalAccountId,
       label: grant.label,
       accountEmail: grant.accountEmail,
+      accountName: grant.accountName,
       teamName: grant.teamName,
       scopes: grant.scopes,
       reconnectConnectionId,

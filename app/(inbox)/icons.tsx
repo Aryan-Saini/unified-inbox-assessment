@@ -69,6 +69,21 @@ export const RerunIcon = (p: Props) => (
   </Svg>
 );
 
+/** One arrow up, one arrow down, side by side. */
+export const UpDownIcon = (p: Props) => (
+  <Svg {...p}>
+    <path d="M9 19V5M5 9l4-4 4 4" />
+    <path d="M15 5v14M19 15l-4 4-4-4" />
+  </Svg>
+);
+
+/** Three rules, longest first — the conventional "this list is ordered" mark. */
+export const SortIcon = (p: Props) => (
+  <Svg {...p}>
+    <path d="M4 7h16M4 12h10M4 17h5" />
+  </Svg>
+);
+
 export const SettingsIcon = (p: Props) => (
   <Svg {...p}>
     <circle cx="12" cy="12" r="3" />
@@ -170,6 +185,13 @@ export const ClockIcon = (p: Props) => (
   <Svg {...p}>
     <circle cx="12" cy="12" r="8.5" />
     <path d="M12 7.5V12l3 2" />
+  </Svg>
+);
+
+export const ListIcon = (p: Props) => (
+  <Svg {...p}>
+    <path d="M9 6.5h11M9 12h11M9 17.5h11" />
+    <path d="M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01" />
   </Svg>
 );
 

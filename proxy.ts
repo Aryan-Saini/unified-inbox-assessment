@@ -15,6 +15,7 @@ import { SIGNED_OUT_PARAM } from "./app/authParams";
 //   /          -> wherever you belong, so a bookmark or a lost `returnTo` lands
 //   /sign-in   -> /auth, the route this page used to live at
 //   /dashboard -> /auth when signed out
+//   /outbox    -> /auth when signed out (same shell, same rule)
 //   /auth      -> /dashboard when signed in (the gate closes behind you)
 
 /** Same-origin redirect that keeps the query string — OAuth comes back with one. */
@@ -41,9 +42,13 @@ export default clerkMiddleware(async (auth, request) => {
     return redirectTo(request, signedIn ? "/dashboard" : "/auth");
   }
 
-  const onDashboard =
-    pathname === "/dashboard" || pathname.startsWith("/dashboard/");
-  if (!signedIn && onDashboard) {
+  // Every route the signed-in shell renders. `/outbox` is a second entry into
+  // the same app, so leaving it out here would have let a signed-out browser
+  // render the shell and only then be turned away by `AuthGate`.
+  const inApp = ["/dashboard", "/outbox"].some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  );
+  if (!signedIn && inApp) {
     return redirectTo(request, "/auth");
   }
 

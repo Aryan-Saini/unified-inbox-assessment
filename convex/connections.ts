@@ -106,6 +106,7 @@ export const list = query({
       externalAccountId: v.string(),
       label: v.string(),
       accountEmail: v.optional(v.string()),
+      accountName: v.optional(v.string()),
       teamName: v.optional(v.string()),
       status: connectionStatus,
       statusReason: v.optional(v.string()),
@@ -141,6 +142,7 @@ export const list = query({
         externalAccountId: c.externalAccountId,
         label: c.label,
         accountEmail: c.accountEmail,
+        accountName: c.accountName,
         teamName: c.teamName,
         status: c.status,
         statusReason: c.statusReason,
@@ -224,45 +226,62 @@ export const disconnect = mutation({
  * optional and read through their search rather than through the connection, so a
  * deleted row degrades them to "no connection recorded" rather than breaking them.
  */
+/**
+ * Retire a connection: delete it outright when nothing points at it, empty it
+ * and hide it when something does.
+ *
+ * Shared by `remove` (the user asked) and `supersede` (a newer grant replaced
+ * it), because the constraint is the same in both cases and only the reason
+ * differs. A hard delete would break every `drafts.connectionId` and
+ * `sends.connectionId` pointing here, and the outbox would lose the ability to
+ * explain what a past delivery went through.
+ */
+async function retire(
+  ctx: MutationCtx,
+  connection: Doc<"connections">,
+  reason: string,
+): Promise<{ deleted: boolean }> {
+  // `first()` rather than a count: the question is only whether *any* row
+  // points here, and stopping at one keeps this cheap for a heavy sender.
+  const [draft, send] = await Promise.all([
+    ctx.db
+      .query("drafts")
+      .withIndex("by_user", (q) => q.eq("userId", connection.userId))
+      .filter((q) => q.eq(q.field("connectionId"), connection._id))
+      .first(),
+    ctx.db
+      .query("sends")
+      .withIndex("by_user", (q) => q.eq("userId", connection.userId))
+      .filter((q) => q.eq(q.field("connectionId"), connection._id))
+      .first(),
+  ]);
+
+  if (draft === null && send === null) {
+    await ctx.db.delete("connections", connection._id);
+    return { deleted: true };
+  }
+
+  await ctx.db.patch("connections", connection._id, {
+    hiddenAt: Date.now(),
+    status: "revoked",
+    statusReason: reason,
+    // Same as `disconnect`: the tokens are the part that must not survive.
+    accessTokenCipher: "",
+    refreshTokenCipher: undefined,
+    tokenExpiresAt: undefined,
+    refreshLockedUntil: undefined,
+    enabled: false,
+    updatedAt: Date.now(),
+  });
+  return { deleted: false };
+}
+
 export const remove = mutation({
   args: { connectionId: v.id("connections") },
   returns: v.object({ deleted: v.boolean() }),
   handler: async (ctx, args) => {
     const connection = await requireOwnConnection(ctx, args.connectionId);
-
-    // `first()` rather than a count: the question is only whether *any* row
-    // points here, and stopping at one keeps this cheap for a heavy sender.
-    const [draft, send] = await Promise.all([
-      ctx.db
-        .query("drafts")
-        .withIndex("by_user", (q) => q.eq("userId", connection.userId))
-        .filter((q) => q.eq(q.field("connectionId"), args.connectionId))
-        .first(),
-      ctx.db
-        .query("sends")
-        .withIndex("by_user", (q) => q.eq("userId", connection.userId))
-        .filter((q) => q.eq(q.field("connectionId"), args.connectionId))
-        .first(),
-    ]);
-
-    if (draft === null && send === null) {
-      await ctx.db.delete("connections", args.connectionId);
-      return { deleted: true };
-    }
-
-    await ctx.db.patch("connections", args.connectionId, {
-      hiddenAt: Date.now(),
-      status: "revoked",
-      statusReason: "Removed by you.",
-      // Same as `disconnect`: the tokens are the part that must not survive.
-      accessTokenCipher: "",
-      refreshTokenCipher: undefined,
-      tokenExpiresAt: undefined,
-      refreshLockedUntil: undefined,
-      enabled: false,
-      updatedAt: Date.now(),
-    });
-    return { deleted: false };
+    return await retire(ctx, connection, "Removed by you.");
   },
 });
 
@@ -325,6 +344,72 @@ export const simulateRevoke = mutation({
  * so. That is a legible state a reconnect fixes, which is a better failure mode
  * than either a row holding an unbound ciphertext or a lost grant.
  */
+/**
+ * Slack's `externalAccountId` is `T…:U…` — the workspace *and* the user within
+ * it. Two different Slack users in one workspace are therefore two different
+ * identities, and the `(userId, provider, externalAccountId)` index correctly
+ * treats them as separate rows. That is right for identity and wrong for
+ * *searching*: both grants search the same workspace.
+ *
+ * This finds the live connections a new grant is about to supersede: same user,
+ * same provider, same workspace, different identity. Gmail has no workspace —
+ * its `externalAccountId` is the address itself, which is the identity — so this
+ * is empty there by construction, and connecting a second Gmail account never
+ * disturbs the first.
+ */
+/**
+ * Do two `externalAccountId`s name the same Slack workspace?
+ *
+ * True only for the `T…:U…` form, and only when the `T…` halves match. Gmail's
+ * identifier is a bare address with no workspace part, so this is false there by
+ * construction — two Gmail addresses are always two accounts.
+ */
+function sameWorkspaceAs(a: string, b: string): boolean {
+  const left = a.indexOf(":");
+  const right = b.indexOf(":");
+  if (left <= 0 || right <= 0) return false;
+  return a.slice(0, left) === b.slice(0, right);
+}
+
+async function sameWorkspace(
+  ctx: MutationCtx,
+  args: { userId: Id<"users">; provider: "gmail" | "slack"; externalAccountId: string },
+): Promise<Doc<"connections">[]> {
+  const separator = args.externalAccountId.indexOf(":");
+  if (separator <= 0) return [];
+  const workspace = args.externalAccountId.slice(0, separator + 1);
+
+  const rows = await ctx.db
+    .query("connections")
+    .withIndex("by_user", (q) => q.eq("userId", args.userId))
+    .collect();
+
+  return rows.filter(
+    (row) =>
+      row.provider === args.provider &&
+      row.hiddenAt === undefined &&
+      row.externalAccountId.startsWith(workspace) &&
+      row.externalAccountId !== args.externalAccountId,
+  );
+}
+
+/**
+ * How to name an account in a message a person reads.
+ *
+ * Gmail is its address. Slack is the member *and* the workspace, because
+ * "aryan-test" on both sides of a mismatch explains nothing when the two grants
+ * differ only by who signed in.
+ */
+function describeIdentity(row: {
+  label: string;
+  accountEmail?: string;
+  accountName?: string;
+}): string {
+  if (row.accountEmail !== undefined) return row.accountEmail;
+  if (row.accountName !== undefined) return `${row.accountName} at ${row.label}`;
+  return row.label;
+}
+
 export const upsertFromGrant = internalMutation({
   args: {
     userId: v.id("users"),
@@ -332,6 +417,7 @@ export const upsertFromGrant = internalMutation({
     externalAccountId: v.string(),
     label: v.string(),
     accountEmail: v.optional(v.string()),
+    accountName: v.optional(v.string()),
     teamName: v.optional(v.string()),
     scopes: v.array(v.string()),
     /** Set when this flow was started as a reconnect of a specific row. */
@@ -368,17 +454,60 @@ export const upsertFromGrant = internalMutation({
       if (target === null || target.userId !== args.userId) {
         return { ok: false as const, error: "unknown_connection" as const };
       }
-      // Signing in as a different account during a reconnect is refused rather
-      // than absorbed. Silently repointing the row would rewrite the identity
-      // that every existing draft and send was made against; silently creating a
-      // second row would leave the broken one broken with no explanation.
+
       if (target.externalAccountId !== args.externalAccountId) {
-        return {
-          ok: false as const,
-          error: "identity_mismatch" as const,
-          expected: target.accountEmail ?? target.label,
-          actual: args.accountEmail ?? args.label,
-        };
+        // Same workspace, different member: absorbed, not refused. A Slack
+        // `externalAccountId` is `T…:U…`, so re-authorising as a colleague — or
+        // as yourself under a second login — changes the identity while the
+        // thing being reconnected is unmistakably the same workspace. Refusing
+        // sent the user to "Add account", which is what produced two grants to
+        // one workspace fanning out twice.
+        //
+        // The row is repointed rather than replaced, so its `_id` survives and
+        // every draft and send hanging off it stays answerable.
+        if (sameWorkspaceAs(target.externalAccountId, args.externalAccountId)) {
+          // Unless the new identity is already connected: then that row is the
+          // newer grant, it wins, and the one being reconnected is retired.
+          // Repointing here would put two rows on one identity and break the
+          // uniqueness the account index depends on.
+          if (existing !== null && existing._id !== target._id) {
+            await retire(
+              ctx,
+              target,
+              `Replaced by a newer connection to ${args.teamName ?? args.label}.`,
+            );
+          } else {
+            await ctx.db.patch("connections", target._id, {
+              externalAccountId: args.externalAccountId,
+              accountEmail: args.accountEmail,
+              // The member changed, so the name on the row has to change with
+              // it — otherwise the row keeps claiming the colleague it used to
+              // be authorised as.
+              accountName: args.accountName,
+            });
+          }
+        } else {
+          // A genuinely different account — another workspace, another inbox.
+          // Repointing would rewrite the identity every existing draft and send
+          // was made against, so this stays a refusal with both names in it.
+          return {
+            ok: false as const,
+            error: "identity_mismatch" as const,
+            expected: describeIdentity(target),
+            actual: describeIdentity(args),
+          };
+        }
+
+        if (existing === null) {
+          await ctx.db.patch("connections", target._id, {
+            label: args.label,
+            accountName: args.accountName,
+            teamName: args.teamName,
+            scopes: args.scopes,
+            updatedAt: now,
+          });
+          return { ok: true as const, connectionId: target._id, created: false };
+        }
       }
     }
 
@@ -387,11 +516,30 @@ export const upsertFromGrant = internalMutation({
       await ctx.db.patch("connections", existing._id, {
         label: args.label,
         accountEmail: args.accountEmail,
+        accountName: args.accountName,
         teamName: args.teamName,
         scopes: args.scopes,
         updatedAt: now,
       });
       return { ok: true as const, connectionId: existing._id, created: false };
+    }
+
+    // A *new* identity in a workspace this user has already connected means the
+    // newer grant takes over: two grants to one Slack workspace are two sets of
+    // provider calls returning near-identical results, and the older one is
+    // whichever the user has just replaced by signing in again. Retiring it here
+    // rather than leaving it enabled is what makes reconnecting-as-someone-else
+    // self-healing instead of a silent double fan-out.
+    //
+    // Scoped to the workspace, not the provider: several Gmail inboxes, or
+    // several *different* Slack workspaces, are the multi-account case the whole
+    // product is for and must not be disturbed.
+    for (const previous of await sameWorkspace(ctx, args)) {
+      await retire(
+        ctx,
+        previous,
+        `Replaced by a newer connection to ${args.teamName ?? args.label}.`,
+      );
     }
 
     const connectionId = await ctx.db.insert("connections", {
@@ -400,6 +548,7 @@ export const upsertFromGrant = internalMutation({
       externalAccountId: args.externalAccountId,
       label: args.label,
       accountEmail: args.accountEmail,
+      accountName: args.accountName,
       teamName: args.teamName,
       status: "errored",
       statusReason: "Connecting — tokens have not been stored yet.",
@@ -468,6 +617,7 @@ const forUseReturns = v.union(
     provider: providerValidator,
     externalAccountId: v.string(),
     label: v.string(),
+    scopes: v.array(v.string()),
     status: connectionStatus,
     statusReason: v.optional(v.string()),
     enabled: v.boolean(),
@@ -496,6 +646,7 @@ export const forUse = internalQuery({
       provider: c.provider,
       externalAccountId: c.externalAccountId,
       label: c.label,
+      scopes: c.scopes,
       status: c.status,
       statusReason: c.statusReason,
       enabled: c.enabled,
@@ -515,6 +666,7 @@ type ConnectionForUse = {
   provider: Provider;
   externalAccountId: string;
   label: string;
+  scopes: string[];
   status: Doc<"connections">["status"];
   statusReason?: string;
   enabled: boolean;
@@ -630,6 +782,9 @@ export interface ResolvedToken {
   provider: Provider;
   externalAccountId: string;
   label: string;
+  /** What the user actually granted. An adapter reads this to skip a call it
+   *  knows the grant does not cover, instead of spending a request to be told. */
+  scopes: string[];
 }
 
 function isFresh(connection: ConnectionForUse): boolean {
@@ -685,6 +840,7 @@ export async function resolveToken(
     provider: connection.provider,
     externalAccountId: connection.externalAccountId,
     label: connection.label,
+    scopes: connection.scopes,
   });
 
   // Seeded fixtures carry no grant. Refusing here rather than at the provider is

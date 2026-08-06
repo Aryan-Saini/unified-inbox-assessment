@@ -2,8 +2,134 @@
 
 /** Shared primitives: the modal shell, chips and toggles. */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useKeyboardInset } from "../useKeyboardInset";
 import { CloseIcon } from "./icons";
+
+/**
+ * A truncated label that shows the whole thing on hover.
+ *
+ * Every long name in this UI is clamped to a width — an address may be 254
+ * characters and a workspace may be named without spaces — which leaves the
+ * ellipsis as the only account of what was cut. This gives it back, and only
+ * when there is something to give back: the tooltip is suppressed unless the
+ * text is actually overflowing its box, so a name that fits does not sprout a
+ * bubble for no reason.
+ *
+ * `title` was the cheap version and is deliberately not used: the OS tooltip
+ * waits about a second, cannot be styled to match, and — the reason it had to
+ * go — is drawn by the platform in a way that made it useless for a name you
+ * are trying to *read*, wrapping badly and vanishing on the slightest move.
+ *
+ * Rendered through a portal because these labels sit inside `overflow-hidden`
+ * lists and dialogs, which would clip a bubble positioned inside them.
+ */
+export function Truncated({
+  text,
+  className = "",
+  children,
+}: {
+  /** The full value, shown on hover. */
+  text: string;
+  className?: string;
+  /** Rendered in place of `text` when the visible form is richer than the
+   *  string — "George at aryan-test", an address hung off a name. */
+  children?: ReactNode;
+}) {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  const bubble = useRef<HTMLSpanElement | null>(null);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const [at, setAt] = useState<{ left: number; top: number } | null>(null);
+
+  const show = () => {
+    const el = ref.current;
+    if (el === null) return;
+    // Nothing was cut, so there is nothing to reveal.
+    if (el.scrollWidth <= el.clientWidth + 1) return;
+    setAnchor(el.getBoundingClientRect());
+  };
+
+  const hide = () => {
+    setAnchor(null);
+    setAt(null);
+  };
+
+  /**
+   * Above by preference, below when there is no room above.
+   *
+   * Preference rather than rule, because these labels are the *first* line of
+   * a card and several of them sit within a bubble's height of the top of the
+   * viewport — a tooltip that only ever renders upward is drawn off-screen
+   * there, which is the same as not having one. The height is measured rather
+   * than guessed: the text wraps, so a 254-character address is five lines and
+   * a workspace name is two.
+   *
+   * `useLayoutEffect` so the measure-then-place happens before paint; the first
+   * pass renders it hidden off-screen, and nothing flickers.
+   */
+  useLayoutEffect(() => {
+    const el = bubble.current;
+    if (anchor === null || el === null) return;
+
+    const gap = 8;
+    const { offsetWidth: w, offsetHeight: h } = el;
+    const above = anchor.top - gap - h;
+
+    setAt({
+      left: Math.max(8, Math.min(anchor.left, window.innerWidth - w - 8)),
+      top:
+        above >= 8
+          ? above
+          : Math.min(anchor.bottom + gap, window.innerHeight - h - 8),
+    });
+  }, [anchor]);
+
+  return (
+    <>
+      <span
+        ref={ref}
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onFocus={show}
+        onBlur={hide}
+        tabIndex={0}
+        className={`truncate ${className}`}
+      >
+        {children ?? text}
+      </span>
+
+      {anchor === null || typeof document === "undefined"
+        ? null
+        : createPortal(
+            <span
+              ref={bubble}
+              role="tooltip"
+              style={
+                at === null
+                  ? // First pass: laid out at full width, off-screen, so it can
+                    // be measured before it is placed.
+                    { left: -9999, top: 0, visibility: "hidden" }
+                  : { left: at.left, top: at.top }
+              }
+              className="pointer-events-none fixed z-[80] max-w-[27rem] rounded-lg border border-line-strong bg-ink-900 px-2.5 py-1.5 text-[12px] leading-relaxed break-words text-neutral-100 shadow-[0_12px_40px_rgba(0,0,0,0.7)]"
+            >
+              {text}
+            </span>,
+            document.body,
+          )}
+    </>
+  );
+}
+
+/**
+ * Every open dialog, innermost last.
+ *
+ * Escape belongs to the top one alone. A settings dialog opened *over* a draft
+ * is the case that makes this load-bearing: one keypress closing both would
+ * throw the draft away as a side effect of leaving settings.
+ */
+const OPEN_MODALS: object[] = [];
 
 export function Modal({
   open,
@@ -11,6 +137,7 @@ export function Modal({
   title,
   subtitle,
   badge,
+  heading,
   width = "max-w-3xl",
   footer,
   mobileFullScreen = false,
@@ -21,6 +148,10 @@ export function Modal({
   title: string;
   subtitle?: string;
   badge?: React.ReactNode;
+  /** Replaces the title/subtitle block, for a dialog whose header is better
+   *  stated by the thing it is about than by a sentence describing it. `title` is
+   *  still required and still names the dialog to a screen reader. */
+  heading?: React.ReactNode;
   width?: string;
   footer?: React.ReactNode;
   /** Take the whole viewport on a phone instead of sitting as a bottom sheet. */
@@ -29,10 +160,28 @@ export function Modal({
 }) {
   const panel = useRef<HTMLDivElement>(null);
 
+  // `fixed inset-0` is the *layout* viewport, which iOS does not shrink for the
+  // keyboard — so a bottom sheet keeps its footer at the bottom of the window,
+  // under the keys. The dialogs that take text are the ones whose footer holds
+  // Send and Confirm, which is the worst button in the app to put out of reach.
+  // Padding the overlay moves the sheet's floor up to the top of the keyboard.
+  const keyboard = useKeyboardInset();
+
+  // Read through a ref so the effect below depends on `open` alone: callers pass
+  // an inline arrow, and re-running on every render would keep re-stacking this
+  // dialog over whatever was opened on top of it.
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     if (!open) return;
+    OPEN_MODALS.push(panel);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (OPEN_MODALS[OPEN_MODALS.length - 1] !== panel) return;
+      close.current();
     };
     document.addEventListener("keydown", onKey);
     const previous = document.body.style.overflow;
@@ -40,9 +189,11 @@ export function Modal({
     panel.current?.focus();
     return () => {
       document.removeEventListener("keydown", onKey);
+      const at = OPEN_MODALS.indexOf(panel);
+      if (at !== -1) OPEN_MODALS.splice(at, 1);
       document.body.style.overflow = previous;
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -51,6 +202,7 @@ export function Modal({
       className={`fixed inset-0 z-50 flex justify-center sm:items-center ${
         mobileFullScreen ? "items-stretch" : "items-end"
       }`}
+      style={keyboard === 0 ? undefined : { paddingBottom: keyboard }}
     >
       <button
         aria-label="Close dialog"
@@ -65,23 +217,32 @@ export function Modal({
         tabIndex={-1}
         className={`pop-in relative flex w-full ${width} flex-col overflow-hidden border-line bg-ink-900 outline-none sm:max-h-[92vh] sm:rounded-2xl sm:border sm:shadow-[0_24px_80px_rgba(0,0,0,0.7)] ${
           mobileFullScreen
-            ? // `sm:h-auto` is load-bearing: without it the phone's full-height
-              // panel persists on desktop and the box towers over its content.
-              "h-dvh rounded-none sm:h-auto"
-            : "max-h-[92vh] rounded-t-2xl border shadow-[0_-8px_60px_rgba(0,0,0,0.6)]"
+            ? // `h-full` rather than `h-dvh`: it resolves against the overlay's
+              // content box, which is the window *minus* the keyboard, where
+              // `dvh` is the window regardless. `sm:h-auto` is load-bearing too —
+              // without it the phone's full-height panel persists on desktop and
+              // the box towers over its content.
+              "h-full rounded-none sm:h-auto"
+            : // Whichever is shorter: the sheet's usual 92% peek, or all of the
+              // room the keyboard has left.
+              "max-h-[min(92vh,100%)] rounded-t-2xl border shadow-[0_-8px_60px_rgba(0,0,0,0.6)]"
         }`}
       >
         <header className="flex items-start gap-3 border-b border-line px-5 py-4">
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-[15px] font-semibold text-white">{title}</h2>
-              {badge}
-            </div>
-            {subtitle ? (
-              <p className="mt-1 text-[13px] leading-relaxed text-neutral-400">
-                {subtitle}
-              </p>
-            ) : null}
+            {heading ?? (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-[15px] font-semibold text-white">{title}</h2>
+                  {badge}
+                </div>
+                {subtitle ? (
+                  <p className="mt-1 text-[13px] leading-relaxed text-neutral-400">
+                    {subtitle}
+                  </p>
+                ) : null}
+              </>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -212,8 +373,11 @@ export function Button({
     outline:
       "border border-line-strong text-neutral-200 hover:border-neutral-500 hover:text-white",
     ghost: "text-neutral-300 hover:bg-white/5 hover:text-white",
+    // Filled, not just outlined: destructive actions should be recognisable as
+    // destructive before the label is read, and an outline alone put it in the
+    // same visual class as the neutral `outline` variant beside it.
     danger:
-      "border border-rose-500/40 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200",
+      "border border-rose-500/40 bg-rose-500/10 text-rose-300 hover:border-rose-500/60 hover:bg-rose-500/20 hover:text-rose-200",
   }[variant];
 
   return (

@@ -7,8 +7,10 @@
  * runtime alongside every other adapter.
  *
  * Scopes used (deliberately narrow, no `https://mail.google.com/`):
- *   gmail.readonly — search and read message metadata
- *   gmail.send     — send, and nothing else. Cannot delete or modify mail.
+ *   gmail.readonly    — search and read message metadata
+ *   gmail.send        — send, and nothing else. Cannot delete or modify mail.
+ *   contacts.readonly — sender profile photos, read once per search. Optional in
+ *                       the strict sense: a grant without it still searches.
  */
 
 import { toBase64Url } from "../core/crypto";
@@ -19,7 +21,14 @@ import type { MessageSender, SendContext, SendPayload, SendReceipt } from "../co
 import { AdapterError, type AdapterContext } from "../core/types";
 
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
+const PEOPLE_API = "https://people.googleapis.com/v1/people/me/connections";
+const CONTACTS_SCOPE = "https://www.googleapis.com/auth/contacts.readonly";
 const REQUEST_TIMEOUT_MS = 15_000;
+
+/** How many contacts are read for photos. One page, no pagination: this is a
+ *  decoration on a search, and a second round trip for the 501st contact is not
+ *  worth holding the fan-out for. */
+const CONTACTS_PAGE_SIZE = 500;
 
 interface MessageRef {
   id: string;
@@ -120,11 +129,93 @@ function displayName(from: string | undefined): string | undefined {
   return name !== undefined && name !== "" ? name : from.trim();
 }
 
+/**
+ * The Cc line, reduced to bare addresses — `"Ada <ada@x.com>, bob@y.com"` ->
+ * `"cc ada@x.com, bob@y.com"`. Display names are dropped because this sits on
+ * one truncating line next to the sender's address, where the address is the
+ * part that identifies who else saw the message. To is left out: on a message
+ * found in the user's own mailbox it is the user, on every row.
+ */
+function ccLine(cc: string | undefined): string | undefined {
+  if (cc === undefined) return undefined;
+  const addresses = cc
+    .split(",")
+    .map((part) => emailAddress(part))
+    .filter((part): part is string => part !== undefined && part !== "");
+  return addresses.length > 0 ? `cc ${addresses.join(", ")}` : undefined;
+}
+
 /** `"Ada Lovelace <ada@example.com>"` -> `"ada@example.com"`. */
 export function emailAddress(from: string | undefined): string | undefined {
   if (from === undefined) return undefined;
   const match = /<([^>]+)>/.exec(from);
   return (match?.[1] ?? from).trim();
+}
+
+interface ConnectionsResponse {
+  connections?: Array<{
+    emailAddresses?: Array<{ value?: string }>;
+    photos?: Array<{ url?: string; default?: boolean }>;
+  }>;
+}
+
+/**
+ * Sender photos, keyed by lowercased address.
+ *
+ * Gmail's search returns a `From` header and nothing else — no avatar anywhere in
+ * the message resource — so the face has to come from People API. One request per
+ * search covers every row: reading the contact list once and matching locally is
+ * cheaper than a per-sender lookup, and it cannot fan out into N extra calls on a
+ * page of results.
+ *
+ * **Never throws.** A missing `contacts.readonly` (a grant issued before the scope
+ * was added), a rate limit, a timeout — all of them mean "no photos this time",
+ * not "the search failed". The real 401 on a dead grant is still raised by the
+ * message calls, which is where it belongs.
+ *
+ * `photo.default` is Google's generic silhouette. It is skipped rather than shown,
+ * because the UI's own initials fallback says more than a grey outline does.
+ */
+async function contactPhotos(ctx: {
+  accessToken: string;
+  signal: AbortSignal;
+  scopes?: string[];
+}): Promise<Map<string, string>> {
+  const photos = new Map<string, string>();
+
+  // A grant issued before this scope existed would 403 on every single search.
+  // Reading what it actually holds turns that into no request at all. An empty
+  // list means "not recorded", so the call is still attempted.
+  if (
+    ctx.scopes !== undefined &&
+    ctx.scopes.length > 0 &&
+    !ctx.scopes.includes(CONTACTS_SCOPE)
+  ) {
+    return photos;
+  }
+
+  try {
+    const page = await googleFetch<ConnectionsResponse>(
+      `${PEOPLE_API}?personFields=emailAddresses,photos&pageSize=${CONTACTS_PAGE_SIZE}`,
+      ctx,
+    );
+
+    for (const person of page.connections ?? []) {
+      const url = person.photos?.find((p) => p.default !== true)?.url;
+      if (url === undefined) continue;
+      for (const address of person.emailAddresses ?? []) {
+        if (address.value === undefined) continue;
+        // First photo wins: the contact list is returned newest-first, and one
+        // address on two contact cards is a duplicate, not a choice.
+        const key = address.value.trim().toLowerCase();
+        if (!photos.has(key)) photos.set(key, url);
+      }
+    }
+  } catch {
+    return new Map();
+  }
+
+  return photos;
 }
 
 export const gmailAdapter: EnrichedAdapter = {
@@ -149,20 +240,37 @@ export const gmailAdapter: EnrichedAdapter = {
     // Gmail's list endpoint returns ids only, so each result costs a second
     // call. Fetched concurrently — the fan-out deadline covers the whole batch,
     // and `ctx.limit` keeps the batch small enough not to trip a rate limit.
-    const messages = await Promise.all(
-      refs.map((ref) =>
-        googleFetch<MessageResponse>(
-          `${API}/messages/${ref.id}?format=metadata` +
-            "&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date" +
-            "&metadataHeaders=Message-Id",
-          auth,
+    // The photo lookup rides alongside the metadata batch rather than after it:
+    // it is independent of every message, and it must not add a serial round trip
+    // to a source that is racing the other adapters.
+    const [messages, photos] = await Promise.all([
+      Promise.all(
+        refs.map((ref) =>
+          googleFetch<MessageResponse>(
+            `${API}/messages/${ref.id}?format=metadata` +
+              "&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date" +
+              "&metadataHeaders=Message-Id&metadataHeaders=Cc&metadataHeaders=To",
+            auth,
+          ),
         ),
       ),
-    );
+      contactPhotos({ ...auth, scopes: ctx.scopes }),
+    ]);
 
     return messages.map((message) => {
       const from = header(message, "From");
       const internalDate = message.internalDate;
+      const address = emailAddress(from);
+
+      // A search covers the whole mailbox, so a hit can be one of your own sent
+      // messages. It has to be told apart: the interesting party is the recipient,
+      // and a reply belongs to them rather than to the alias it went out as.
+      const outgoing = message.labelIds?.includes("SENT") ?? false;
+      const to = outgoing ? header(message, "To") : undefined;
+      const recipient = emailAddress(to);
+      // Whose face to show. Outgoing, that is the recipient — you already know
+      // what you look like.
+      const facing = (outgoing ? recipient : address)?.toLowerCase();
 
       return {
         source: "gmail",
@@ -185,7 +293,12 @@ export const gmailAdapter: EnrichedAdapter = {
            compose path having to call Gmail again. */
         externalId: message.id,
         threadId: message.threadId,
-        replyTo: emailAddress(from),
+        replyTo: address,
+        context: ccLine(header(message, "Cc")),
+        avatarUrl: facing === undefined ? undefined : photos.get(facing),
+        outgoing: outgoing ? true : undefined,
+        recipient,
+        recipientName: displayName(to),
         unread: message.labelIds?.includes("UNREAD") ?? false,
       } satisfies EnrichedResult;
     });

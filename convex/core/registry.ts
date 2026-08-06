@@ -38,6 +38,17 @@ export interface ResultExtras {
   /** Context line for the row, e.g. `#deals`. */
   context: string;
   unread: boolean;
+  /** Sender's provider avatar, when the provider exposes one. */
+  avatarUrl: string;
+  /** True when the user sent this rather than received it. */
+  outgoing: boolean;
+  /** Who it went to, when `outgoing`. */
+  recipient: string;
+  recipientName: string;
+  /** Replies in this message's thread, when it has one. */
+  replyCount: number;
+  /** When the most recent reply landed. ISO 8601, like `timestamp`. */
+  lastReplyAt: string;
 }
 
 export type EnrichedResult = Result & Partial<ResultExtras>;
@@ -60,6 +71,23 @@ export const ADAPTERS: Record<Source, EnrichedAdapter> = {
   slack: slackAdapter,
   web: webAdapter,
 };
+
+/**
+ * Every searchable source, derived from the registry rather than written out
+ * again.
+ *
+ * This exists because the alternative was three hand-maintained
+ * `["gmail", "slack", "web"]` arrays — the fan-out default, the REST
+ * `sources` allow-list, and the API's default — and none of them was
+ * exhaustiveness-checked. A `Record<Source, …>` breaks the build when a source
+ * is added; a `Source[]` literal does not, so forgetting one meant a registered
+ * adapter that silently never ran. Deriving the list makes that class of bug
+ * unrepresentable: if it is in `ADAPTERS`, it is searchable.
+ *
+ * Order is `ADAPTERS` insertion order, and is what `searches.ts` sorts the
+ * source strip by.
+ */
+export const ALL_SOURCES = Object.keys(ADAPTERS) as Source[];
 
 /** Sources you can send *through*. Keyed by `channel`, not `Source`, so `web`
  *  is absent by type rather than by a runtime check. */

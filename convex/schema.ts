@@ -70,6 +70,13 @@ export default defineSchema({
     /** Human label for the UI: the email address or workspace name. */
     label: v.string(),
     accountEmail: v.optional(v.string()),
+    /**
+     * Who the grant belongs to *within* the workspace — the Slack member name.
+     * `label` is the workspace, and one workspace can be connected as any of its
+     * members, so without this the row cannot say whose Slack it is searching.
+     * Absent for Gmail, where `accountEmail` already answers that.
+     */
+    accountName: v.optional(v.string()),
     teamName: v.optional(v.string()),
 
     status: connectionStatus,
@@ -241,9 +248,26 @@ export default defineSchema({
        strips them so the public `Result` stays exactly the spec's 7 fields. */
     /** Where a reply would go — sender address, or Slack channel id. */
     replyTo: v.optional(v.string()),
-    /** Thread/channel context line, e.g. "#deals · 12 replies". */
+    /** Thread/channel context line, e.g. "#deals". */
     context: v.optional(v.string()),
     unread: v.optional(v.boolean()),
+    /** Sender's provider avatar. Slack only — Gmail exposes none to a search. */
+    avatarUrl: v.optional(v.string()),
+    /**
+     * True when the *user* sent this, not received it. Gmail search covers the
+     * whole mailbox, Sent included, so a hit can be one of your own messages —
+     * and one of those describes itself the other way round: the name to show is
+     * the recipient's, and a reply continues to them rather than to the `From`.
+     */
+    outgoing: v.optional(v.boolean()),
+    /** Who it went to, when `outgoing`. Address, and display name if the header
+     *  carried one. */
+    recipient: v.optional(v.string()),
+    recipientName: v.optional(v.string()),
+    /** Replies in this message's thread. Slack only. */
+    replyCount: v.optional(v.number()),
+    /** When the newest reply landed, ISO 8601. Slack only. */
+    lastReplyAt: v.optional(v.string()),
   }).index("by_search", ["searchId"]),
 
   /**

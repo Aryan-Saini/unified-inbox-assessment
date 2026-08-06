@@ -21,8 +21,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Unified Inbox — one search, every inbox",
-  description: "Search Gmail, Slack and the web from one place.",
+  title: "Unified Inbox: one search, every inbox",
+  description: "Search Gmail, Slack and The Web from one place.",
 };
 
 export const viewport: Viewport = {
@@ -37,11 +37,18 @@ export default function InboxLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
+    // See the note in `app/(auth)/layout.tsx` — same two suppressions, same
+    // reason: these attributes are constants, so the only mismatch they can
+    // absorb is one the browser introduced.
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="h-full overflow-hidden bg-ink-950 text-white">
+      <body
+        suppressHydrationWarning
+        className="h-full overflow-hidden bg-ink-950 text-white"
+      >
         {/* Clerk v7 places ClerkProvider inside <body>, not around <html>. */}
         <ClerkProvider>
           <ConvexClientProvider>

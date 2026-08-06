@@ -5,7 +5,8 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAuthedQuery } from "@/app/useAuthedQuery";
 import { BRAND_LOGO } from "./brand-icons";
-import { formatAge } from "./format";
+import { AccountName, ScopeSummary } from "./ConnectorSwitchboard";
+import { accountTitle, formatAge } from "./format";
 import type { Connection, ConnectionStatus } from "./types";
 import { Button, ConfirmDialog, Modal, StatusPill } from "./ui";
 import { KeyIcon, PlugIcon, SlidersIcon, TrashIcon } from "./icons";
@@ -51,33 +52,33 @@ function ConnectionRow({
   const healthy = connection.status === "active";
 
   return (
-    <li className="flex items-center gap-3 px-3 py-2.5">
-      <Logo className="h-4 w-4 shrink-0" />
+    <li className="flex items-start gap-3 px-3 py-2.5">
+      <Logo className="mt-0.5 h-4 w-4 shrink-0" />
 
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-        <span className="truncate text-[13px] font-medium text-neutral-100">
-          {connection.label}
-        </span>
-        <StatusPill tone={TONE[connection.status]}>
-          {connection.status}
-        </StatusPill>
+      <div className="min-w-0 flex-1">
+        {/* No wrapping. The name is the only thing on this row that can be
+            arbitrarily long, so it is the only thing that gives way — a wrapped
+            row put the status pill on a line of its own and made every long
+            account two rows tall. */}
+        <div className="flex min-w-0 items-center gap-2">
+          <AccountName account={connection} />
+          <StatusPill tone={TONE[connection.status]}>
+            {connection.status}
+          </StatusPill>
+        </div>
+        {/* The grant's actual scopes. "Scoped narrowly rather than blanket
+            access" is only a claim until it is shown, and this is also how a
+            grant predating a scope change is spotted: it is missing one. */}
+        <ScopeSummary scopes={connection.scopes} />
       </div>
 
-      {/* Remove sits beside the state-specific action rather than replacing it,
-          so a revoked account is not a dead end: before this, `healthy` false
-          meant Reconnect was the only button on the row and nothing could ever
-          be taken off the list. The confirmation is a dialog, not more buttons
-          crammed in here — there is no room for a question on this row. */}
-      <Button
-        variant="ghost"
-        onClick={onRemove}
-        title={`Remove ${connection.label}`}
-        aria-label={`Remove ${connection.label}`}
-        className="!px-2 !py-1.5 !text-[12px] !text-neutral-500 hover:!text-rose-300"
-      >
-        <TrashIcon className="h-3.5 w-3.5" />
-      </Button>
+      {/* One action, matched to the state the row is actually in.
+          Live: give up the grant. Not live: get it back.
 
+          Remove appears only once the grant is gone. Offering it beside
+          Disconnect made the destructive option permanently available next to
+          the reversible one, and the two are a sequence, not a choice: give the
+          grant up first, then decide whether the account should stay listed. */}
       {healthy ? (
         <Button
           variant="ghost"
@@ -87,24 +88,36 @@ function ConnectionRow({
           Disconnect
         </Button>
       ) : (
-        <Button
-          variant="outline"
-          onClick={onReconnect}
-          disabled={reconnecting}
-          className="!px-2.5 !py-1.5 !text-[12px]"
-        >
-          {reconnecting ? (
-            <>
-              <span className="h-3 w-3 animate-spin rounded-full border-2 border-neutral-600 border-t-neutral-200" />
-              Reconnecting…
-            </>
-          ) : (
-            <>
-              <PlugIcon className="h-3.5 w-3.5" />
-              Reconnect
-            </>
-          )}
-        </Button>
+        <>
+          <Button
+            variant="outline"
+            onClick={onReconnect}
+            disabled={reconnecting}
+            className="!px-2.5 !py-1.5 !text-[12px]"
+          >
+            {reconnecting ? (
+              <>
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-neutral-600 border-t-neutral-200" />
+                Reconnecting…
+              </>
+            ) : (
+              <>
+                <PlugIcon className="h-3.5 w-3.5" />
+                Reconnect
+              </>
+            )}
+          </Button>
+
+          <Button
+            variant="danger"
+            onClick={onRemove}
+            title={`Remove ${connection.label}`}
+            aria-label={`Remove ${connection.label}`}
+            className="!px-2 !py-1.5 !text-[12px]"
+          >
+            <TrashIcon className="h-3.5 w-3.5" />
+          </Button>
+        </>
       )}
     </li>
   );
@@ -256,7 +269,7 @@ export function SettingsDialog({
                 {revealedKey ? (
                   <div className="fade-in rounded-xl border border-indigo-500/30 bg-indigo-500/[0.07] p-3.5">
                     <p className="text-[12px] font-medium text-indigo-200">
-                      Copy this now — it will not be shown again.
+                      Copy this now. It will not be shown again.
                     </p>
                     <code className="mt-2 block overflow-x-auto rounded-lg border border-line bg-ink-950 px-3 py-2 font-mono text-[12px] text-white">
                       {revealedKey}
@@ -407,16 +420,16 @@ export function SettingsDialog({
         onConfirm={() => {
           if (pendingRemoval !== null) onRemove(pendingRemoval.id);
         }}
-        title={`Remove ${pendingRemoval?.label ?? "account"}?`}
+        title={`Remove ${accountTitle(pendingRemoval ?? undefined)}?`}
         confirmLabel="Remove account"
       >
         <p>
           This deletes the stored grant for{" "}
           <span className="text-neutral-200">
-            {pendingRemoval?.label ?? "this account"}
+            {accountTitle(pendingRemoval ?? undefined, "this account")}
           </span>{" "}
           and takes it off this list. Nothing is revoked at{" "}
-          {pendingRemoval?.provider === "gmail" ? "Google" : "Slack"} — you can
+          {pendingRemoval?.provider === "gmail" ? "Google" : "Slack"}, so you can
           connect it again at any time.
         </p>
         <p className="mt-2.5">

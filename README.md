@@ -1,6 +1,6 @@
 # Unified Inbox
 
-Search Gmail, Slack and the web from one place, and send replies only after an
+Search Gmail, Slack and The Web from one place, and send replies only after an
 explicit confirmation step.
 
 The interesting part is not the search. It is that **the same message cannot be
@@ -19,11 +19,15 @@ them lives.
 
 | Route        | What it is                                                        |
 | ------------ | ----------------------------------------------------------------- |
-| `/dashboard` | The unified inbox: search, compose, connections, outbox. Signed-in only |
+| `/dashboard` | The unified inbox: search, compose, connections. Signed-in only    |
+| `/outbox`    | Send history: each reply under the message it answered. Signed-in only |
 | `/auth`      | Sign in / sign up, one email-code flow. Signed-out only           |
-| `/`          | Redirects to whichever of the two you belong on                   |
+| `/`          | Redirects to whichever of these you belong on                     |
 
-Each lives in its own route group with its own root layout
+`/dashboard` and `/outbox` render one shell (`InboxApp`) with the pane switched,
+so the sidebar, the dialogs and the toast deck exist once and cannot drift.
+
+Each route group has its own root layout
 (`app/(inbox)/layout.tsx`, `app/(auth)/layout.tsx`). The gate is two layers:
 `proxy.ts` redirects on the Clerk session before anything renders, and
 `app/AuthGate.tsx` / `app/GuestGate.tsx` hold the page on a loading splash
@@ -224,11 +228,54 @@ itself was lost to a deploy. Neither is load-bearing; if they were, the feature'
 latency would be the cron's interval.
 
 Adapters may attach enrichment (`externalId`, `threadId`, `replyTo`, `context`,
-`unread`) and it is stored as real columns for the UI — then **stripped by the
-REST projection**, so the public `Result` stays exactly the specification's seven
-fields. The validator in `convex/api/views.ts` *is* that contract: Convex checks
-the returned object against it, so an eighth column cannot leak into the API
-without that file changing and a test failing.
+`unread`, `avatarUrl`, `replyCount`, `lastReplyAt`) and it is stored as real columns for the UI
+— then **stripped by the REST projection**, so the public `Result` stays exactly
+the specification's seven fields. The validator in `convex/api/views.ts` *is*
+that contract: Convex checks the returned object against it, so an eighth column
+cannot leak into the API without that file changing and a test failing.
+
+### Adding a source
+
+The honest version, because "writing one adapter, nothing else" is the claim
+this architecture exists to earn and it is worth stating precisely.
+
+**Nothing in the merge layer changes.** `orchestrator.ts`, ranking, the REST
+API, history and the send gate reach providers only through `ADAPTERS[source]`
+and never name one. A new adapter inherits concurrent fan-out, partial results,
+retry with backoff, error classification, the reconnect path and history for
+free — that is the whole point of the boundary.
+
+What you write, and what you widen:
+
+| File | Why |
+|---|---|
+| `convex/adapters/<name>.ts` | The adapter. The actual work. |
+| `convex/core/registry.ts` | One line in `ADAPTERS`. |
+| `convex/core/types.ts` | The `Source` union. |
+| `convex/schema.ts` | `v.literal("<name>")` in `source`. |
+| `convex/core/rank.ts` | A weight in `SOURCE_WEIGHT`. |
+| `app/(inbox)/types.ts` | The UI's `Source`, which is a deliberate copy. |
+| `app/(inbox)/mock-data.ts` | A display name. |
+| `app/(inbox)/brand-icons.tsx` | A logo. |
+
+So: **one adapter file plus one registry line, and a union widened in six
+places.** Every one of those six is an exhaustive `Record<Source, …>` or a
+union, so `tsc` fails until each is filled in — the compiler hands you the list
+rather than leaving you to grep for it. The last two are not plumbing at all: a
+display name and an icon are new information nothing can derive for you.
+
+The fan-out list itself is **derived**, not written: `ALL_SOURCES` in
+`registry.ts` is `Object.keys(ADAPTERS)`, and the search default, the REST
+`sources` allow-list and the API default all read it. That was three
+hand-maintained `["gmail", "slack", "web"]` literals, which was the one place a
+missing edit failed *silently* — a registered adapter that never ran, with a
+green build. `convex/core/registry.test.ts` now pins the registry, the schema
+and `requiresGrant` to each other.
+
+The remaining honest caveat: a source needing OAuth also touches `schema.ts`'s
+`provider` union, `oauth.ts` and the callback route in `http.ts`. That is not
+adapter plumbing — it is a second grant type, and the brief's own `Draft.channel`
+is likewise a closed union.
 
 ### The send gate
 
@@ -379,8 +426,36 @@ pnpm dev                       # in a second terminal
 
 `npx convex dev` must stay running in development — it pushes `convex/` on save.
 
+In a git worktree, `.env.local` is gitignored and so does not come across with
+the branch. `./scripts/link-env-local.sh` copies the main checkout's copy in;
+`t3.json` runs it automatically on worktree create.
+
 Everything in `.env.local` is read by **Next.js**. Everything the backend needs is
 set on the **Convex deployment**, which is a separate environment.
+
+### Opening it on a phone
+
+```bash
+pnpm dev:lan                   # instead of pnpm dev
+```
+
+`pnpm dev` over the LAN — `http://192.168.x.x:3000` — cannot sign anyone in. That
+origin is not a *secure context*, so the browser withholds `crypto.subtle` and
+`crypto.randomUUID`, and clerk-js stops before its first Frontend API call without
+throwing. The only symptom is "Checking your session…" forever; `localhost` is
+exempt, which is why it only shows up on a second device. (The gates now give up
+after six seconds and say so, rather than spinning.)
+
+`dev:lan` resolves this machine's LAN address, generates one mkcert certificate
+covering it *and* `localhost`, and serves HTTPS on every interface — so
+`https://localhost:3000` still works for desktop while the phone gets a secure
+origin. It prints the address to open; that first visit warns about the
+certificate, and accepting it is enough. `allowedDevOrigins` in
+[`next.config.ts`](next.config.ts) is detected the same way, without which the
+phone's `/_next/*` requests come back 403.
+
+The t3 **Dev** script runs `dev:lan`. Plain `pnpm dev` is unchanged, for
+Codespaces and for working without a certificate.
 
 ### `.env.local` (Next.js)
 
@@ -555,17 +630,33 @@ OAuth work without a tunnel.
 ### Google (Gmail)
 
 1. [console.cloud.google.com](https://console.cloud.google.com) → new project.
-2. **APIs & Services → Library** → enable the **Gmail API**.
+2. **APIs & Services → Library** → enable the **Gmail API** and the **People
+   API** (the latter is only for sender avatars — see the scope note below).
 3. **OAuth consent screen** → External → fill in the app name and support email.
    Leave the publishing status as **Testing**.
 4. **Audience → Test users** → add every Google account you intend to connect. In
    Testing mode an account that is not on this list cannot grant access at all.
-5. **Data access → Add scopes** — the four the app requests, and no more:
+5. **Data access → Add scopes** — the five the app requests, and no more:
    `openid`, `email`,
    `https://www.googleapis.com/auth/gmail.readonly`,
-   `https://www.googleapis.com/auth/gmail.send`.
+   `https://www.googleapis.com/auth/gmail.send`,
+   `https://www.googleapis.com/auth/contacts.readonly`.
    Notably absent: `gmail.modify`, `gmail.compose`, and anything that can delete
    mail.
+
+   `contacts.readonly` buys one thing: the sender's profile photo on a result row.
+   Gmail's search API returns no avatar anywhere in a message, so the face is read
+   from People API (`people/me/connections`, one request per search, photos only).
+   It is the narrowest scope Google offers that returns a contact photo at all —
+   the `contacts.other.readonly` variant excludes `photos` from its read mask —
+   and it is read-only. Everything that depends on it degrades instead of failing:
+   `contactPhotos` in `convex/adapters/gmail.ts` swallows its own errors, so a
+   grant issued without this scope keeps searching and the row falls back to the
+   sender's domain favicon, then to their initial on a colour derived from their
+   address. Drop the scope and the only thing that changes is which of the three
+   tiers a Gmail row shows. (The favicon tier detects the service's generic globe
+   by its size — 16px against the 64px asked for — so a domain with no icon of its
+   own shows the letter rather than the same globe as everyone else.)
 6. **Credentials → Create credentials → OAuth client ID → Web application**.
    Authorised redirect URI:
    `https://<deployment>.convex.site/oauth/google/callback`.
@@ -602,7 +693,7 @@ an app manifest** — and paste this, substituting your deployment slug:
 ```yaml
 display_information:
   name: Unified Inbox
-  description: Search and reply across Gmail, Slack and the web from one place.
+  description: Search and reply across Gmail, Slack and The Web from one place.
 oauth_config:
   redirect_urls:
     - https://<deployment>.convex.site/oauth/slack/callback
@@ -611,6 +702,8 @@ oauth_config:
       - search:read
       - chat:write
       - users:read
+      - channels:history
+      - groups:history
 settings:
   token_rotation_enabled: false
   org_deploy_enabled: false
@@ -624,7 +717,16 @@ npx convex env set SLACK_CLIENT_ID     123…
 npx convex env set SLACK_CLIENT_SECRET …
 ```
 
-Install it into a throwaway workspace. Three Slack-specific notes:
+Install it into a throwaway workspace. Four Slack-specific notes:
+
+- **Why `channels:history` / `groups:history`.** Everything else here is the
+  minimum to search and post. These two exist so `conversations.replies` can tell
+  a result that has a thread hanging off it from one that does not — the fact
+  Slack itself puts in the message list, and often where the actual answer is.
+  They are read-only, and the adapter only ever asks about a message it already
+  found; it never calls `conversations.history`, which is what reads a channel
+  wholesale. A connection authorised before these were requested keeps working
+  and simply shows no reply counts until it reconnects.
 
 - **`search.messages` requires a user token (`xoxp-`)** — a bot token cannot call
   it at all. So the install requests `user_scope`, and the app reads
@@ -889,6 +991,10 @@ of importance:
 - **API keys, crypto, canonicalization.** 401s and cross-user 404s; digest-only
   storage; AEAD round-trip, tamper detection, and an AAD swap failing; canonical
   payload stability across revisions.
+- **The registry is the only source list.** The derived `ALL_SOURCES`, the schema
+  union, every adapter's own `source`, and `requiresGrant` all have to agree —
+  so a source that is registered but unsearchable (or storable but adapterless)
+  fails a test rather than silently never running.
 
 ### The honest caveat
 
@@ -1008,7 +1114,10 @@ In [`docs/screenshots/`](docs/screenshots). These were captured during the
 UI-first phase, against the mock harness the components were built on — which is
 why several still carry a **"MOCK"** badge. The components themselves are
 unchanged and are now driven by live Convex subscriptions, so the layouts are
-current even where those badges are not.
+current even where those badges are not. Two are now in a different place: a
+successful send is a toast rather than a receipt dialog, and the delivered row —
+attempt log, delivery count, and the "retry with the same key" button that
+proves the count stays at one — lives on the `/outbox` card.
 
 | | |
 | --- | --- |

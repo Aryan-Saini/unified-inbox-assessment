@@ -79,7 +79,7 @@ export const SearchField = forwardRef<
                 onSubmit();
               }
             }}
-            placeholder="Search Gmail, Slack and the web…"
+            placeholder="Search Gmail, Slack and The Web…"
             aria-label="Search across every connected source"
             autoComplete="off"
             spellCheck={false}
@@ -92,6 +92,17 @@ export const SearchField = forwardRef<
         <div className="flex items-center justify-between gap-2 border-t border-line px-2 py-1.5">
           <div className="min-w-0">{footer}</div>
           <div className="flex shrink-0 items-center gap-1">
+            {/* The spinner does not sit on the submit button: it says something
+                is running, and the source chips already say *which* source —
+                putting it here as well would make one fact look like two. */}
+            {working ? (
+              <span
+                role="status"
+                aria-label="Searching"
+                className="mr-1 h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-neutral-700 border-t-neutral-400"
+              />
+            ) : null}
+
             {value.length > 0 ? (
               <button
                 type="button"
@@ -103,17 +114,19 @@ export const SearchField = forwardRef<
               </button>
             ) : null}
 
+            {/* Enter already runs the search, so this is the discoverable half
+                of the same action rather than a second one — and the thing a
+                touch keyboard, which has no Enter-to-search convention, needs.
+                Disabled on an empty field so the affordance never promises a
+                search that `startSearch` would drop on the floor. */}
             <button
               type="submit"
               disabled={value.trim().length === 0}
               aria-label="Run search"
-              className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white transition-colors duration-300 hover:bg-indigo-400 disabled:bg-white/[0.06] disabled:text-neutral-600"
+              title="Run search"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-white transition-colors hover:bg-indigo-400 disabled:bg-white/[0.06] disabled:text-neutral-600"
             >
-              {working ? (
-                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-              ) : (
-                <ArrowUpIcon className="h-4 w-4" />
-              )}
+              <ArrowUpIcon className="h-4 w-4" />
             </button>
           </div>
         </div>

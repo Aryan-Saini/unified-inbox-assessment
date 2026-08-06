@@ -41,6 +41,9 @@ export interface AdapterContext {
   accessToken?: string;
   /** Provider-side account identity, for building permalinks. */
   externalAccountId?: string;
+  /** The scopes this grant actually holds, so an adapter can skip an optional
+   *  call the user never authorised rather than spend a 403 discovering it. */
+  scopes?: string[];
   /** Max results the adapter should return. Advisory. */
   limit: number;
   /** Aborts when the orchestrator's per-source deadline elapses. */

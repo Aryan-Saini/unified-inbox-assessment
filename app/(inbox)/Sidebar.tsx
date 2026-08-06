@@ -7,7 +7,9 @@ import type { SearchRecord } from "./types";
 import {
   ArchiveIcon,
   ChevronDownIcon,
+  ClockIcon,
   CloseIcon,
+  ListIcon,
   PanelLeftIcon,
   PlusIcon,
   RerunIcon,
@@ -38,41 +40,68 @@ function HistoryRow({
         active ? "bg-white/[0.07]" : "hover:bg-white/[0.04]"
       }`}
     >
+      {/* One line, not two. The count used to sit on a line of its own, which
+          doubled every row's height to carry a number — so it moved up beside
+          the age, where both facts about a past search read as one trailing
+          note. The whole trailing group gives way to the row actions on
+          hover, exactly as the age alone used to. */}
       <button
         onClick={onSelect}
-        className="block w-full cursor-pointer px-2.5 py-2 text-left"
+        className="flex w-full cursor-pointer items-center gap-2 px-2.5 py-1.5 text-left"
       >
-        <span className="flex items-center gap-2">
-          <span
-            className={`min-w-0 flex-1 truncate text-[13px] ${
-              active ? "text-white" : "text-neutral-300"
-            }`}
-          >
-            {record.query}
-          </span>
-          {/* Time gives way to the row actions on hover. */}
-          <span className="shrink-0 text-[11px] text-neutral-500 group-hover:opacity-0">
-            {record.age}
-          </span>
+        <span
+          className={`min-w-0 flex-1 truncate text-[13px] ${
+            active ? "text-white" : "text-neutral-300"
+          }`}
+        >
+          {record.query}
         </span>
-        <span className="mt-1 flex items-center gap-2 text-[11px] text-neutral-500">
-          {record.pending ? (
-            <>
-              <span className="h-2.5 w-2.5 animate-spin rounded-full border border-neutral-600 border-t-neutral-300" />
-              <span>searching…</span>
-            </>
-          ) : (
-            <span>{record.resultCount} results</span>
-          )}
+
+        {/* Each number carries a glyph so the pair reads without a legend: a
+            list for how many results, a clock for how long ago. The two are
+            tinted apart — emerald for the count, sky for the age — so the eye
+            can pick one column out of a long history without reading either —
+            which only works if they are columns. Hence the fixed slot per pair
+            and fixed field per number: sized to their content, a two-digit count
+            pushed the clock a character left of where a one-digit count put it,
+            and neither glyph lined up with the row above. */}
+        <span className="flex shrink-0 items-center gap-2 text-[11px] tabular-nums transition-opacity group-hover:opacity-0">
+          <span
+            className="flex w-9 items-center justify-end gap-1 text-emerald-300/85"
+            title={record.pending ? "Searching" : `${record.resultCount} results`}
+          >
+            {record.pending ? (
+              <span
+                role="status"
+                aria-label="Searching"
+                className="mx-auto h-2.5 w-2.5 animate-spin rounded-full border border-neutral-700 border-t-emerald-400"
+              />
+            ) : (
+              <>
+                <ListIcon className="h-3 w-3 shrink-0 text-emerald-400/70" />
+                <span className="w-5 text-right">{record.resultCount}</span>
+              </>
+            )}
+          </span>
+          <span
+            className="flex w-11 items-center justify-end gap-1 text-sky-300/85"
+            title={`${record.age} ago`}
+          >
+            <ClockIcon className="h-3 w-3 shrink-0 text-sky-400/70" />
+            <span className="w-7 text-right">{record.age}</span>
+          </span>
         </span>
       </button>
 
-      <span className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+      {/* The two actions carry their own tints at the same weight as the
+          numbers they replace, so the hover state swaps one coloured pair for
+          another instead of draining the row to grey. */}
+      <span className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
         <button
           onClick={onRerun}
           title="Re-run this search"
           aria-label={`Re-run search: ${record.query}`}
-          className="rounded-md p-1.5 text-neutral-400 transition-colors hover:bg-white/10 hover:text-white"
+          className="rounded-md p-1.5 text-sky-400/70 transition-colors hover:bg-sky-500/12 hover:text-sky-300"
         >
           <RerunIcon className="h-3.5 w-3.5" />
         </button>
@@ -84,7 +113,7 @@ function HistoryRow({
               ? `Restore search: ${record.query}`
               : `Archive search: ${record.query}`
           }
-          className="rounded-md p-1.5 text-neutral-400 transition-colors hover:bg-white/10 hover:text-white"
+          className="rounded-md p-1.5 text-amber-400/70 transition-colors hover:bg-amber-500/12 hover:text-amber-300"
         >
           {record.archived ? (
             <UnarchiveIcon className="h-3.5 w-3.5" />
@@ -106,6 +135,7 @@ export function Sidebar({
   onRerun,
   onNewSearch,
   onArchiveToggle,
+  outboxActive = false,
   onOpenOutbox,
   onOpenSettings,
   sheet = false,
@@ -119,6 +149,9 @@ export function Sidebar({
   onRerun: (record: SearchRecord) => void;
   onNewSearch: () => void;
   onArchiveToggle: (id: string) => void;
+  /** The outbox is a route, not a dialog, so the rail marks it the way the
+   *  history rows mark the search being read. */
+  outboxActive?: boolean;
   onOpenOutbox: () => void;
   onOpenSettings: () => void;
   /**
@@ -149,7 +182,16 @@ export function Sidebar({
     >
       {/* Brand + collapse (or close, in the sheet) */}
       <div className="flex h-14 shrink-0 items-center gap-2 px-3">
-        <Logo className="h-7 w-7 shrink-0 text-white" />
+        {/* On the collapsed rail the mark takes the same 36px box as the icon
+            buttons below it, so the three sit on one centre line. Left to its
+            natural 28px width it reads 4px off. */}
+        <span
+          className={`flex shrink-0 items-center ${
+            isCollapsed ? "h-9 w-9 justify-center" : ""
+          }`}
+        >
+          <Logo className="h-7 w-7 text-white" />
+        </span>
         <span
           className={`min-w-0 flex-1 truncate text-[13px] font-semibold tracking-tight text-white transition-opacity duration-200 ${
             isCollapsed ? "pointer-events-none opacity-0" : "opacity-100"
@@ -293,13 +335,16 @@ export function Sidebar({
       <div className="shrink-0 space-y-1 border-t border-line p-3">
         <button
           onClick={onOpenOutbox}
-          title="Outbox"
-          className={`flex items-center gap-2 rounded-lg text-[13px] text-neutral-400 transition-colors hover:bg-white/5 hover:text-white ${
-            isCollapsed ? "h-9 w-9 justify-center" : "w-full px-2.5 py-2"
-          }`}
+          title="Outgoing"
+          aria-current={outboxActive ? "page" : undefined}
+          className={`flex items-center gap-2 rounded-lg text-[13px] transition-colors ${
+            outboxActive
+              ? "bg-white/[0.07] text-white"
+              : "text-neutral-400 hover:bg-white/5 hover:text-white"
+          } ${isCollapsed ? "h-9 w-9 justify-center" : "w-full px-2.5 py-2"}`}
         >
           <SendIcon className="h-4.5 w-4.5 shrink-0" />
-          {isCollapsed ? null : <span className="flex-1 text-left">Outbox</span>}
+          {isCollapsed ? null : <span className="flex-1 text-left">Outgoing</span>}
         </button>
         <button
           onClick={onOpenSettings}

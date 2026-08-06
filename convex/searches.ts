@@ -18,18 +18,17 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { webSourceLabel } from "./adapters/web";
 import { appError } from "./core/errors";
 import { faultInjectionEnabled } from "./core/faults";
+import { ALL_SOURCES } from "./core/registry";
 import type { Source } from "./core/types";
 import { consume } from "./limits";
 import { SWEEP_DELAY_MS } from "./orchestrator";
 import { errorKind as errorKindValidator, source as sourceValidator } from "./schema";
 import { optionalUser, requireUser } from "./users";
-
-const ALL_SOURCES: Source[] = ["gmail", "slack", "web"];
 
 /** Longest query we will accept. Providers reject far longer strings anyway, and
  *  an unbounded one is a cheap way to bloat every row that quotes it. */
@@ -106,6 +105,12 @@ const resultView = v.object({
   replyTo: v.optional(v.string()),
   context: v.optional(v.string()),
   unread: v.optional(v.boolean()),
+  avatarUrl: v.optional(v.string()),
+  outgoing: v.optional(v.boolean()),
+  recipient: v.optional(v.string()),
+  recipientName: v.optional(v.string()),
+  replyCount: v.optional(v.number()),
+  lastReplyAt: v.optional(v.string()),
 });
 
 /* -------------------------------------------------------------------- dispatch */
@@ -347,6 +352,64 @@ export const setArchived = mutation({
   },
 });
 
+/* --------------------------------------------------------- live reconciliation */
+
+/** The caller's connections keyed by id, for reading a stored run against the
+ *  accounts as they stand now. */
+async function connectionsById(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+): Promise<Map<Id<"connections">, Doc<"connections">>> {
+  const rows = await ctx.db
+    .query("connections")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .take(100);
+  return new Map(rows.map((row) => [row._id, row]));
+}
+
+/**
+ * Re-read a stored `needs_reconnect` against the account as it stands now.
+ *
+ * A source row records the grant's state at the moment it ran, which is what
+ * history wants and not what a live strip wants: an amber "needs reconnect"
+ * outlived both of the things that resolve it. An account the user has removed
+ * has nothing left to reconnect, and one they have already reconnected does not
+ * need it — but the row still said so, and worst-status-wins let it speak for a
+ * healthy sibling account in the same connector.
+ *
+ * `null` means drop the row: the account behind it no longer exists.
+ */
+function reconcileRun(
+  row: Doc<"searchSources">,
+  connections: Map<Id<"connections">, Doc<"connections">>,
+): Doc<"searchSources"> | null {
+  if (row.status !== "needs_reconnect" || row.connectionId === undefined) return row;
+
+  const connection = connections.get(row.connectionId);
+  // Deleted outright, or removed-but-undeletable and hidden. Either way the
+  // Reconnect button on this row would point at nothing.
+  if (connection === undefined || connection.hiddenAt !== undefined) return null;
+
+  // Still broken: the row is current, and the action it offers is the right one.
+  if (connection.status !== "active") return row;
+
+  // Reconnected since the search ran. The run genuinely did fail, so it is not
+  // promoted to a success — it becomes an ordinary failure whose fix is to run
+  // it again rather than to authorise anything.
+  return {
+    ...row,
+    status: "failed",
+    errorKind: "unknown",
+    errorMessage: "This account was reconnected after the search ran. Retry to search it.",
+  };
+}
+
+/** Whether any row's `needs_reconnect` still has to be checked against a live
+ *  connection — if none does, the connections read is skipped entirely. */
+function anyReconnect(rows: Doc<"searchSources">[]): boolean {
+  return rows.some((r) => r.status === "needs_reconnect" && r.connectionId !== undefined);
+}
+
 /**
  * The live view of one search: the search, every source run, every result so far.
  *
@@ -387,6 +450,14 @@ export const watch = query({
       .withIndex("by_search", (q) => q.eq("searchId", args.searchId))
       .take(200);
 
+    const connections = anyReconnect(sources)
+      ? await connectionsById(ctx, user._id)
+      : new Map<Id<"connections">, Doc<"connections">>();
+
+    const liveSources = sources
+      .map((row) => reconcileRun(row, connections))
+      .filter((row): row is Doc<"searchSources"> => row !== null);
+
     return {
       search: {
         id: search._id,
@@ -400,7 +471,7 @@ export const watch = query({
         createdAt: search.createdAt,
         completedAt: search.completedAt,
       },
-      sources: sources
+      sources: liveSources
         .sort((a, b) => ALL_SOURCES.indexOf(a.source) - ALL_SOURCES.indexOf(b.source))
         .map((row) => ({
           id: row._id,
@@ -432,6 +503,12 @@ export const watch = query({
           replyTo: row.replyTo,
           context: row.context,
           unread: row.unread,
+          avatarUrl: row.avatarUrl,
+          outgoing: row.outgoing,
+          recipient: row.recipient,
+          recipientName: row.recipientName,
+          replyCount: row.replyCount,
+          lastReplyAt: row.lastReplyAt,
         })),
     };
   },
@@ -472,12 +549,29 @@ export const history = query({
       .order("desc")
       .take(HISTORY_LIMIT);
 
-    const rows = [];
+    const perSearch = [];
     for (const search of searches) {
-      const sources = await ctx.db
-        .query("searchSources")
-        .withIndex("by_search", (q) => q.eq("searchId", search._id))
-        .take(128);
+      perSearch.push({
+        search,
+        sources: await ctx.db
+          .query("searchSources")
+          .withIndex("by_search", (q) => q.eq("searchId", search._id))
+          .take(128),
+      });
+    }
+
+    // One read for the whole page, and only when some row's reconnect state is
+    // actually in question — `degraded` has to agree with the strip, which is
+    // reconciled the same way in `watch`.
+    const connections = perSearch.some((entry) => anyReconnect(entry.sources))
+      ? await connectionsById(ctx, user._id)
+      : new Map<Id<"connections">, Doc<"connections">>();
+
+    const rows = [];
+    for (const { search, ...rest } of perSearch) {
+      const sources = rest.sources
+        .map((row) => reconcileRun(row, connections))
+        .filter((row): row is Doc<"searchSources"> => row !== null);
 
       rows.push({
         id: search._id,

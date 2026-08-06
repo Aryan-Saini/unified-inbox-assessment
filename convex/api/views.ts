@@ -4,7 +4,8 @@
  * These are pure functions paired with the validators that describe them, and
  * they are the *only* way a row reaches an API consumer. That matters most for
  * `toPublicResult`: the `searchResults` table carries enrichment the UI uses
- * (`seq`, `score`, `connectionId`, `threadId`, `replyTo`, `context`, `unread`),
+ * (`seq`, `score`, `connectionId`, `threadId`, `replyTo`, `context`, `unread`,
+ * `avatarUrl`, `replyCount`),
  * and the public `Result` in the specification has exactly seven fields. The
  * validator below *is* that contract — Convex checks the returned object against
  * it, so an eighth field added to the table cannot leak into the API without this

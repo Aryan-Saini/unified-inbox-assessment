@@ -82,6 +82,12 @@ const adapterResult = v.object({
   replyTo: v.optional(v.string()),
   context: v.optional(v.string()),
   unread: v.optional(v.boolean()),
+  avatarUrl: v.optional(v.string()),
+  outgoing: v.optional(v.boolean()),
+  recipient: v.optional(v.string()),
+  recipientName: v.optional(v.string()),
+  replyCount: v.optional(v.number()),
+  lastReplyAt: v.optional(v.string()),
 });
 
 /* ------------------------------------------------------------------- helpers */
@@ -284,6 +290,12 @@ export const completeSourceRun = internalMutation({
         replyTo: result.replyTo,
         context: result.context,
         unread: result.unread,
+        avatarUrl: result.avatarUrl,
+        outgoing: result.outgoing,
+        recipient: result.recipient,
+        recipientName: result.recipientName,
+        replyCount: result.replyCount,
+        lastReplyAt: result.lastReplyAt,
       });
     }
 
@@ -447,6 +459,7 @@ export const runSource = internalAction({
     try {
       let accessToken: string | undefined;
       let externalAccountId: string | undefined;
+      let scopes: string[] | undefined;
 
       if (requiresGrant(begin.source)) {
         if (begin.connectionId === undefined) {
@@ -459,6 +472,7 @@ export const runSource = internalAction({
         const token = await resolveToken(ctx, begin.connectionId);
         accessToken = token.accessToken;
         externalAccountId = token.externalAccountId;
+        scopes = token.scopes;
       }
 
       const adapter = ADAPTERS[begin.source];
@@ -472,6 +486,7 @@ export const runSource = internalAction({
           return await adapter.search(begin.query, {
             accessToken,
             externalAccountId,
+            scopes,
             limit: RESULTS_PER_SOURCE,
             // A fresh deadline per attempt: a retry that inherited the first
             // attempt's clock would be cut off before it could help.
@@ -512,6 +527,12 @@ export const runSource = internalAction({
           replyTo: result.replyTo,
           context: result.context,
           unread: result.unread,
+          avatarUrl: result.avatarUrl,
+          outgoing: result.outgoing,
+          recipient: result.recipient,
+          recipientName: result.recipientName,
+          replyCount: result.replyCount,
+          lastReplyAt: result.lastReplyAt,
         })),
       });
     } catch (err) {

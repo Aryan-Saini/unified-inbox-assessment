@@ -1,16 +1,27 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { BRAND_LOGO } from "./brand-icons";
-import { SOURCE_META } from "./mock-data";
-import type { Source, SourceRun, UiResult } from "./types";
 import {
+  ResultIdentity,
+  faviconForEmail,
+  faviconForUrl,
+  siteNameOf,
+  whereLine,
+} from "./ResultIdentity";
+import { SOURCE_META } from "./mock-data";
+import type { Connection, Source, SourceRun, UiResult } from "./types";
+import {
+  AlertIcon,
   ClockIcon,
   ExternalIcon,
   PlugIcon,
   ReplyIcon,
   RerunIcon,
   SearchIcon,
+  SendIcon,
+  SortIcon,
+  UpDownIcon,
 } from "./icons";
 
 function seconds(ms: number) {
@@ -48,16 +59,19 @@ function SourceChip({
   const Logo = BRAND_LOGO[run.source];
   const inFlight = run.status === "pending" || run.status === "running";
 
+  // No border of its own: the chip is a segment inside the bordered strip, and
+  // a box drawn inside a box reads as two competing edges. Fill alone carries
+  // the state.
   const shell =
     run.status === "needs_reconnect"
-      ? "border-amber-500/35 bg-amber-500/[0.08]"
+      ? "bg-amber-500/[0.14]"
       : run.status === "failed"
-        ? "border-rose-500/35 bg-rose-500/[0.08]"
+        ? "bg-rose-500/[0.14]"
         : selected
-          ? "border-line-strong bg-white/[0.08]"
+          ? "bg-white/[0.09]"
           : inFlight
-            ? "border-line-strong bg-white/[0.04]"
-            : "border-line bg-white/[0.02]";
+            ? "bg-white/[0.05]"
+            : "bg-transparent hover:bg-white/[0.04]";
 
   // Filtering to a source with nothing in it would blank the list for no
   // reason, so the chip is only a control once it has results.
@@ -65,7 +79,7 @@ function SourceChip({
 
   return (
     <div
-      className={`relative flex items-center overflow-hidden rounded-lg border text-[12px] transition-colors duration-300 ${shell} ${
+      className={`relative flex items-center overflow-hidden rounded-xl text-[12px] transition-colors duration-300 ${shell} ${
         run.status === "running" ? "sweep" : ""
       }`}
     >
@@ -90,28 +104,36 @@ function SourceChip({
       >
         <Logo className="h-4 w-4 shrink-0" />
 
+        {/* The three states a chip passes through in one search are given a
+            common minimum width, so the strip does not twitch under the reader
+            as "queued" becomes a timer and then a count. */}
         {run.status === "pending" ? (
-          <span className="text-neutral-500">queued</span>
+          <span className="min-w-[3.25rem] text-neutral-500">queued</span>
         ) : null}
 
+        {/* No marker while in flight — the chip's own sweep already says the
+            adapter is working, and the timer is ticking next to it. */}
         {run.status === "running" ? (
-          <span className="flex items-center gap-1.5 text-neutral-400">
-            <span
-              className={`pulse-ring relative h-1.5 w-1.5 rounded-full ${meta.dot}`}
-            />
-            <span className="tabular-nums">{seconds(elapsed)}</span>
+          <span className="min-w-[3.25rem] tabular-nums text-neutral-400">
+            {seconds(elapsed)}
           </span>
         ) : null}
 
         {run.status === "succeeded" ? (
-          <span className="text-neutral-500">
+          <span className="min-w-[3.25rem] text-neutral-500">
             <span className="tabular-nums text-neutral-300">{count}</span> ·{" "}
             <span className="tabular-nums">{seconds(run.durationMs ?? 0)}</span>
           </span>
         ) : null}
 
+        {/* A hazard mark rather than the words "needs reconnect": the
+            Reconnect button beside it already says what the state is and what
+            to do about it, so the label was the same sentence twice, in the
+            widest form available. */}
         {run.status === "needs_reconnect" ? (
-          <span className="text-amber-200">needs reconnect</span>
+          <span role="img" aria-label={`${meta.name} needs reconnecting`}>
+            <AlertIcon className="h-3.5 w-3.5 text-amber-300" />
+          </span>
         ) : null}
 
         {run.status === "failed" ? (
@@ -179,17 +201,59 @@ function Highlight({ text, tokens }: { text: string; tokens: string[] }) {
   );
 }
 
+/**
+ * A stand-in for one `ResultCard`, block for block: avatar, two identity lines,
+ * headline, two snippet lines, action row. The wrapper heights are the *line
+ * boxes* of the real thing rather than the bar heights, so a skeleton occupies
+ * the same space its result will — otherwise every arriving row shoves the list
+ * down under the reader's eye, which is the one job a skeleton has.
+ */
 function SkeletonRow({ index }: { index: number }) {
+  const bar = "sweep relative overflow-hidden rounded bg-white/[0.04]";
+
   return (
     <div
-      className="rise-in flex gap-3 rounded-xl border border-line/60 px-4 py-3.5"
+      className="rise-in rounded-2xl border border-line-strong bg-ink-850 px-4 py-3.5"
       style={{ "--delay": `${index * 80}ms` } as React.CSSProperties}
     >
-      <div className="sweep relative h-8 w-8 shrink-0 overflow-hidden rounded-lg bg-white/[0.04]" />
-      <div className="min-w-0 flex-1 space-y-2">
-        <div className="sweep relative h-3 w-2/5 overflow-hidden rounded bg-white/[0.05]" />
-        <div className="sweep relative h-3 w-11/12 overflow-hidden rounded bg-white/[0.03]" />
-        <div className="sweep relative h-3 w-3/5 overflow-hidden rounded bg-white/[0.03]" />
+      <div className="flex items-start gap-3">
+        <div className={`${bar} mt-0.5 h-8 w-8 shrink-0 rounded-full`} />
+
+        <div className="min-w-0 flex-1">
+          <div className="flex h-4 items-center">
+            <div className={`${bar} h-3 w-32`} />
+          </div>
+          <div className="mt-0.5 flex h-3.5 items-center">
+            <div className={`${bar} h-2.5 w-52`} />
+          </div>
+        </div>
+
+        <div className="flex h-4 items-center">
+          <div className={`${bar} h-2.5 w-10`} />
+        </div>
+      </div>
+
+      {/* Headline: 16px on `leading-snug`. */}
+      <div className="mt-2.5 flex h-[22px] items-center">
+        <div className={`${bar} h-4 w-3/5`} />
+      </div>
+
+      {/* Snippet: two lines of 13px on `leading-relaxed`. */}
+      <div className="mt-1 flex h-[21px] items-center">
+        <div className={`${bar} h-3 w-full`} />
+      </div>
+      <div className="flex h-[21px] items-center">
+        <div className={`${bar} h-3 w-4/5`} />
+      </div>
+
+      {/* The action row. An invisible copy of the real button rather than a
+          measured height, so it cannot drift out of step when that button's
+          padding or type size changes. */}
+      <div className="mt-2.5 flex items-center" aria-hidden>
+        <span className="invisible flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-[12px] font-medium">
+          <ReplyIcon className="h-3.5 w-3.5" />
+          Reply
+        </span>
       </div>
     </div>
   );
@@ -198,75 +262,223 @@ function SkeletonRow({ index }: { index: number }) {
 function ResultCard({
   result,
   tokens,
+  account,
   onReply,
 }: {
   result: UiResult;
   tokens: string[];
+  /** The connected account this result was found by, if it is still connected. */
+  account?: Connection;
   onReply: () => void;
 }) {
   const meta = SOURCE_META[result.source];
-  const host = result.url.replace(/^https?:\/\//, "").split("/")[0];
+
+  /**
+   * Touch has no hover, so the actions this card reveals on hover were simply
+   * unreachable on a phone — and the tap that should have revealed them opened
+   * the message in a new tab instead, which is the one thing a reader scanning
+   * a list does not want. On a device without hover, the first tap on the card
+   * reveals Reply and Open; the links still work, they are just no longer what
+   * an accidental tap does. Nothing changes where hover exists.
+   */
+  const [revealed, setRevealed] = useState(false);
+
+  /**
+   * Whether the gesture that is about to produce a click began as a touch, and
+   * whether the actions were already showing when it began.
+   *
+   * The pointer event is the signal rather than `(hover: none)`, because the
+   * media query describes the *device* and this is a question about the
+   * gesture: a hybrid machine — a touchscreen laptop, an iPad with a trackpad —
+   * reports hover support and still gets tapped. `pointerdown` runs before the
+   * click it precedes, so both facts are known by the time the link has to
+   * decide whether to navigate.
+   */
+  const fromTouch = useRef(false);
+  const wasRevealed = useRef(false);
+
+  const noteGesture = (event: React.PointerEvent) => {
+    if (event.pointerType === "mouse") return;
+    fromTouch.current = true;
+    // Captured before the state change below, so the tap that *does* the
+    // revealing is not also the tap that acts on what it revealed.
+    wasRevealed.current = revealed;
+    setRevealed(true);
+  };
+
+  /**
+   * Swallow a tap that would navigate, and let the reveal stand instead — but
+   * only the first one. Once the card is showing its actions, a tap on the link
+   * is a tap on a link again.
+   */
+  const interceptTap = (event: React.MouseEvent) => {
+    if (!fromTouch.current || wasRevealed.current) return;
+    event.preventDefault();
+  };
+
+  /** Chat, i.e. a source whose rows are messages with no subject of their own. */
+  const isMessage = result.source === "slack";
+  const isWeb = result.source === "web";
+
+  /** One of the user's own sent messages, which Gmail search returns too. */
+  const isSent = result.outgoing === true;
+
+  // Who the row is *about*. Normally the sender; on a message you sent, the person
+  // you sent it to — naming yourself on your own outgoing mail says nothing, and
+  // the name beside the "to" address has to be the same party as the address. A
+  // web hit has no author at all, and "Web" only repeats the chip beside it, so
+  // the site takes the line.
+  const who = isWeb
+    ? siteNameOf(result.url)
+    : isSent
+      ? (result.recipientName ?? result.recipient ?? "(no recipient)")
+      : (result.author ?? meta.name);
+
+  // The address beside that name, and it must belong to the same party: the
+  // recipient's on a sent message, the sender's otherwise. Dropped when it only
+  // repeats the name, and never shown for Slack, where `replyTo` is a channel id.
+  const address = isSent ? result.recipient : result.replyTo;
+  const sender =
+    result.source === "gmail" && address !== who ? address : undefined;
 
   return (
-    <article className="rise-in group relative overflow-hidden rounded-xl border border-line bg-ink-900/60 transition-colors hover:border-line-strong hover:bg-ink-850">
-      {/* Source rail. The only place colour carries meaning in a row. */}
-      <span className={`absolute inset-y-0 left-0 w-[3px] ${meta.dot} opacity-60`} />
+    // Same shell as the search field — `border-line-strong` on `bg-ink-850`,
+    // rounded-2xl — so the composer and the rows it produced read as one
+    // surface rather than two different card styles.
+    <article
+      onPointerDown={noteGesture}
+      // Readable from a test without reaching into React's internals.
+      data-revealed={revealed}
+      className="rise-in group relative rounded-2xl border border-line-strong bg-ink-850 transition-colors duration-300 hover:border-neutral-600"
+    >
+      <div className="px-4 py-3.5">
+        {/* A search-engine result row: who it came from and where it lives sit
+            beside the brand mark, then the title as the link, then the snippet.
+            Reading top to bottom answers "from whom, about what" before the
+            body — the order a person scans a list of hits in. */}
+        <header className="flex items-start gap-3">
+          <ResultIdentity
+            source={result.source}
+            avatarUrl={result.avatarUrl}
+            favicon={
+              isWeb
+                ? faviconForUrl(result.url)
+                : result.source === "gmail"
+                  ? faviconForEmail(address)
+                  : undefined
+            }
+            seed={isWeb ? result.url : address}
+            where={whereLine(result, account?.label)}
+            label={who}
+            fullName={`${isSent ? "to " : ""}${who}${sender ? ` <${sender}>` : ""}`}
+            name={
+              <>
+                {/* "to" rather than a pill, because it is the grammar of the
+                    line: "to Sam <sam@…>" reads as one fact, where a Sent badge
+                    plus an unqualified name reads as two. */}
+                {isSent ? <span className="text-neutral-500">to </span> : null}
+                {who}
+                {sender ? (
+                  <span className="text-neutral-500"> &lt;{sender}&gt;</span>
+                ) : null}
+              </>
+            }
+          />
 
-      <div className="px-4 py-3.5 pl-5">
-        <header className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 font-medium ${meta.tint}`}
-          >
-            <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
-            {meta.name}
-          </span>
-
-          {result.author ? (
-            <span className="max-w-[16rem] truncate text-neutral-300">
-              {result.author}
+          <span className="flex shrink-0 items-center gap-2 text-[11px] text-neutral-500">
+            {/* Your own message, marked where the eye already goes for the
+                row's metadata. The "to" in the name line says the same thing
+                grammatically, but it is one word deep in a sentence — scanning
+                a column of results, a mark on the right edge is what separates
+                what you sent from what you received without reading either. */}
+            {isSent ? (
+              <span
+                title="You sent this"
+                className="flex items-center gap-1 rounded-md bg-indigo-500/12 px-1.5 py-0.5 font-medium text-indigo-300"
+              >
+                <SendIcon className="h-3 w-3" />
+                Sent
+              </span>
+            ) : null}
+            <span className="flex items-center gap-1">
+              <ClockIcon className="h-3 w-3" />
+              <time dateTime={result.timestamp}>{result.age}</time>
             </span>
-          ) : null}
-
-          {result.context ? (
-            <>
-              <span className="text-neutral-700">·</span>
-              <span className="truncate text-neutral-500">{result.context}</span>
-            </>
-          ) : null}
-
-          <span className="ml-auto flex shrink-0 items-center gap-1 text-neutral-500">
-            <ClockIcon className="h-3 w-3" />
-            <time dateTime={result.timestamp}>{result.age}</time>
           </span>
         </header>
 
-        <h3 className="mt-2 text-[14.5px] leading-snug font-medium text-neutral-100">
+        {/* Two body treatments, because two different things are being shown.
+            An email has a subject: a short label, written to be scanned, and it
+            earns the headline. A chat message has no subject — the text *is* the
+            message — so styling it as a big coloured link made it read as a
+            title someone wrote, which is exactly why a Slack row did not look
+            like a message. It gets body type instead: white, unemphasised, up to
+            three lines, underlined only on hover. */}
+        {isMessage ? (
           <a
             href={result.url}
             target="_blank"
             rel="noreferrer"
-            className="decoration-neutral-600 underline-offset-2 hover:underline"
+            onClick={interceptTap}
+            className="mt-2 block line-clamp-3 text-[14px] leading-relaxed text-neutral-100 decoration-neutral-600 underline-offset-2 hover:underline"
           >
-            <Highlight text={result.title} tokens={tokens} />
+            <Highlight text={result.snippet} tokens={tokens} />
           </a>
-          {result.unread ? (
-            <span
-              title="Unread"
-              className="ml-2 inline-block h-1.5 w-1.5 translate-y-[-2px] rounded-full bg-indigo-400"
-            />
-          ) : null}
-        </h3>
+        ) : (
+          <>
+            {/* Clamped, because a subject line is capped at 988 characters and
+                one written to the cap otherwise renders as ten lines of
+                headline and pushes the snippet off the card. */}
+            <h3 className="mt-2.5 line-clamp-3 text-[16px] leading-snug font-medium text-indigo-300">
+              <a
+                href={result.url}
+                target="_blank"
+                rel="noreferrer"
+                onClick={interceptTap}
+                className="underline-offset-2 hover:underline"
+              >
+                <Highlight text={result.title} tokens={tokens} />
+              </a>
+            </h3>
 
-        <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-neutral-400">
-          <Highlight text={result.snippet} tokens={tokens} />
-        </p>
+            <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-neutral-400">
+              <Highlight text={result.snippet} tokens={tokens} />
+            </p>
+          </>
+        )}
 
         <footer className="mt-2.5 flex items-center gap-2">
-          <span className="truncate font-mono text-[11px] text-neutral-600">
-            {host}
-          </span>
+          {/* Slack puts the thread under the message it belongs to, and that is
+              often where the answer actually is — so the row says a thread
+              exists rather than making you open it to find out. */}
+          {result.replyCount ? (
+            <a
+              href={result.url}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 text-[12px] text-neutral-500 hover:text-neutral-300"
+            >
+              <ReplyIcon className="h-3.5 w-3.5 shrink-0 text-indigo-300" />
+              <span className="font-medium text-indigo-300">
+                {result.replyCount}{" "}
+                {result.replyCount === 1 ? "reply" : "replies"}
+              </span>
+              {/* When the thread was last alive. A count alone does not say
+                  whether the conversation is still moving. */}
+              {result.lastReplyAge ? (
+                <>
+                  <span className="text-neutral-700">·</span>
+                  <span>last {result.lastReplyAge}</span>
+                </>
+              ) : null}
+            </a>
+          ) : null}
 
-          <span className="ml-auto flex shrink-0 items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          <span
+            className={`ml-auto flex shrink-0 items-center gap-1.5 transition-opacity group-hover:opacity-100 focus-within:opacity-100 ${
+              revealed ? "opacity-100" : "opacity-0"
+            }`}
+          >
             {result.replyTo ? (
               <button
                 onClick={onReply}
@@ -296,6 +508,7 @@ export function ResultsList({
   query,
   results,
   runs,
+  connections,
   working,
   elapsed,
   onReply,
@@ -305,6 +518,8 @@ export function ResultsList({
   query: string;
   results: UiResult[];
   runs: SourceRun[];
+  /** Used to name the account a result arrived at — see `ResultCard`. */
+  connections: Connection[];
   working: boolean;
   elapsed: number;
   onReply: (result: UiResult) => void;
@@ -313,9 +528,25 @@ export function ResultsList({
 }) {
   const [filter, setFilter] = useState<Source | "all">("all");
   const [sort, setSort] = useState<"arrival" | "newest" | "rank">("arrival");
+  /** `desc` is each sort's natural reading: first-to-arrive, newest, best. */
+  const [direction, setDirection] = useState<"desc" | "asc">("desc");
+
+  const byConnection = useMemo(
+    () => new Map(connections.map((c) => [c.id, c])),
+    [connections],
+  );
 
   const SORT_LABEL = { arrival: "Arrival order", newest: "Newest first", rank: "Relevance" } as const;
   const NEXT_SORT = { arrival: "newest", newest: "rank", rank: "arrival" } as const;
+
+  // "Reversed" means something different per sort, and saying which is the
+  // whole value of the control — an arrow on its own only says "not the other
+  // way".
+  const DIRECTION_LABEL = {
+    arrival: { desc: "First to arrive", asc: "Last to arrive" },
+    newest: { desc: "Newest first", asc: "Oldest first" },
+    rank: { desc: "Best match first", asc: "Weakest match first" },
+  } as const;
 
   const tokens = useMemo(
     () =>
@@ -349,59 +580,105 @@ export function ResultsList({
     return list;
   }, [results, filter, sort]);
 
+  // Direction is applied to the finished order rather than folded into each
+  // comparator: one reversal is the same answer for all three sorts, and it
+  // keeps ties in arrival order instead of inverting them too.
+  const ordered = useMemo(
+    () => (direction === "desc" ? shown : [...shown].reverse()),
+    [shown, direction],
+  );
+
   const empty = results.length === 0;
 
   return (
     <div className="space-y-3">
-      {/* One row: source state and source filter are the same control. */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <button
-          type="button"
-          onClick={() => setFilter("all")}
-          aria-pressed={filter === "all"}
-          className={`rounded-lg border px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
-            filter === "all"
-              ? "border-line-strong bg-white/[0.08] text-white"
-              : "border-transparent text-neutral-500 hover:bg-white/[0.04] hover:text-neutral-300"
-          }`}
-        >
-          All <span className="tabular-nums opacity-60">{results.length}</span>
-        </button>
+      {/* One row: source state and source filter are the same control. Both
+          halves wear the search field's shell, so the strip reads as chrome
+          belonging to the composer above rather than as the first result. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1 rounded-2xl border border-line-strong bg-ink-850 p-1">
+          <button
+            type="button"
+            onClick={() => setFilter("all")}
+            aria-pressed={filter === "all"}
+            className={`rounded-xl px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
+              filter === "all"
+                ? "bg-white/[0.09] text-white"
+                : "text-neutral-500 hover:bg-white/[0.04] hover:text-neutral-300"
+            }`}
+          >
+            All <span className="tabular-nums opacity-60">{results.length}</span>
+          </button>
 
-        {runs.map((run) => (
-          <SourceChip
-            key={run.source}
-            run={run}
-            count={counts[run.source]}
-            elapsed={elapsed}
-            selected={filter === run.source}
-            onSelect={() => setFilter(run.source)}
-            onReconnect={() => onReconnect(run.source)}
-            onRetry={() => onRetry(run.source)}
-          />
-        ))}
+          {runs.map((run) => (
+            <SourceChip
+              key={run.source}
+              run={run}
+              count={counts[run.source]}
+              elapsed={elapsed}
+              selected={filter === run.source}
+              onSelect={() => setFilter(run.source)}
+              onReconnect={() => onReconnect(run.source)}
+              onRetry={() => onRetry(run.source)}
+            />
+          ))}
+        </div>
 
-        <button
-          type="button"
-          onClick={() => setSort((v) => NEXT_SORT[v])}
-          disabled={working}
-          title={
-            working
-              ? "Available once every source has returned"
-              : "Cycle sort: arrival → newest → relevance"
-          }
-          className="ml-auto rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-neutral-500 transition-colors hover:bg-white/[0.04] hover:text-neutral-300 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {SORT_LABEL[sort]}
-        </button>
+        {/* Which order, and which way round — two questions, so two controls,
+            sharing one shell built exactly like the filter bar so both ends of
+            the row are the same height. */}
+        <div className="ml-auto flex items-center gap-1 rounded-2xl border border-line-strong bg-ink-850 p-1">
+          <button
+            type="button"
+            onClick={() => setSort((v) => NEXT_SORT[v])}
+            disabled={working}
+            title={
+              working
+                ? "Available once every source has returned"
+                : "Cycle sort: arrival → newest → relevance"
+            }
+            className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[12px] font-medium text-neutral-300 transition-colors hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+          >
+            <SortIcon className="h-3.5 w-3.5 shrink-0" />
+            {/* Fixed width: the three labels are different lengths, and letting
+                the button resize as it cycles would shift its own edge out from
+                under the pointer that just clicked it. */}
+            <span className="w-[6.5rem] text-left">{SORT_LABEL[sort]}</span>
+          </button>
+
+          <span className="h-4 w-px shrink-0 bg-line" />
+
+          <button
+            type="button"
+            onClick={() => setDirection((v) => (v === "desc" ? "asc" : "desc"))}
+            disabled={working}
+            aria-pressed={direction === "asc"}
+            aria-label={`${DIRECTION_LABEL[sort][direction]}, reverse the order`}
+            title={
+              working
+                ? "Available once every source has returned"
+                : `${DIRECTION_LABEL[sort][direction]}, click to reverse`
+            }
+            className={`flex shrink-0 items-center justify-center rounded-xl p-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent ${
+              direction === "asc"
+                ? "bg-white/[0.09] text-white"
+                : "text-neutral-400 hover:bg-white/[0.05] hover:text-white"
+            }`}
+          >
+            <UpDownIcon className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
-      <div className="space-y-2">
-        {shown.map((result) => (
+      <div className="space-y-3">
+        {ordered.map((result) => (
           <ResultCard
             key={`${result.source}-${result.id}`}
             result={result}
             tokens={tokens}
+            account={
+              result.connectionId ? byConnection.get(result.connectionId) : undefined
+            }
             onReply={() => onReply(result)}
           />
         ))}
@@ -410,13 +687,16 @@ export function ResultsList({
           ? [0, 1, 2, 3].map((i) => <SkeletonRow key={i} index={i} />)
           : null}
 
+        {/* Not a card. A card is a container for a thing, and there is no thing
+            here — an empty list should read as absence, not as a result whose
+            content happens to be the word "none". */}
         {!working && empty ? (
-          <div className="rounded-xl border border-line bg-ink-900/60 px-6 py-12 text-center">
+          <div className="px-6 py-14 text-center">
             <SearchIcon className="mx-auto h-6 w-6 text-neutral-700" />
             <p className="mt-3 text-[14px] font-medium text-neutral-300">
               No results for “{query}”
             </p>
-            <p className="mx-auto mt-1 max-w-sm text-[13px] leading-relaxed text-neutral-500">
+            <p className="mx-auto mt-1.5 max-w-sm text-[13px] leading-relaxed text-neutral-500">
               Every source returned, and none of them matched. Try fewer words,
               or check the source strip above for a connection that needs
               attention.

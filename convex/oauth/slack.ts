@@ -28,10 +28,27 @@ const AUTHORIZE_ENDPOINT = "https://slack.com/oauth/v2/authorize";
 const ACCESS_ENDPOINT = "https://slack.com/api/oauth.v2.access";
 
 /**
- * The narrowest set that can search, post, and resolve a user id to a name.
- * No `channels:history`, no `files:read`, nothing that reads a channel wholesale.
+ * The narrowest set that can search, post, resolve a user id to a name and
+ * face, and count the replies on a thread it already found.
+ *
+ * The two `*:history` scopes are the loosest thing here and were added
+ * deliberately: `conversations.replies` is the only way to learn that a result
+ * has a thread hanging off it, and a Slack row without that is missing the
+ * thing Slack itself puts in the message list. They are read-only, and the
+ * adapter calls `conversations.replies` for a message it already has an id for
+ * — never `conversations.history`, which is what actually reads a channel
+ * wholesale. Still no `files:read` and no bot-wide access.
+ *
+ * Adding a scope invalidates nothing: an existing grant keeps working and
+ * simply returns no reply counts until the user reconnects.
  */
-export const SLACK_USER_SCOPES = ["search:read", "chat:write", "users:read"];
+export const SLACK_USER_SCOPES = [
+  "search:read",
+  "chat:write",
+  "users:read",
+  "channels:history",
+  "groups:history",
+];
 
 export interface SlackGrant {
   accessToken: string;
@@ -208,6 +225,57 @@ export async function exchangeCode(args: {
     },
     "code exchange",
   );
+}
+
+interface SlackUserInfoResponse {
+  ok?: unknown;
+  user?: {
+    name?: unknown;
+    real_name?: unknown;
+    profile?: { display_name?: unknown; real_name?: unknown };
+  };
+}
+
+/**
+ * What the granting member is called in the workspace.
+ *
+ * The grant itself only carries `U…`, and a workspace name alone does not say
+ * *whose* Slack this is — one workspace can be connected as any of its members,
+ * and the search results differ per member. `users:read` is already in the
+ * requested set, so this is one extra call rather than a wider consent screen.
+ *
+ * Best-effort by design: a name is a label, and failing to read it must not
+ * fail a connection whose token is already valid.
+ */
+export async function fetchUserName(args: {
+  accessToken: string;
+  userId: string;
+}): Promise<string | undefined> {
+  try {
+    const url = new URL("https://slack.com/api/users.info");
+    url.searchParams.set("user", args.userId);
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(10_000),
+      headers: { authorization: `Bearer ${args.accessToken}` },
+    });
+    const body = (await response.json()) as SlackUserInfoResponse;
+    if (body.ok !== true) return undefined;
+
+    const profile = body.user?.profile;
+    for (const candidate of [
+      profile?.display_name,
+      profile?.real_name,
+      body.user?.real_name,
+      body.user?.name,
+    ]) {
+      if (typeof candidate === "string" && candidate.trim() !== "") {
+        return candidate.trim();
+      }
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

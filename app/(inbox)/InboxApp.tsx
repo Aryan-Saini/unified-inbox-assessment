@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -9,17 +10,19 @@ import { ComposeDialog } from "./ComposeDialog";
 import { ResultsList } from "./ResultsList";
 import { SearchField } from "./SearchField";
 import { ConnectionsDialog } from "./ConnectionsDialog";
-import { OutboxDialog, type OutboxSend } from "./OutboxDialog";
+import { OutboxPage, type OutboxSend } from "./OutboxPage";
+import { SendFailureDialog } from "./SendFailureDialog";
+import { SendWatcher } from "./SendWatcher";
 import { SettingsDialog } from "./SettingsDialog";
 import { Sidebar } from "./Sidebar";
-import { SourceStatus } from "./SourceStatus";
 import { TypedHeading } from "./TypedHeading";
-import { SOURCES, SOURCE_META } from "./mock-data";
+import { SOURCE_META } from "./mock-data";
 import { SourceBar } from "./SourceBar";
 import type { ComposePrefill, Draft, SearchRecord, Source, UiResult } from "./types";
-import { formatAge } from "./format";
+import { accountTitle, formatAge } from "./format";
 import { useClockMinute } from "./useClock";
 import { useConnections } from "./useConnections";
+import { useEnabledSources } from "./useEnabledSources";
 import { DEFAULT_DEMO, useSearch, type DemoOptions } from "./useSearch";
 import {
   ArchiveIcon,
@@ -33,6 +36,8 @@ interface Toast {
   id: number;
   text: string;
   action?: { label: string; run: () => void };
+  /** `pending` swaps the tick for a spinner — the toast is the progress. */
+  tone?: "ok" | "pending";
 }
 
 /** What the compose dialog is opened on: the result being answered, plus an
@@ -42,18 +47,45 @@ interface ComposeTarget {
   prefill?: ComposePrefill;
 }
 
-export function InboxApp() {
+/**
+ * Which pane the shell is showing. Both are real routes — `/dashboard` and
+ * `/outbox` — rendering one shell so the sidebar, the dialogs and the toast
+ * deck are not built twice and cannot drift.
+ */
+export type InboxView = "search" | "outbox";
+
+export function InboxApp({ view = "search" }: { view?: InboxView }) {
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
-  const [outboxOpen, setOutboxOpen] = useState(false);
   const [demo, setDemo] = useState<DemoOptions>(DEFAULT_DEMO);
   const [compose, setCompose] = useState<ComposeTarget | null>(null);
+  /**
+   * The delivery currently being watched, and the toast reporting it.
+   *
+   * A claimed send finishes on the server, so the shell — not the dialog that
+   * started it — is what follows it: the dialog is gone by then, and closing a
+   * modal must not stop the app caring how the message did.
+   */
+  const [watching, setWatching] = useState<{
+    sendId: Id<"sends">;
+    toastId: number;
+  } | null>(null);
+  /** Who the in-flight send is going to, for the toast that reports it. Held
+   *  outside state because it is only ever read, never rendered. */
+  const watchLabel = useRef("");
+  /** A settled send that did not go out. The one case that still takes a modal. */
+  const [failedSendId, setFailedSendId] = useState<Id<"sends"> | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [text, setText] = useState("");
-  /** Which connectors a search fans out to, driven by the source bar. */
-  const [enabledSources, setEnabledSources] = useState<Source[]>(SOURCES);
+  /**
+   * Which connectors a search fans out to, driven by the source bar and kept
+   * across reloads — turning web off is a standing preference, not a per-visit
+   * one.
+   */
+  const [enabledSources, setEnabledSources] = useEnabledSources();
 
   /**
    * Real connections, real OAuth. `addAccount` and `reconnect` navigate to the
@@ -62,6 +94,7 @@ export function InboxApp() {
    */
   const {
     connections,
+    loading: connectionsLoading,
     addAccount,
     reconnect,
     toggleAccount,
@@ -119,13 +152,55 @@ export function InboxApp() {
 
   const hero = phase === "idle";
 
-  const toast = useCallback((text: string, action?: Toast["action"]) => {
-    const id = (nextId.current += 1);
-    setToasts((prev) => [...prev, { id, text, action }]);
-    setTimeout(
-      () => setToasts((prev) => prev.filter((t) => t.id !== id)),
-      4500,
-    );
+  /**
+   * Whether the source bar is showing the standing preference or the search on
+   * screen.
+   *
+   * The preference is what the *next* search will use, and on the hero it is the
+   * only thing there is to show. Docked on a search, though, the bar describes
+   * *that* search — it fanned out to the sources it fanned out to, and repainting
+   * it with today's preference claims web was off for a search that queried web.
+   *
+   * A toggle is intent about the next search, so it hands the bar back to the
+   * preference — but only for the search it was made on. Recording *which* search
+   * rather than a bare flag is what expires the override when the watched search
+   * changes, without an effect that resets state on every navigation.
+   */
+  const [overrodeOn, setOverrodeOn] = useState<Id<"searches"> | null>(null);
+  const barFollowsPreference = searchId !== null && overrodeOn === searchId;
+
+  const searchSources = useMemo(
+    () => [...new Set(runs.map((run) => run.source))],
+    [runs],
+  );
+  const barSources =
+    hero || barFollowsPreference || searchSources.length === 0
+      ? enabledSources
+      : searchSources;
+
+  /** Returns the id, so a toast that reports something still in progress can be
+   *  taken back down when it settles. */
+  const toast = useCallback(
+    (
+      text: string,
+      action?: Toast["action"],
+      opts?: { tone?: Toast["tone"]; sticky?: boolean },
+    ) => {
+      const id = (nextId.current += 1);
+      setToasts((prev) => [...prev, { id, text, action, tone: opts?.tone }]);
+      // A sticky toast is one whose subject has not finished happening yet;
+      // expiring it on a timer would leave the screen claiming nothing is going
+      // on while a send is still in flight.
+      if (opts?.sticky !== true) {
+        setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4500);
+      }
+      return id;
+    },
+    [],
+  );
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
   // --- Search ------------------------------------------------------------
@@ -138,6 +213,15 @@ export function InboxApp() {
       setText(trimmed);
       setMobileNavOpen(false);
 
+      // Every source off is a state the master switch can reach, so it needs an
+      // answer here. Saying so beats the alternatives: dispatching nothing looks
+      // like a dead button, and falling back to "all of them" would search the
+      // exact sources that were just switched off.
+      if (enabledSources.length === 0) {
+        toast("Every connector is off. Turn one on to search.");
+        return;
+      }
+
       // A connector with every account switched off has nothing to query, so it
       // is dropped from the fan-out as well — otherwise it would report an
       // empty success and look like "no matches".
@@ -146,7 +230,7 @@ export function InboxApp() {
       );
       run(trimmed, dispatchable.length > 0 ? dispatchable : enabledSources);
     },
-    [run, enabledSources, connections],
+    [run, enabledSources, connections, toast],
   );
 
   // --- Connectors --------------------------------------------------------
@@ -157,12 +241,31 @@ export function InboxApp() {
    * explained instead.
    */
   const toggleSource = useCallback((source: Source) => {
+    // A toggle is intent about the *next* search, so the bar stops describing the
+    // one on screen and starts showing the preference again.
+    setOverrodeOn(searchId);
     setEnabledSources((prev) => {
       if (!prev.includes(source)) return [...prev, source];
       if (prev.length === 1) return prev;
       return prev.filter((s) => s !== source);
     });
-  }, []);
+  }, [searchId, setEnabledSources]);
+
+  /**
+   * The switchboard header's master switch: every source, or none.
+   *
+   * This is the one path allowed to land on zero. `toggleSource` still holds the
+   * last source on, because reaching empty one flick at a time is almost always a
+   * miscount rather than an intention — whereas "all off" is unambiguous, and
+   * `startSearch` says so rather than quietly searching everything.
+   */
+  const setAllSources = useCallback(
+    (sources: Source[]) => {
+      setOverrodeOn(searchId);
+      setEnabledSources(sources);
+    },
+    [searchId, setEnabledSources],
+  );
 
   const newSearch = useCallback(() => {
     reset();
@@ -215,9 +318,9 @@ export function InboxApp() {
 
   const disconnect = useCallback(
     (id: string) => {
-      const label = connections.find((c) => c.id === id)?.label ?? "account";
+      const label = accountTitle(connections.find((c) => c.id === id));
       disconnectAccount(id);
-      toast(`Disconnected ${label} — history kept`);
+      toast(`Disconnected ${label}, history kept`);
     },
     [connections, disconnectAccount, toast],
   );
@@ -229,10 +332,10 @@ export function InboxApp() {
    */
   const removeConnection = useCallback(
     (id: string) => {
-      const label = connections.find((c) => c.id === id)?.label ?? "account";
+      const label = accountTitle(connections.find((c) => c.id === id));
       void removeAccount(id)
         .then((deleted) =>
-          toast(deleted ? `Removed ${label}` : `Removed ${label} — past sends keep their history`),
+          toast(deleted ? `Removed ${label}` : `Removed ${label}, past sends keep their history`),
         )
         .catch((err: unknown) =>
           toast(err instanceof Error ? err.message : `Could not remove ${label}`),
@@ -265,7 +368,7 @@ export function InboxApp() {
         `This connection is ${expected}, but you signed in as ${actual}. Add it as another account instead.`,
       );
     } else if (error === "access_denied") {
-      toast("Connection cancelled — nothing was changed");
+      toast("Connection cancelled, nothing was changed");
     } else {
       toast(`Could not connect: ${params.get("oauth_error_detail") ?? error}`);
     }
@@ -302,7 +405,7 @@ export function InboxApp() {
       if (failing?.errorMessage?.includes("[simulated]") === true) {
         const next = { ...demo, slackNeedsReconnect: false };
         setDemo(next);
-        toast("Simulated revocation cleared — re-run to pick the grant back up", {
+        toast("Simulated revocation cleared. Re-run to pick the grant back up", {
           label: "Re-run",
           run: () => rerun(next),
         });
@@ -345,10 +448,12 @@ export function InboxApp() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const meta = e.metaKey || e.ctrlKey;
+      // ⌘K is labelled "New search" on the sidebar button, so it has to *be*
+      // one: clear the field and drop the results on screen rather than
+      // dropping a cursor into the query that produced them.
       if (meta && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        input.current?.focus();
-        input.current?.select();
+        newSearch();
       }
       if (meta && e.key === "\\") {
         e.preventDefault();
@@ -360,11 +465,53 @@ export function InboxApp() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [newSearch]);
 
-  const onSent = useCallback(
-    (draft: Draft) => toast(`Recorded one delivery to ${draft.to}`),
+  /**
+   * A send in progress is a toast, not a screen.
+   *
+   * Sending is not a decision — it is a wait, and a modal spinner over the whole
+   * app is a poor way to say "hold on". The toast says it instead, and the app
+   * stays usable underneath: search something else while it goes.
+   */
+  const onSending = useCallback(
+    ({ sendId, draft }: { sendId: Id<"sends">; draft: Draft }) => {
+      const label = draft.toLabel || draft.to;
+      watchLabel.current = label;
+      const toastId = toast(`Sending to ${label}…`, undefined, {
+        tone: "pending",
+        sticky: true,
+      });
+      setWatching({ sendId, toastId });
+    },
     [toast],
+  );
+
+  /**
+   * The claimed send has settled.
+   *
+   * Delivered is a toast carrying the way to the record rather than restating
+   * it; anything else opens the failure dialog, which is where a person is
+   * actually needed. Either way the pending toast comes down and the watcher
+   * unmounts.
+   */
+  const onSettled = useCallback(
+    (send: OutboxSend) => {
+      setWatching((current) => {
+        if (current !== null) dismissToast(current.toastId);
+        return null;
+      });
+
+      if (send.status === "succeeded") {
+        toast(`Delivered once to ${watchLabel.current}`, {
+          label: "View in outbox",
+          run: () => router.push("/outbox"),
+        });
+      } else {
+        setFailedSendId(send.id);
+      }
+    },
+    [toast, dismissToast, router],
   );
 
   // --- Outbox --------------------------------------------------------------
@@ -375,7 +522,6 @@ export function InboxApp() {
    * stays claimed by the indeterminate delivery, exactly as it should.
    */
   const composeAgain = useCallback((send: OutboxSend) => {
-    setOutboxOpen(false);
     setCompose({
       result: {
         source: send.channel,
@@ -392,6 +538,12 @@ export function InboxApp() {
     });
   }, []);
 
+  /** Back to the search pane, for an action that only makes sense there. A
+   *  no-op when it is already on screen, so the URL is not churned. */
+  const toSearch = useCallback(() => {
+    if (view === "outbox") router.push("/dashboard");
+  }, [router, view]);
+
   const renderSidebar = (sheet: boolean) => (
     <Sidebar
       sheet={sheet}
@@ -407,13 +559,21 @@ export function InboxApp() {
         setText(record.query);
         setMobileNavOpen(false);
         open(record.id as Id<"searches">, record.query);
+        toSearch();
       }}
-      onRerun={rerunFromHistory}
-      onNewSearch={newSearch}
+      onRerun={(record) => {
+        rerunFromHistory(record);
+        toSearch();
+      }}
+      onNewSearch={() => {
+        newSearch();
+        toSearch();
+      }}
       onArchiveToggle={toggleArchive}
+      outboxActive={view === "outbox"}
       onOpenOutbox={() => {
-        setOutboxOpen(true);
         setMobileNavOpen(false);
+        router.push("/outbox");
       }}
       onOpenSettings={() => {
         setSettingsOpen(true);
@@ -449,11 +609,24 @@ export function InboxApp() {
           </button>
         </div>
 
+        {/* The outbox takes the pane rather than covering it. It is a record of
+            what the product did, not a setting — reading it should feel like
+            reading the results, which is why it is a route with the same cards
+            and the same gutters rather than a dialog over them. */}
+        {view === "outbox" ? (
+          <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
+            <OutboxPage onReconnect={reconnect} onComposeAgain={composeAgain} />
+          </div>
+        ) : (
+        <>
         {/* The lift. One flex column. In the hero state this spacer and the
             (empty) results pane below both grow, so the free space splits
             evenly and the field sits dead centre. On search the spacer's
             flex-grow animates to 0 and the field rises to the top. */}
-        <div className="flex min-h-0 flex-1 flex-col">
+        {/* The whole column scrolls, not just the results under the composer,
+            so the scrollbar spans the pane top to bottom the way a search
+            engine's does. The composer sticks to the top of that scroll. */}
+        <div className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto">
           <div
             className={`shrink-0 basis-0 transition-[flex-grow] duration-[600ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
               hero ? "grow" : "grow-0"
@@ -464,7 +637,7 @@ export function InboxApp() {
               separates it from the results, and a full-width line across the
               pane read as a second, competing edge. */}
           <div
-            className={`shrink-0 px-4 transition-[padding] duration-500 sm:px-6 ${
+            className={`sticky top-0 z-10 shrink-0 bg-ink-950 px-4 transition-[padding] duration-500 sm:px-6 ${
               hero ? "" : "pt-2 pb-1"
             }`}
           >
@@ -491,9 +664,10 @@ export function InboxApp() {
                 footer={
                   <div className="flex items-center gap-0.5">
                     <SourceBar
-                      enabled={enabledSources}
+                      enabled={barSources}
                       connections={connections}
                       onToggleSource={toggleSource}
+                      onSetAllSources={setAllSources}
                       onToggleAccount={toggleAccount}
                       onAddAccount={addAccount}
                       onReconnect={reconnect}
@@ -542,51 +716,119 @@ export function InboxApp() {
           </div>
 
           {/* Results */}
-          <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
+          <div className="shrink-0">
             {hero ? null : (
-              <div className="mx-auto w-full max-w-3xl space-y-3 px-4 pt-2 pb-6 sm:px-6">
-                <SourceStatus runs={runs} onReconnect={reconnectSource} />
-                <ResultsList
-                  query={query}
-                  results={results}
-                  runs={runs}
-                  working={working}
-                  elapsed={elapsed}
-                  onReply={(result) => setCompose({ result })}
-                  onReconnect={reconnectSource}
-                  onRetry={retrySource}
-                />
+              // The gutter sits outside the max-width, exactly as it does
+              // around the composer above, so a card and the field it came
+              // from land on the same left and right edge.
+              <div className="px-4 pt-2 pb-6 sm:px-6">
+                <div className="mx-auto w-full max-w-3xl space-y-3">
+                  <ResultsList
+                    query={query}
+                    results={results}
+                    runs={runs}
+                    connections={connections}
+                    working={working}
+                    elapsed={elapsed}
+                    onReply={(result) => setCompose({ result })}
+                    onReconnect={reconnectSource}
+                    onRetry={retrySource}
+                  />
+                </div>
               </div>
             )}
           </div>
+
+          {/* Mirrors the spacer above the composer. The results pane used to do
+              this job by growing, but it can no longer grow now that the column
+              itself is what scrolls. */}
+          <div
+            className={`shrink-0 basis-0 transition-[flex-grow] duration-[600ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              hero ? "grow" : "grow-0"
+            }`}
+          />
         </div>
+        </>
+        )}
       </main>
 
-      {/* Toasts */}
-      <div className="pointer-events-none fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2 px-4">
-        {toasts.map((t) => (
-          <div
-            key={t.id}
-            className="pop-in pointer-events-auto flex items-center gap-3 rounded-xl border border-line-strong bg-ink-850 px-3.5 py-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.6)]"
-          >
-            <CheckIcon className="h-4 w-4 shrink-0 text-emerald-400" />
-            <span className="text-[13px] whitespace-nowrap text-neutral-200">
-              {t.text}
-            </span>
-            {t.action ? (
-              <button
-                onClick={() => {
-                  t.action?.run();
-                  setToasts((prev) => prev.filter((x) => x.id !== t.id));
-                }}
-                className="rounded-md px-2 py-1 text-[12px] font-semibold text-indigo-300 transition-colors hover:bg-indigo-500/10 hover:text-indigo-200"
-              >
-                {t.action.label}
-              </button>
-            ) : null}
-          </div>
-        ))}
+      {/* Toasts. They stack as a deck pinned to one spot rather than growing a
+          column upward, so a burst of them never walks up the screen. */}
+      <div className="pointer-events-none fixed bottom-5 left-1/2 z-50 -translate-x-1/2 px-4">
+        {toasts.map((t, i) => {
+          const depth = toasts.length - 1 - i;
+          return (
+            <div
+              key={t.id}
+              style={{
+                transform: `translateX(-50%) translateY(${-depth * 8}px) scale(${1 - depth * 0.05})`,
+                opacity: depth > 2 ? 0 : 1,
+                zIndex: toasts.length - depth,
+              }}
+              className="pointer-events-auto absolute bottom-0 left-1/2 origin-bottom transition-all duration-200 ease-out"
+            >
+              {/* One line, always. The action is `shrink-0` and the text
+                  truncates instead: an action allowed to wrap turned "View in
+                  outbox" into three stacked words taller than the toast. */}
+              <div className="pop-in flex max-w-[min(92vw,30rem)] items-center gap-2.5 rounded-full border border-line-strong bg-ink-850 py-1.5 pr-1.5 pl-3.5 shadow-[0_12px_40px_rgba(0,0,0,0.6)]">
+                {t.tone === "pending" ? (
+                  <span
+                    role="status"
+                    aria-label="In progress"
+                    className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-neutral-700 border-t-indigo-400"
+                  />
+                ) : (
+                  <CheckIcon className="h-4 w-4 shrink-0 text-emerald-400" />
+                )}
+                <span className="min-w-0 flex-1 truncate py-1 text-[13px] text-neutral-200">
+                  {t.text}
+                </span>
+                {t.action ? (
+                  <button
+                    onClick={() => {
+                      t.action?.run();
+                      setToasts((prev) => prev.filter((x) => x.id !== t.id));
+                    }}
+                    className="shrink-0 rounded-full bg-white/[0.06] px-3 py-1.5 text-[12px] font-semibold whitespace-nowrap text-indigo-300 transition-colors hover:bg-indigo-500/15 hover:text-indigo-200"
+                  >
+                    {t.action.label}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
       </div>
+
+      {/* Before the settings and connections dialogs in the tree, deliberately:
+          a reply whose grant is dead sends you to settings *on top of* the open
+          draft, so fixing the account and closing it leaves you exactly where
+          you were. Same z-index, so later siblings win. */}
+      {/* Keyed on the result: opening a reply to a different row remounts the
+          dialog, which resets the draft — and mints a fresh idempotency key —
+          without an effect to do it. */}
+      {compose ? (
+        <ComposeDialog
+          key={compose.result.id}
+          result={compose.result}
+          accountLabel={
+            connections.find((c) => c.id === compose.result.connectionId)?.label
+          }
+          // Until the list arrives the grant is assumed healthy: an unknown
+          // status is not a broken one, and the send path refuses on its own if
+          // it turns out to be.
+          connectionStatus={
+            connectionsLoading
+              ? "active"
+              : connections.find((c) => c.id === compose.result.connectionId)
+                  ?.status
+          }
+          prefill={compose.prefill}
+          onClose={() => setCompose(null)}
+          onReconnect={() => setSettingsOpen(true)}
+          onSending={onSending}
+        />
+      ) : null}
 
       <ConnectionsDialog
         open={connectionsOpen}
@@ -599,6 +841,34 @@ export function InboxApp() {
         onReconnect={reconnect}
       />
 
+      {watching !== null ? (
+        <SendWatcher sendId={watching.sendId} onSettled={onSettled} />
+      ) : null}
+
+      {/* Failure is the one send outcome that interrupts: it is waiting on a
+          decision, and a toast cannot take one. */}
+      {failedSendId !== null ? (
+        <SendFailureDialog
+          sendId={failedSendId}
+          onClose={() => setFailedSendId(null)}
+          onDelivered={(send) => {
+            setFailedSendId(null);
+            toast(`Delivered once to ${send.to}`, {
+              label: "View in outbox",
+              run: () => router.push("/outbox"),
+            });
+          }}
+          onReconnect={(connectionId) => {
+            setFailedSendId(null);
+            reconnect(connectionId);
+          }}
+          onComposeAgain={(send) => {
+            setFailedSendId(null);
+            composeAgain(send);
+          }}
+        />
+      ) : null}
+
       <SettingsDialog
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -609,26 +879,6 @@ export function InboxApp() {
         onRemove={removeConnection}
       />
 
-      <OutboxDialog
-        open={outboxOpen}
-        onClose={() => setOutboxOpen(false)}
-        connections={connections}
-        onReconnect={reconnect}
-        onComposeAgain={composeAgain}
-      />
-
-      {/* Keyed on the result: opening a reply to a different row remounts the
-          dialog, which resets the draft — and mints a fresh idempotency key —
-          without an effect to do it. */}
-      {compose ? (
-        <ComposeDialog
-          key={compose.result.id}
-          result={compose.result}
-          prefill={compose.prefill}
-          onClose={() => setCompose(null)}
-          onSent={onSent}
-        />
-      ) : null}
     </div>
   );
 }

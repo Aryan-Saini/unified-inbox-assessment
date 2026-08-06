@@ -5,7 +5,7 @@ import { BRAND_LOGO } from "./brand-icons";
 import { SOURCE_META } from "./mock-data";
 import type { Connection, ConnectionStatus, Source } from "./types";
 import { PlusIcon } from "./icons";
-import { Button, StatusPill } from "./ui";
+import { Button, StatusPill, Truncated } from "./ui";
 
 /**
  * Only the account-backed sources appear here. Web has nothing to sign in to,
@@ -15,15 +15,84 @@ import { Button, StatusPill } from "./ui";
 const CONNECTOR_SOURCES = ["gmail", "slack"] as const;
 type ConnectorSource = (typeof CONNECTOR_SOURCES)[number];
 
+/**
+ * The pill states a condition; the button beside it offers the action. The
+ * expired pill used to read "Reconnect", which put the same word twice on one
+ * row — once as a diagnosis and once as a cure — and left the row unable to say
+ * what was actually wrong with the grant.
+ */
 const STATUS: Record<
   ConnectionStatus,
   { tone: "ok" | "warn" | "bad"; label: string }
 > = {
   active: { tone: "ok", label: "Active" },
-  expired: { tone: "warn", label: "Reconnect" },
+  expired: { tone: "warn", label: "Expired" },
   errored: { tone: "bad", label: "Errored" },
   revoked: { tone: "bad", label: "Revoked" },
 };
+
+/**
+ * How many scopes a grant holds, with the list itself on hover.
+ *
+ * A count answers the question the row is actually asking — "is this grant
+ * narrow, and does it still match what the app requests?" — in one short line,
+ * where five printed scopes wrapped the row and buried the account label they
+ * belong to. The names are one hover away for anyone auditing them.
+ *
+ * Google's `https://www.googleapis.com/auth/` prefix is dropped in the tooltip:
+ * it is the same on every Gmail scope, so it is noise in a vertical list.
+ */
+export function ScopeSummary({ scopes }: { scopes: string[] }) {
+  if (scopes.length === 0) return null;
+
+  const names = scopes.map((scope) =>
+    scope.replace(/^https:\/\/www\.googleapis\.com\/auth\//, ""),
+  );
+
+  return (
+    <span
+      title={names.join("\n")}
+      className="mt-0.5 inline-block cursor-help text-[11.5px] text-neutral-500 underline decoration-dotted decoration-neutral-700 underline-offset-2"
+    >
+      {scopes.length} {scopes.length === 1 ? "scope" : "scopes"}
+    </span>
+  );
+}
+
+/**
+ * What a row is called: the account first, then where it lives.
+ *
+ * Slack's label is the *workspace*, and a workspace has many members whose
+ * searches differ — so "aryan-test" alone never said whose Slack this is. The
+ * member leads and the workspace qualifies it: "George at aryan-test". Gmail is
+ * just its address, which is already both halves.
+ */
+export function AccountName({
+  account,
+}: {
+  account: { label: string; accountName?: string };
+}) {
+  // `min-w-0 flex-1` rather than a bare `truncate`: a flex child will not
+  // shrink below its content by default, so a 254-character address — which is
+  // a legal one — pushed the status pill off the row instead of ellipsising.
+  // The name yields, the pill does not, and `Truncated` hands the whole thing
+  // back on hover.
+  const shell = "min-w-0 flex-1 text-[13px] font-medium text-neutral-100";
+
+  if (account.accountName === undefined || account.accountName === "") {
+    return <Truncated text={account.label} className={shell} />;
+  }
+
+  return (
+    <Truncated
+      text={`${account.accountName} at ${account.label}`}
+      className={shell}
+    >
+      {account.accountName}
+      <span className="font-normal text-neutral-400"> at {account.label}</span>
+    </Truncated>
+  );
+}
 
 /** The row-level switch. Label-less; the row it sits in is the label. */
 export function Switch({
@@ -175,36 +244,51 @@ export function ConnectorSwitchboard({
             ) : (
               <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line">
                 {accounts.map((account) => (
+                  // `items-start`, not `items-center`. The left column is two
+                  // lines (name, then scopes) and the right one is a single row
+                  // of controls, so centring the row centred the controls
+                  // against the *pair* — leaving the pill and the switch that
+                  // belong to the same line visibly off each other. Both
+                  // clusters are pinned to the top instead and given the same
+                  // line box, so the first line aligns across the row whether or
+                  // not the account has a Reconnect button under it.
                   <li
                     key={account.id}
-                    className={`flex items-center gap-3 px-3 py-2.5 transition-opacity ${
+                    className={`flex items-start gap-3 px-3 py-2.5 transition-opacity ${
                       connectorOn ? "" : "opacity-50"
                     }`}
                   >
-                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                      <span className="truncate text-[13px] font-medium text-neutral-100">
-                        {account.label}
-                      </span>
-                      <StatusPill tone={STATUS[account.status].tone}>
-                        {STATUS[account.status].label}
-                      </StatusPill>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex h-7 min-w-0 items-center gap-2">
+                        <AccountName account={account} />
+                        <StatusPill tone={STATUS[account.status].tone}>
+                          {STATUS[account.status].label}
+                        </StatusPill>
+                      </div>
+                      {/* What this grant can actually do. Narrow scopes are a
+                          claim worth being able to check rather than trust, and
+                          it is also how you tell a stale grant from a current
+                          one after the requested set changes. */}
+                      <ScopeSummary scopes={account.scopes} />
                     </div>
 
-                    {account.status !== "active" ? (
-                      <Button
-                        variant="ghost"
-                        onClick={() => onReconnect(account.id)}
-                        className="!px-2.5 !py-1.5 !text-[12px]"
-                      >
-                        Reconnect
-                      </Button>
-                    ) : null}
+                    <div className="flex h-7 shrink-0 items-center gap-2">
+                      {account.status !== "active" ? (
+                        <Button
+                          variant="ghost"
+                          onClick={() => onReconnect(account.id)}
+                          className="!px-2.5 !py-1 !text-[12px]"
+                        >
+                          Reconnect
+                        </Button>
+                      ) : null}
 
-                    <Switch
-                      checked={account.enabled}
-                      onChange={() => onToggleAccount(account.id)}
-                      label={`Include ${account.label} in searches`}
-                    />
+                      <Switch
+                        checked={account.enabled}
+                        onChange={() => onToggleAccount(account.id)}
+                        label={`Include ${account.label} in searches`}
+                      />
+                    </div>
                   </li>
                 ))}
               </ul>

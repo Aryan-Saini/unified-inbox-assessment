@@ -3,10 +3,16 @@
   "iconPath": "t3-logo.png",
   "scripts": [
     {
+      "name": "Copy .env.local",
+      "command": "./scripts/link-env-local.sh",
+      "icon": "configure",
+      "runOnWorktreeCreate": true
+    },
+    {
       "name": "Dev",
-      "command": "pnpm dev",
+      "command": "pnpm dev:lan",
       "icon": "play",
-      "previewUrl": "http://localhost:3000",
+      "previewUrl": "https://localhost:3000",
       "autoOpenPreview": true
     },
     {
