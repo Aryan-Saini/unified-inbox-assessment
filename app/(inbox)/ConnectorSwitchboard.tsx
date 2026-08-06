@@ -15,12 +15,18 @@ import { Button, StatusPill, Truncated } from "./ui";
 const CONNECTOR_SOURCES = ["gmail", "slack"] as const;
 type ConnectorSource = (typeof CONNECTOR_SOURCES)[number];
 
+/**
+ * The pill states a condition; the button beside it offers the action. The
+ * expired pill used to read "Reconnect", which put the same word twice on one
+ * row — once as a diagnosis and once as a cure — and left the row unable to say
+ * what was actually wrong with the grant.
+ */
 const STATUS: Record<
   ConnectionStatus,
   { tone: "ok" | "warn" | "bad"; label: string }
 > = {
   active: { tone: "ok", label: "Active" },
-  expired: { tone: "warn", label: "Reconnect" },
+  expired: { tone: "warn", label: "Expired" },
   errored: { tone: "bad", label: "Errored" },
   revoked: { tone: "bad", label: "Revoked" },
 };
@@ -238,14 +244,22 @@ export function ConnectorSwitchboard({
             ) : (
               <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line">
                 {accounts.map((account) => (
+                  // `items-start`, not `items-center`. The left column is two
+                  // lines (name, then scopes) and the right one is a single row
+                  // of controls, so centring the row centred the controls
+                  // against the *pair* — leaving the pill and the switch that
+                  // belong to the same line visibly off each other. Both
+                  // clusters are pinned to the top instead and given the same
+                  // line box, so the first line aligns across the row whether or
+                  // not the account has a Reconnect button under it.
                   <li
                     key={account.id}
-                    className={`flex items-center gap-3 px-3 py-2.5 transition-opacity ${
+                    className={`flex items-start gap-3 px-3 py-2.5 transition-opacity ${
                       connectorOn ? "" : "opacity-50"
                     }`}
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="flex min-w-0 items-center gap-2">
+                      <div className="flex h-7 min-w-0 items-center gap-2">
                         <AccountName account={account} />
                         <StatusPill tone={STATUS[account.status].tone}>
                           {STATUS[account.status].label}
@@ -258,21 +272,23 @@ export function ConnectorSwitchboard({
                       <ScopeSummary scopes={account.scopes} />
                     </div>
 
-                    {account.status !== "active" ? (
-                      <Button
-                        variant="ghost"
-                        onClick={() => onReconnect(account.id)}
-                        className="!px-2.5 !py-1.5 !text-[12px]"
-                      >
-                        Reconnect
-                      </Button>
-                    ) : null}
+                    <div className="flex h-7 shrink-0 items-center gap-2">
+                      {account.status !== "active" ? (
+                        <Button
+                          variant="ghost"
+                          onClick={() => onReconnect(account.id)}
+                          className="!px-2.5 !py-1 !text-[12px]"
+                        >
+                          Reconnect
+                        </Button>
+                      ) : null}
 
-                    <Switch
-                      checked={account.enabled}
-                      onChange={() => onToggleAccount(account.id)}
-                      label={`Include ${account.label} in searches`}
-                    />
+                      <Switch
+                        checked={account.enabled}
+                        onChange={() => onToggleAccount(account.id)}
+                        label={`Include ${account.label} in searches`}
+                      />
+                    </div>
                   </li>
                 ))}
               </ul>

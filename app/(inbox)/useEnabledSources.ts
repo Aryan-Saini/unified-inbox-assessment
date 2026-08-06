@@ -15,7 +15,14 @@ function parse(raw: string | null): Source[] | null {
     // preference must not be able to resurrect a connector the app has dropped,
     // and this pins the order too.
     const kept = SOURCES.filter((s) => value.includes(s));
-    return kept.length > 0 ? kept : null;
+
+    // An empty array is a preference, not a broken read. Treating it as broken
+    // is what made the switchboard's "All off" appear to do nothing: it wrote
+    // `[]`, the next read discarded it, and the switch snapped straight back on.
+    // A *non*-empty array that survives none of the filtering is genuinely
+    // stale — every source in it has since been removed — and still falls back.
+    if (value.length > 0 && kept.length === 0) return null;
+    return kept;
   } catch {
     return null;
   }
