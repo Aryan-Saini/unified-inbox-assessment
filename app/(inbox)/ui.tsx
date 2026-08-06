@@ -2,8 +2,89 @@
 
 /** Shared primitives: the modal shell, chips and toggles. */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { CloseIcon } from "./icons";
+
+/**
+ * A truncated label that shows the whole thing on hover.
+ *
+ * Every long name in this UI is clamped to a width — an address may be 254
+ * characters and a workspace may be named without spaces — which leaves the
+ * ellipsis as the only account of what was cut. This gives it back, and only
+ * when there is something to give back: the tooltip is suppressed unless the
+ * text is actually overflowing its box, so a name that fits does not sprout a
+ * bubble for no reason.
+ *
+ * `title` was the cheap version and is deliberately not used: the OS tooltip
+ * waits about a second, cannot be styled to match, and — the reason it had to
+ * go — is drawn by the platform in a way that made it useless for a name you
+ * are trying to *read*, wrapping badly and vanishing on the slightest move.
+ *
+ * Rendered through a portal because these labels sit inside `overflow-hidden`
+ * lists and dialogs, which would clip a bubble positioned inside them.
+ */
+export function Truncated({
+  text,
+  className = "",
+  children,
+}: {
+  /** The full value, shown on hover. */
+  text: string;
+  className?: string;
+  /** Rendered in place of `text` when the visible form is richer than the
+   *  string — "George at aryan-test", an address hung off a name. */
+  children?: ReactNode;
+}) {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  const [at, setAt] = useState<{ left: number; top: number } | null>(null);
+
+  const show = () => {
+    const el = ref.current;
+    if (el === null) return;
+    // Nothing was cut, so there is nothing to reveal.
+    if (el.scrollWidth <= el.clientWidth + 1) return;
+    const r = el.getBoundingClientRect();
+    setAt({ left: r.left, top: r.top });
+  };
+
+  const hide = () => setAt(null);
+
+  return (
+    <>
+      <span
+        ref={ref}
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onFocus={show}
+        onBlur={hide}
+        tabIndex={0}
+        className={`truncate ${className}`}
+      >
+        {children ?? text}
+      </span>
+
+      {at === null || typeof document === "undefined"
+        ? null
+        : createPortal(
+            <span
+              role="tooltip"
+              style={{
+                // Clamped to the viewport on both axes: these labels sit at the
+                // right-hand edge of cards and near the top of dialogs, and a
+                // bubble that renders off-screen is the same as no bubble.
+                left: Math.max(8, Math.min(at.left, window.innerWidth - 448)),
+                top: Math.max(8, at.top - 10),
+              }}
+              className="pointer-events-none fixed z-[80] max-w-[27rem] -translate-y-full rounded-lg border border-line-strong bg-ink-900 px-2.5 py-1.5 text-[12px] leading-relaxed break-words text-neutral-100 shadow-[0_12px_40px_rgba(0,0,0,0.7)]"
+            >
+              {text}
+            </span>,
+            document.body,
+          )}
+    </>
+  );
+}
 
 /**
  * Every open dialog, innermost last.

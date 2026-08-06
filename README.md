@@ -446,10 +446,16 @@ throwing. The only symptom is "Checking your session…" forever; `localhost` is
 exempt, which is why it only shows up on a second device. (The gates now give up
 after six seconds and say so, rather than spinning.)
 
-`dev:lan` resolves this machine's LAN address and serves HTTPS on it with a
-mkcert certificate, which makes it a secure context. The phone will warn about the
-certificate once — accepting it is enough. It binds to that one interface, so
-`localhost` stops answering while it runs.
+`dev:lan` resolves this machine's LAN address, generates one mkcert certificate
+covering it *and* `localhost`, and serves HTTPS on every interface — so
+`https://localhost:3000` still works for desktop while the phone gets a secure
+origin. It prints the address to open; that first visit warns about the
+certificate, and accepting it is enough. `allowedDevOrigins` in
+[`next.config.ts`](next.config.ts) is detected the same way, without which the
+phone's `/_next/*` requests come back 403.
+
+The t3 **Dev** script runs `dev:lan`. Plain `pnpm dev` is unchanged, for
+Codespaces and for working without a certificate.
 
 ### `.env.local` (Next.js)
 

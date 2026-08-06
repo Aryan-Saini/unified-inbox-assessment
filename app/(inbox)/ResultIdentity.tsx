@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { BRAND_LOGO } from "./brand-icons";
+import { Truncated } from "./ui";
 import type { Source, UiResult } from "./types";
 
 /**
@@ -274,6 +275,7 @@ export function ResultIdentity({
   source,
   label,
   name,
+  fullName,
   where,
   avatarUrl,
   favicon,
@@ -284,6 +286,9 @@ export function ResultIdentity({
   label: string;
   /** Overrides `label` for display, so a row can hang the address off the name. */
   name?: React.ReactNode;
+  /** The plain-text form of `name`, for the hover tooltip — a node cannot be
+   *  read back out, and it is the *whole* line the tooltip has to show. */
+  fullName?: string;
   where: string;
   avatarUrl?: string;
   favicon?: string;
@@ -309,15 +314,16 @@ export function ResultIdentity({
           land where a name stops being readable rather than where the card
           runs out. The full value is on the element's title. */}
       <span className="min-w-0 flex-1">
-        <span className="block max-w-[30rem] truncate text-[13px] leading-tight text-neutral-200">
-          {name ?? label}
-        </span>
-        <span
-          title={where}
-          className="mt-0.5 block max-w-[30rem] truncate text-[11.5px] leading-tight text-neutral-500"
+        <Truncated
+          text={fullName ?? label}
+          className="block max-w-[30rem] text-[13px] leading-tight text-neutral-200"
         >
-          {where}
-        </span>
+          {name ?? label}
+        </Truncated>
+        <Truncated
+          text={where}
+          className="mt-0.5 block max-w-[30rem] text-[11.5px] leading-tight text-neutral-500"
+        />
       </span>
     </>
   );

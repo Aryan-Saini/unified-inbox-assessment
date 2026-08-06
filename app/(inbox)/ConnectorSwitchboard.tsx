@@ -5,7 +5,7 @@ import { BRAND_LOGO } from "./brand-icons";
 import { SOURCE_META } from "./mock-data";
 import type { Connection, ConnectionStatus, Source } from "./types";
 import { PlusIcon } from "./icons";
-import { Button, StatusPill } from "./ui";
+import { Button, StatusPill, Truncated } from "./ui";
 
 /**
  * Only the account-backed sources appear here. Web has nothing to sign in to,
@@ -66,25 +66,25 @@ export function AccountName({
 }: {
   account: { label: string; accountName?: string };
 }) {
-  // `min-w-0 flex-1 truncate` rather than a bare `truncate`: a flex child will
-  // not shrink below its content by default, so a 254-character address —
-  // which is a legal one — pushed the status pill off the row instead of
-  // ellipsising. The name yields, the pill does not.
-  const shell = "min-w-0 flex-1 truncate text-[13px] font-medium text-neutral-100";
+  // `min-w-0 flex-1` rather than a bare `truncate`: a flex child will not
+  // shrink below its content by default, so a 254-character address — which is
+  // a legal one — pushed the status pill off the row instead of ellipsising.
+  // The name yields, the pill does not, and `Truncated` hands the whole thing
+  // back on hover.
+  const shell = "min-w-0 flex-1 text-[13px] font-medium text-neutral-100";
 
   if (account.accountName === undefined || account.accountName === "") {
-    return (
-      <span className={shell} title={account.label}>
-        {account.label}
-      </span>
-    );
+    return <Truncated text={account.label} className={shell} />;
   }
 
   return (
-    <span className={shell} title={`${account.accountName} at ${account.label}`}>
+    <Truncated
+      text={`${account.accountName} at ${account.label}`}
+      className={shell}
+    >
       {account.accountName}
       <span className="font-normal text-neutral-400"> at {account.label}</span>
-    </span>
+    </Truncated>
   );
 }
 

@@ -10,9 +10,9 @@
     },
     {
       "name": "Dev",
-      "command": "pnpm dev",
+      "command": "pnpm dev:lan",
       "icon": "play",
-      "previewUrl": "http://localhost:3000",
+      "previewUrl": "https://localhost:3000",
       "autoOpenPreview": true
     },
     {

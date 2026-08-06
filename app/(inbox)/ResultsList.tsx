@@ -322,6 +322,7 @@ function ResultCard({
             seed={isWeb ? result.url : address}
             where={whereLine(result, account?.label)}
             label={who}
+            fullName={`${isSent ? "to " : ""}${who}${sender ? ` <${sender}>` : ""}`}
             name={
               <>
                 {/* "to" rather than a pill, because it is the grammar of the
