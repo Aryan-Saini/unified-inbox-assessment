@@ -368,13 +368,23 @@ export function ComposeDialog({
             <Button variant="ghost" onClick={() => setStep("compose")}>
               Back to draft
             </Button>
+            {/* The button names the recipient — that is the confirm gate's
+                whole promise — but a recipient may be 254 characters, and
+                interpolating one turned the primary action into a four-line
+                block of address. The verb and the ellipsised name stay on one
+                line; the payload table directly above shows the address in
+                full, which is where "check the recipient" is actually done. */}
             <Button
               variant="primary"
               disabled={!reviewMatches || busy}
               onClick={() => void confirmSend()}
+              title={isSlack ? `Post to ${shownTo}` : `Send to ${shownTo}`}
+              className="min-w-0 max-w-full"
             >
-              <CheckIcon className="h-4 w-4" />
-              {isSlack ? `Post to ${shownTo}` : `Send to ${shownTo}`}
+              <CheckIcon className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 truncate">
+                {isSlack ? `Post to ${shownTo}` : `Send to ${shownTo}`}
+              </span>
             </Button>
           </>
         ) : null
