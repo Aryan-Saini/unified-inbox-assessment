@@ -4,6 +4,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useKeyboardInset } from "../useKeyboardInset";
 import { CloseIcon } from "./icons";
 
 /**
@@ -159,6 +160,13 @@ export function Modal({
 }) {
   const panel = useRef<HTMLDivElement>(null);
 
+  // `fixed inset-0` is the *layout* viewport, which iOS does not shrink for the
+  // keyboard — so a bottom sheet keeps its footer at the bottom of the window,
+  // under the keys. The dialogs that take text are the ones whose footer holds
+  // Send and Confirm, which is the worst button in the app to put out of reach.
+  // Padding the overlay moves the sheet's floor up to the top of the keyboard.
+  const keyboard = useKeyboardInset();
+
   // Read through a ref so the effect below depends on `open` alone: callers pass
   // an inline arrow, and re-running on every render would keep re-stacking this
   // dialog over whatever was opened on top of it.
@@ -194,6 +202,7 @@ export function Modal({
       className={`fixed inset-0 z-50 flex justify-center sm:items-center ${
         mobileFullScreen ? "items-stretch" : "items-end"
       }`}
+      style={keyboard === 0 ? undefined : { paddingBottom: keyboard }}
     >
       <button
         aria-label="Close dialog"
@@ -208,10 +217,15 @@ export function Modal({
         tabIndex={-1}
         className={`pop-in relative flex w-full ${width} flex-col overflow-hidden border-line bg-ink-900 outline-none sm:max-h-[92vh] sm:rounded-2xl sm:border sm:shadow-[0_24px_80px_rgba(0,0,0,0.7)] ${
           mobileFullScreen
-            ? // `sm:h-auto` is load-bearing: without it the phone's full-height
-              // panel persists on desktop and the box towers over its content.
-              "h-dvh rounded-none sm:h-auto"
-            : "max-h-[92vh] rounded-t-2xl border shadow-[0_-8px_60px_rgba(0,0,0,0.6)]"
+            ? // `h-full` rather than `h-dvh`: it resolves against the overlay's
+              // content box, which is the window *minus* the keyboard, where
+              // `dvh` is the window regardless. `sm:h-auto` is load-bearing too —
+              // without it the phone's full-height panel persists on desktop and
+              // the box towers over its content.
+              "h-full rounded-none sm:h-auto"
+            : // Whichever is shorter: the sheet's usual 92% peek, or all of the
+              // room the keyboard has left.
+              "max-h-[min(92vh,100%)] rounded-t-2xl border shadow-[0_-8px_60px_rgba(0,0,0,0.6)]"
         }`}
       >
         <header className="flex items-start gap-3 border-b border-line px-5 py-4">

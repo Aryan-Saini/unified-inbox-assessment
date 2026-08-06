@@ -443,9 +443,21 @@ export function LoginForm() {
                   : "Enter the code we emailed you."}
           </Hint>
           {mfaStrategy === "backup_code" ? (
+            // A backup code is a code too, and left as a plain text box the
+            // phone capitalised its first letter and offered spelling
+            // corrections for it — on a string where every character is load
+            // bearing. Not `inputMode="numeric"`: Clerk's backup codes are
+            // alphanumeric, so this one wants the full keyboard.
             <input
               autoFocus
               required
+              type="text"
+              name="backup-code"
+              autoComplete="one-time-code"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              enterKeyHint="go"
               value={code}
               onChange={(e) => setCode(e.target.value.trim())}
               placeholder="Backup code"
@@ -672,11 +684,25 @@ function CodeInput({
       onClick={() => inputRef.current?.focus()}
       role="presentation"
     >
+      {/* Everything here is one instruction to the phone: this is a one-time
+          code. `autoComplete` alone was not enough — iOS reads the field's
+          `name` and `pattern` too, and without them it classified this as an
+          ordinary text box and offered the password/card/address bar over the
+          keys instead of the code. `autoCorrect`, `autoCapitalize` and
+          `spellCheck` turn off the suggestion strip that a text box also earns,
+          and `enterKeyHint` makes the return key say what submitting does. */}
       <input
         ref={inputRef}
         autoFocus
+        type="text"
+        name="one-time-code"
         inputMode="numeric"
+        pattern="[0-9]*"
         autoComplete="one-time-code"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        enterKeyHint="go"
         maxLength={CODE_LENGTH}
         value={value}
         onChange={(e) =>
