@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { BRAND_LOGO } from "./brand-icons";
 import {
   ResultIdentity,
@@ -273,6 +273,49 @@ function ResultCard({
 }) {
   const meta = SOURCE_META[result.source];
 
+  /**
+   * Touch has no hover, so the actions this card reveals on hover were simply
+   * unreachable on a phone — and the tap that should have revealed them opened
+   * the message in a new tab instead, which is the one thing a reader scanning
+   * a list does not want. On a device without hover, the first tap on the card
+   * reveals Reply and Open; the links still work, they are just no longer what
+   * an accidental tap does. Nothing changes where hover exists.
+   */
+  const [revealed, setRevealed] = useState(false);
+
+  /**
+   * Whether the gesture that is about to produce a click began as a touch, and
+   * whether the actions were already showing when it began.
+   *
+   * The pointer event is the signal rather than `(hover: none)`, because the
+   * media query describes the *device* and this is a question about the
+   * gesture: a hybrid machine — a touchscreen laptop, an iPad with a trackpad —
+   * reports hover support and still gets tapped. `pointerdown` runs before the
+   * click it precedes, so both facts are known by the time the link has to
+   * decide whether to navigate.
+   */
+  const fromTouch = useRef(false);
+  const wasRevealed = useRef(false);
+
+  const noteGesture = (event: React.PointerEvent) => {
+    if (event.pointerType === "mouse") return;
+    fromTouch.current = true;
+    // Captured before the state change below, so the tap that *does* the
+    // revealing is not also the tap that acts on what it revealed.
+    wasRevealed.current = revealed;
+    setRevealed(true);
+  };
+
+  /**
+   * Swallow a tap that would navigate, and let the reveal stand instead — but
+   * only the first one. Once the card is showing its actions, a tap on the link
+   * is a tap on a link again.
+   */
+  const interceptTap = (event: React.MouseEvent) => {
+    if (!fromTouch.current || wasRevealed.current) return;
+    event.preventDefault();
+  };
+
   /** Chat, i.e. a source whose rows are messages with no subject of their own. */
   const isMessage = result.source === "slack";
   const isWeb = result.source === "web";
@@ -302,7 +345,12 @@ function ResultCard({
     // Same shell as the search field — `border-line-strong` on `bg-ink-850`,
     // rounded-2xl — so the composer and the rows it produced read as one
     // surface rather than two different card styles.
-    <article className="rise-in group relative rounded-2xl border border-line-strong bg-ink-850 transition-colors duration-300 hover:border-neutral-600">
+    <article
+      onPointerDown={noteGesture}
+      // Readable from a test without reaching into React's internals.
+      data-revealed={revealed}
+      className="rise-in group relative rounded-2xl border border-line-strong bg-ink-850 transition-colors duration-300 hover:border-neutral-600"
+    >
       <div className="px-4 py-3.5">
         {/* A search-engine result row: who it came from and where it lives sit
             beside the brand mark, then the title as the link, then the snippet.
@@ -371,6 +419,7 @@ function ResultCard({
             href={result.url}
             target="_blank"
             rel="noreferrer"
+            onClick={interceptTap}
             className="mt-2 block line-clamp-3 text-[14px] leading-relaxed text-neutral-100 decoration-neutral-600 underline-offset-2 hover:underline"
           >
             <Highlight text={result.snippet} tokens={tokens} />
@@ -385,6 +434,7 @@ function ResultCard({
                 href={result.url}
                 target="_blank"
                 rel="noreferrer"
+                onClick={interceptTap}
                 className="underline-offset-2 hover:underline"
               >
                 <Highlight text={result.title} tokens={tokens} />
@@ -424,7 +474,11 @@ function ResultCard({
             </a>
           ) : null}
 
-          <span className="ml-auto flex shrink-0 items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          <span
+            className={`ml-auto flex shrink-0 items-center gap-1.5 transition-opacity group-hover:opacity-100 focus-within:opacity-100 ${
+              revealed ? "opacity-100" : "opacity-0"
+            }`}
+          >
             {result.replyTo ? (
               <button
                 onClick={onReply}
