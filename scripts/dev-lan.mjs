@@ -27,6 +27,7 @@
 // trusted on this Mac, not there. Accepting it is enough — a browser treats an
 // origin whose certificate you accepted as secure, which is the whole point.
 import { spawn } from "node:child_process";
+import { createServer } from "node:net";
 // Next does not re-export this, so it is a deep import into a pinned version.
 // It breaks loudly at startup rather than quietly, which is the tolerable kind.
 import { createSelfSignedCertificate } from "next/dist/lib/mkcert.js";
@@ -39,6 +40,41 @@ if (!host) {
   process.exit(1);
 }
 
+const args = process.argv.slice(2);
+
+/**
+ * The port Next would land on, settled here rather than left to it.
+ *
+ * Next picks the next free port silently when the requested one is taken, so
+ * printing the address for the phone before it starts means printing a guess.
+ * Claiming the port up front makes the address we print the address it serves.
+ */
+function requestedPort() {
+  const flag = args.findIndex((arg) => arg === "-p" || arg === "--port");
+  const explicit = flag === -1 ? process.env.PORT : args[flag + 1];
+  const port = Number(explicit);
+  return Number.isInteger(port) && port > 0 ? port : 3000;
+}
+
+function isFree(port) {
+  return new Promise((resolve) => {
+    const probe = createServer();
+    probe.once("error", () => resolve(false));
+    probe.once("listening", () => probe.close(() => resolve(true)));
+    probe.listen(port, "0.0.0.0");
+  });
+}
+
+let port = requestedPort();
+while (!(await isFree(port))) port += 1;
+
+// Read above and re-added below as the settled value, so a `-p` that was taken
+// does not come through twice and win back the port we just moved off.
+const passThrough = args.filter((arg, i) => {
+  const flag = args[i - 1];
+  return arg !== "-p" && arg !== "--port" && flag !== "-p" && flag !== "--port";
+});
+
 // Always covers localhost, 127.0.0.1 and ::1 in addition to what it is passed.
 // The first run downloads mkcert and installs its root CA, which prompts for a
 // password; later runs are silent. It regenerates the leaf each time rather than
@@ -50,20 +86,27 @@ if (!certificate) {
   process.exit(1);
 }
 
-console.log(`Phone: https://${host} — accept the certificate warning once.`);
+console.log(`\nPhone: https://${host}:${port} — accept the certificate warning once.\n`);
+
+// The `next` binary by path rather than by name through a shell: `shell: true`
+// concatenates rather than escapes, and one of these arguments is a filesystem
+// path from outside this script.
+const next = new URL("../node_modules/.bin/next", import.meta.url).pathname;
 
 spawn(
-  "next",
+  next,
   [
     "dev",
     "-H",
     "0.0.0.0",
+    "-p",
+    String(port),
     "--experimental-https",
     "--experimental-https-key",
     certificate.key,
     "--experimental-https-cert",
     certificate.cert,
-    ...process.argv.slice(2),
+    ...passThrough,
   ],
-  { stdio: "inherit", shell: true },
+  { stdio: "inherit" },
 ).on("exit", (code) => process.exit(code ?? 0));

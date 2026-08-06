@@ -2,7 +2,7 @@
 
 /** Shared primitives: the modal shell, chips and toggles. */
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { CloseIcon } from "./icons";
 
@@ -37,6 +37,8 @@ export function Truncated({
   children?: ReactNode;
 }) {
   const ref = useRef<HTMLSpanElement | null>(null);
+  const bubble = useRef<HTMLSpanElement | null>(null);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const [at, setAt] = useState<{ left: number; top: number } | null>(null);
 
   const show = () => {
@@ -44,11 +46,43 @@ export function Truncated({
     if (el === null) return;
     // Nothing was cut, so there is nothing to reveal.
     if (el.scrollWidth <= el.clientWidth + 1) return;
-    const r = el.getBoundingClientRect();
-    setAt({ left: r.left, top: r.top });
+    setAnchor(el.getBoundingClientRect());
   };
 
-  const hide = () => setAt(null);
+  const hide = () => {
+    setAnchor(null);
+    setAt(null);
+  };
+
+  /**
+   * Above by preference, below when there is no room above.
+   *
+   * Preference rather than rule, because these labels are the *first* line of
+   * a card and several of them sit within a bubble's height of the top of the
+   * viewport — a tooltip that only ever renders upward is drawn off-screen
+   * there, which is the same as not having one. The height is measured rather
+   * than guessed: the text wraps, so a 254-character address is five lines and
+   * a workspace name is two.
+   *
+   * `useLayoutEffect` so the measure-then-place happens before paint; the first
+   * pass renders it hidden off-screen, and nothing flickers.
+   */
+  useLayoutEffect(() => {
+    const el = bubble.current;
+    if (anchor === null || el === null) return;
+
+    const gap = 8;
+    const { offsetWidth: w, offsetHeight: h } = el;
+    const above = anchor.top - gap - h;
+
+    setAt({
+      left: Math.max(8, Math.min(anchor.left, window.innerWidth - w - 8)),
+      top:
+        above >= 8
+          ? above
+          : Math.min(anchor.bottom + gap, window.innerHeight - h - 8),
+    });
+  }, [anchor]);
 
   return (
     <>
@@ -64,19 +98,20 @@ export function Truncated({
         {children ?? text}
       </span>
 
-      {at === null || typeof document === "undefined"
+      {anchor === null || typeof document === "undefined"
         ? null
         : createPortal(
             <span
+              ref={bubble}
               role="tooltip"
-              style={{
-                // Clamped to the viewport on both axes: these labels sit at the
-                // right-hand edge of cards and near the top of dialogs, and a
-                // bubble that renders off-screen is the same as no bubble.
-                left: Math.max(8, Math.min(at.left, window.innerWidth - 448)),
-                top: Math.max(8, at.top - 10),
-              }}
-              className="pointer-events-none fixed z-[80] max-w-[27rem] -translate-y-full rounded-lg border border-line-strong bg-ink-900 px-2.5 py-1.5 text-[12px] leading-relaxed break-words text-neutral-100 shadow-[0_12px_40px_rgba(0,0,0,0.7)]"
+              style={
+                at === null
+                  ? // First pass: laid out at full width, off-screen, so it can
+                    // be measured before it is placed.
+                    { left: -9999, top: 0, visibility: "hidden" }
+                  : { left: at.left, top: at.top }
+              }
+              className="pointer-events-none fixed z-[80] max-w-[27rem] rounded-lg border border-line-strong bg-ink-900 px-2.5 py-1.5 text-[12px] leading-relaxed break-words text-neutral-100 shadow-[0_12px_40px_rgba(0,0,0,0.7)]"
             >
               {text}
             </span>,
