@@ -56,7 +56,11 @@ function ConnectionRow({
       <Logo className="mt-0.5 h-4 w-4 shrink-0" />
 
       <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        {/* No wrapping. The name is the only thing on this row that can be
+            arbitrarily long, so it is the only thing that gives way — a wrapped
+            row put the status pill on a line of its own and made every long
+            account two rows tall. */}
+        <div className="flex min-w-0 items-center gap-2">
           <AccountName account={connection} />
           <StatusPill tone={TONE[connection.status]}>
             {connection.status}

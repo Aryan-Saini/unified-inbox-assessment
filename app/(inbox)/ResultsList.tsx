@@ -12,6 +12,7 @@ import {
 import { SOURCE_META } from "./mock-data";
 import type { Connection, Source, SourceRun, UiResult } from "./types";
 import {
+  AlertIcon,
   ClockIcon,
   ExternalIcon,
   PlugIcon,
@@ -125,8 +126,14 @@ function SourceChip({
           </span>
         ) : null}
 
+        {/* A hazard mark rather than the words "needs reconnect": the
+            Reconnect button beside it already says what the state is and what
+            to do about it, so the label was the same sentence twice, in the
+            widest form available. */}
         {run.status === "needs_reconnect" ? (
-          <span className="text-amber-200">needs reconnect</span>
+          <span role="img" aria-label={`${meta.name} needs reconnecting`}>
+            <AlertIcon className="h-3.5 w-3.5 text-amber-300" />
+          </span>
         ) : null}
 
         {run.status === "failed" ? (

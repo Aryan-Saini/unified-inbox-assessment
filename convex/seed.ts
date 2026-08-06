@@ -73,8 +73,14 @@ const LONG = {
   /** A Slack workspace name with no spaces to wrap on. */
   workspace: "Northwind-Trading-International-Logistics-and-Freight-Forwarding",
   member: "Alexandra Constantinopoulos-Featherstonehaugh",
-  /** 254 characters, the practical maximum for an address. */
-  address: `${"a".repeat(64)}@${"very-long-subdomain.".repeat(8)}example.com`,
+  /**
+   * Exactly 254 characters: a 64-character local part (the RFC 5321 maximum)
+   * plus a domain taking it to the longest address that is actually
+   * deliverable. `drafts.ts` accepts up to 320, the cap on the whole path, so
+   * this is the longest a real recipient can be rather than the longest the
+   * validator allows.
+   */
+  address: `${"a".repeat(64)}@${"very-long-subdomain.".repeat(8)}${"x".repeat(17)}.example.com`,
   channel: "#q3-planning-logistics-and-freight-forwarding-escalations",
   /** At the 988-character subject cap. */
   subject: `Re: ${"Escalation on the Q3 logistics review and the freight-forwarding contract renewal, including the outstanding invoice reconciliation. ".repeat(7)}`.slice(0, 988),

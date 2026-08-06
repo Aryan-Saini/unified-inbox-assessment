@@ -433,6 +433,24 @@ the branch. `./scripts/link-env-local.sh` copies the main checkout's copy in;
 Everything in `.env.local` is read by **Next.js**. Everything the backend needs is
 set on the **Convex deployment**, which is a separate environment.
 
+### Opening it on a phone
+
+```bash
+pnpm dev:lan                   # instead of pnpm dev
+```
+
+`pnpm dev` over the LAN — `http://192.168.x.x:3000` — cannot sign anyone in. That
+origin is not a *secure context*, so the browser withholds `crypto.subtle` and
+`crypto.randomUUID`, and clerk-js stops before its first Frontend API call without
+throwing. The only symptom is "Checking your session…" forever; `localhost` is
+exempt, which is why it only shows up on a second device. (The gates now give up
+after six seconds and say so, rather than spinning.)
+
+`dev:lan` resolves this machine's LAN address and serves HTTPS on it with a
+mkcert certificate, which makes it a secure context. The phone will warn about the
+certificate once — accepting it is enough. It binds to that one interface, so
+`localhost` stops answering while it runs.
+
 ### `.env.local` (Next.js)
 
 | Variable | Purpose |

@@ -301,11 +301,21 @@ export function ResultIdentity({
         seed={seed}
       />
 
+      {/* Both lines truncate, and both are capped well short of the row.
+          Truncation alone only stops the text at the far edge, so a
+          254-character address — or a workspace named without spaces — ran the
+          full width of the card before ellipsising, and the timestamp on the
+          right was the only thing that stopped it. A cap makes the ellipsis
+          land where a name stops being readable rather than where the card
+          runs out. The full value is on the element's title. */}
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] leading-tight text-neutral-200">
+        <span className="block max-w-[30rem] truncate text-[13px] leading-tight text-neutral-200">
           {name ?? label}
         </span>
-        <span className="mt-0.5 block truncate text-[11.5px] leading-tight text-neutral-500">
+        <span
+          title={where}
+          className="mt-0.5 block max-w-[30rem] truncate text-[11.5px] leading-tight text-neutral-500"
+        >
           {where}
         </span>
       </span>

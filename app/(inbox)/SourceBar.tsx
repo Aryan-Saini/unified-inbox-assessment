@@ -120,9 +120,11 @@ export function SourceBar({
   const on = CONNECTOR_SOURCES.filter((s) => enabled.includes(s));
   const webOn = enabled.includes("web");
   const anyOn = enabled.length > 0;
-  const needsAttention = connections.filter(
-    (c) => c.status !== "active" && c.enabled,
-  ).length;
+  // Any grant that is not active, switched on or not. A dead account that
+  // happens to be toggled off is still a dead account — it cannot be used until
+  // it is reconnected, and hiding that until someone switches it on is how you
+  // discover a revoked grant in the middle of a search instead of before one.
+  const needsAttention = connections.filter((c) => c.status !== "active").length;
 
   // Name the connector when there is only one; count them otherwise. "All
   // connectors" is worth saying explicitly — it is the default state.
@@ -177,10 +179,20 @@ export function SourceBar({
 
         <span>{label}</span>
 
+        {/* A hazard mark and nothing else. What is wrong, with which account,
+            and the button that fixes it are all one click away inside — a count
+            on the trigger only raises the question the panel answers. */}
         {needsAttention > 0 ? (
-          <span className="flex items-center gap-1 rounded-md bg-amber-400/15 px-1.5 py-px text-[10.5px] font-semibold text-amber-300">
-            <AlertIcon className="h-2.5 w-2.5" />
-            {needsAttention}
+          <span
+            role="img"
+            aria-label={`${needsAttention} ${
+              needsAttention === 1 ? "account needs" : "accounts need"
+            } attention`}
+            title={`${needsAttention} ${
+              needsAttention === 1 ? "account needs" : "accounts need"
+            } attention`}
+          >
+            <AlertIcon className="h-3.5 w-3.5 text-amber-300" />
           </span>
         ) : null}
 

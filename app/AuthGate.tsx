@@ -1,15 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { SignOutButton, useAuth } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { AuthSplash } from "./AuthSplash";
+import { AuthTrouble } from "./AuthTrouble";
 import { SIGNED_OUT_PARAM } from "./authParams";
 import { useHardRedirect } from "./useHardRedirect";
-
-/** How long a handshake may take before we stop calling it "loading". */
-const PATIENCE_MS = 6000;
+import { useStalled } from "./useStalled";
 
 /** Module scope so the params object is stable across renders. */
 const SIGNED_OUT_MARK = { [SIGNED_OUT_PARAM]: "1" };
@@ -29,8 +27,9 @@ const SIGNED_OUT_MARK = { [SIGNED_OUT_PARAM]: "1" };
  * has not persisted yet makes `requireUser` throw "your account is still
  * syncing", so a brand-new user waits here for the row instead of seeing that.
  *
- * The two ways that goes wrong both end at `AuthTrouble` rather than a redirect
- * or an endless spinner — see the comments on `signedOut` and `stalled`.
+ * The three ways that goes wrong all end at `AuthTrouble` rather than a redirect
+ * or an endless spinner — see the comments on `signedOut`, `unreachable` and
+ * `stalled`.
  */
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
@@ -52,76 +51,32 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   useHardRedirect("/auth", signedOut, SIGNED_OUT_MARK);
 
   /**
+   * clerk-js never started. Its own loading state has no timeout and no error
+   * path — on an origin the browser will not call secure it stops before its
+   * first Frontend API call and simply never resolves — so without this the gate
+   * spins forever with nothing on screen or in the console to explain it.
+   */
+  const unreachable = useStalled(!isLoaded);
+
+  /**
    * Signed into Clerk but not ready, for longer than a handshake takes. Either
    * Convex refused the JWT (`aud` or `CLERK_JWT_ISSUER_DOMAIN` wrong) or the row
-   * never landed. Both are dead ends: the shell never mounts, so its sign-out
-   * never renders, and `/auth` sends a Clerk-signed-in visitor straight back. The
-   * splash has to become something with a way out.
+   * never landed.
    *
-   * The clock only starts once Clerk has confirmed a session. Timing plain
-   * clerk-js startup would put "you're signed in, but…" on screen while nobody
-   * knows yet whether you are.
+   * The clock only starts once Clerk has confirmed a session, which is what keeps
+   * this distinct from `unreachable`: timing plain clerk-js startup here would put
+   * "you're signed in, but…" on screen while nobody knows yet whether you are.
    */
-  const stalled = useStalled(isLoaded && isSignedIn === true && !ready, PATIENCE_MS);
+  const stalled = useStalled(isLoaded && isSignedIn === true && !ready);
 
   if (ready) return <>{children}</>;
   if (signedOut) return <AuthSplash label="Taking you to sign in" />;
+  if (unreachable) return <AuthTrouble reason="unreachable" />;
   if (stalled) {
-    return <AuthTrouble rejected={!isLoading && !isAuthenticated} />;
+    return <AuthTrouble reason={!isLoading && !isAuthenticated ? "rejected" : "syncing"} />;
   }
   if (!isLoaded || isLoading) {
     return <AuthSplash label="Checking your session" />;
   }
   return <AuthSplash label="Setting up your account" />;
-}
-
-/** `true` once `ms` has passed with `active` continuously set. */
-function useStalled(active: boolean, ms: number) {
-  const [stalled, setStalled] = useState(false);
-
-  useEffect(() => {
-    if (!active) return;
-    const timer = setTimeout(() => setStalled(true), ms);
-    // Clearing on the way out doubles as the reset, so a state that recovers and
-    // stalls again waits the full patience the second time too.
-    return () => {
-      clearTimeout(timer);
-      setStalled(false);
-    };
-  }, [active, ms]);
-
-  return stalled;
-}
-
-/**
- * The escape hatch. Both routes out are here on purpose: reloading retries the
- * upsert (`StoreUser` runs again on mount), and signing out clears the Clerk
- * cookie, which is what makes `/auth` reachable again.
- */
-function AuthTrouble({ rejected }: { rejected: boolean }) {
-  return (
-    <div className="flex h-full flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-      <h1 className="text-xl font-semibold tracking-tight">
-        {rejected ? "We can't verify your account" : "Your account is still syncing"}
-      </h1>
-      <p className="max-w-[28rem] text-sm text-neutral-400">
-        {rejected
-          ? "You're signed in, but the backend would not accept this session. If this keeps happening, the deployment's Clerk issuer or audience is misconfigured."
-          : "You're signed in, but your account record hasn't arrived yet. This normally takes a moment."}
-      </p>
-      <div className="mt-2 flex gap-3">
-        <button
-          onClick={() => window.location.reload()}
-          className="h-10 rounded-md bg-neutral-100 px-4 text-sm font-medium text-black transition-colors hover:bg-white"
-        >
-          Try again
-        </button>
-        <SignOutButton redirectUrl="/auth">
-          <button className="h-10 rounded-md border border-neutral-800 px-4 text-sm font-medium text-neutral-200 transition-colors hover:border-neutral-600 hover:text-white">
-            Sign out
-          </button>
-        </SignOutButton>
-      </div>
-    </div>
-  );
 }

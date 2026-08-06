@@ -66,16 +66,22 @@ export function AccountName({
 }: {
   account: { label: string; accountName?: string };
 }) {
+  // `min-w-0 flex-1 truncate` rather than a bare `truncate`: a flex child will
+  // not shrink below its content by default, so a 254-character address —
+  // which is a legal one — pushed the status pill off the row instead of
+  // ellipsising. The name yields, the pill does not.
+  const shell = "min-w-0 flex-1 truncate text-[13px] font-medium text-neutral-100";
+
   if (account.accountName === undefined || account.accountName === "") {
     return (
-      <span className="truncate text-[13px] font-medium text-neutral-100">
+      <span className={shell} title={account.label}>
         {account.label}
       </span>
     );
   }
 
   return (
-    <span className="min-w-0 truncate text-[13px] font-medium text-neutral-100">
+    <span className={shell} title={`${account.accountName} at ${account.label}`}>
       {account.accountName}
       <span className="font-normal text-neutral-400"> at {account.label}</span>
     </span>
@@ -239,7 +245,7 @@ export function ConnectorSwitchboard({
                     }`}
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
                         <AccountName account={account} />
                         <StatusPill tone={STATUS[account.status].tone}>
                           {STATUS[account.status].label}
