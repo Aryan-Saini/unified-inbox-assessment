@@ -106,7 +106,7 @@ export function DocTable({ head, rows }: { head: string[]; rows: string[][] }) {
       {/* `min-w` so the box scrolls rather than crushing itself: left to
           `w-full` alone, auto table layout gave the name column less room than
           the word in it and broke `order` across two lines. */}
-      <table className="w-full min-w-[34rem] border-collapse text-left text-[13px]">
+      <table className="w-full min-w-[34rem] border-collapse text-left text-[13.5px]">
         <thead>
           <tr className="border-b border-line bg-ink-850/60">
             {head.map((cell) => (
@@ -191,7 +191,7 @@ export function NoteBox({
         <p className={`text-[13px] font-semibold ${warn ? "text-amber-200" : "text-indigo-200"}`}>
           <Inline text={title} />
         </p>
-        <div className="mt-1 text-[13px] leading-relaxed text-neutral-300">{children}</div>
+        <div className="mt-1 text-[14px] leading-relaxed text-neutral-300">{children}</div>
       </div>
     </aside>
   );
@@ -201,9 +201,47 @@ export function NoteBox({
 
 export function Prose({ text }: { text: string }) {
   return (
-    <p className="my-3.5 text-[13px] leading-relaxed text-neutral-400">
+    <p className="my-4 text-[14.5px] leading-[1.75] text-neutral-400">
       <Inline text={text} />
     </p>
+  );
+}
+
+/* ----------------------------------------------------------------- headings */
+
+/**
+ * The one heading level inside a documentation page.
+ *
+ * Pages are now short enough that a single level is the whole outline — the
+ * page title is the `h1`, these are the `h2`s, and the right-hand rail is a
+ * flat list of them. A second nested level would give the rail a hierarchy it
+ * does not need at four or five entries.
+ *
+ * `scroll-mt` clears the sticky header: without it every anchor lands with its
+ * own heading hidden behind the bar it was clicked from.
+ */
+export function SubSectionHeading({
+  id,
+  children,
+}: {
+  id: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <h2
+      id={id}
+      className="group scroll-mt-24 pt-9 pb-0.5 text-[17px] font-semibold tracking-tight text-white"
+    >
+      <a href={`#${id}`} className="inline-flex items-baseline gap-2">
+        {children}
+        <span
+          aria-hidden
+          className="text-[14px] text-neutral-700 opacity-0 transition-opacity group-hover:opacity-100"
+        >
+          #
+        </span>
+      </a>
+    </h2>
   );
 }
 
@@ -211,6 +249,9 @@ export function Prose({ text }: { text: string }) {
 
 export function BlockView({ block }: { block: Block }) {
   switch (block.kind) {
+    case "h":
+      return <SubSectionHeading id={block.id}>{block.text}</SubSectionHeading>;
+
     case "p":
       return <Prose text={block.text} />;
 
@@ -231,7 +272,7 @@ export function BlockView({ block }: { block: Block }) {
       const List = block.ordered === true ? "ol" : "ul";
       return (
         <List
-          className={`my-3.5 space-y-2 pl-5 text-[13px] leading-relaxed text-neutral-400 ${
+          className={`my-4 space-y-2.5 pl-5 text-[14.5px] leading-[1.75] text-neutral-400 ${
             block.ordered === true ? "list-decimal" : "list-disc"
           } marker:text-neutral-600`}
         >

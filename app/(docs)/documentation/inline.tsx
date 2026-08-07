@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
 
 /**
@@ -53,15 +54,21 @@ export function Inline({ text }: { text: string }): ReactNode {
       );
     } else {
       const external = href.startsWith("http");
+      const className =
+        "text-indigo-300 underline decoration-indigo-400/30 underline-offset-2 transition-colors hover:text-indigo-200 hover:decoration-indigo-300";
+      // A cross-page link inside the documentation goes through the router, so
+      // moving between pages swaps the content column instead of reloading the
+      // shell and losing the sidebar's scroll position.
       nodes.push(
-        <a
-          key={key}
-          href={href}
-          {...(external ? { target: "_blank", rel: "noreferrer noopener" } : {})}
-          className="text-indigo-300 underline decoration-indigo-400/30 underline-offset-2 transition-colors hover:text-indigo-200 hover:decoration-indigo-300"
-        >
-          {linkText}
-        </a>,
+        external ? (
+          <a key={key} href={href} target="_blank" rel="noreferrer noopener" className={className}>
+            {linkText}
+          </a>
+        ) : (
+          <Link key={key} href={href} className={className}>
+            {linkText}
+          </Link>
+        ),
       );
     }
   }

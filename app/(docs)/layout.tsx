@@ -41,9 +41,9 @@ export default function DocsLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    // No `scroll-behavior: smooth`. This page is ~31,000px tall, so a rail click
-    // near the bottom animates through twenty screens of content — seconds of
-    // motion. Jumping is what a table of contents is for.
+    // No `scroll-behavior: smooth`. Anchors here are jumps to a heading on a
+    // page the reader is already on, and animating them costs real time on the
+    // longer reference pages for nothing. Jumping is what a contents rail is for.
     <html
       lang="en"
       suppressHydrationWarning

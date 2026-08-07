@@ -17,6 +17,13 @@
 import { API_BASE, BASE_URL } from "./spec";
 
 export type Block =
+  /**
+   * A subheading inside a section. Carries its own `id` because it is both an
+   * anchor and a row in the page's "On this page" rail — derived slugs would
+   * change silently the moment someone reworded a heading, and every link into
+   * it would break without anything failing.
+   */
+  | { kind: "h"; id: string; text: string }
   | { kind: "p"; text: string }
   | { kind: "code"; lang: string; code: string; caption?: string }
   | { kind: "list"; items: string[]; ordered?: boolean }
@@ -72,6 +79,7 @@ export function guide(origin: string): Guide[] {
       id: "quickstart",
       title: "Quickstart",
       blocks: [
+        { kind: "h", id: "get-a-key", text: "Get a key" },
         {
           kind: "p",
           text: "Make a key in the app under **Settings → API keys**. You see the whole thing once. What we keep is its SHA-256 plus the first 12 characters, which is enough to tell two keys apart in a list and useless as a credential, so there is no way to read the key back later. Lose it and you revoke it and make another one.",
@@ -86,6 +94,7 @@ export KEY=uik_your_key_here
 # Prove the key works and find an account to send through.
 curl -sS -H "Authorization: Bearer $KEY" "$API/connections"`,
         },
+        { kind: "h", id: "run-a-search", text: "Run a search" },
         {
           kind: "p",
           text: "Nothing listed? Connect Gmail or Slack in the web app, or load **Settings → Demo data**. Seeded connections are enough to walk the whole draft, confirm, send path, and a send through one fails `permanent` with an explicit \"holds no real grant\", which is worth seeing on its own because it proves demo data can never reach a provider.",
@@ -109,6 +118,7 @@ curl -sS -H "Authorization: Bearer $KEY" "$API/searches/$SEARCH_ID/results?order
       id: "authentication",
       title: "Authentication",
       blocks: [
+        { kind: "h", id: "the-header", text: "The header" },
         {
           kind: "p",
           text: "One credential, one header. Keys start with `uik_` so you can spot one in a log or a shell history, and we check that prefix before hashing anything, which is how pasting a Clerk token by mistake gets you a useful 401 instead of a silent failure.",
@@ -118,6 +128,7 @@ curl -sS -H "Authorization: Bearer $KEY" "$API/searches/$SEARCH_ID/results?order
           lang: "http",
           code: `Authorization: Bearer uik_…`,
         },
+        { kind: "h", id: "how-keys-are-handled", text: "How keys are handled" },
         {
           kind: "list",
           items: [
@@ -140,6 +151,7 @@ curl -sS -H "Authorization: Bearer $KEY" "$API/searches/$SEARCH_ID/results?order
       id: "send-protocol",
       title: "The send protocol",
       blocks: [
+        { kind: "h", id: "four-requests", text: "Four requests" },
         {
           kind: "p",
           text: "This is the part worth reading twice, and the part an automated client is most likely to get wrong. **Four requests, and the API enforces three of them.** Create, confirm and send are checked. The read is not, because create already returns a usable hash, so a client can technically go create, confirm, send. Do the read anyway, for the reason in step 2.",
@@ -160,6 +172,7 @@ curl -sS -H "Authorization: Bearer $KEY" "$API/searches/$SEARCH_ID/results?order
           title: "Do not build `acknowledged_destination` from your own state",
           text: "Copy it out of the draft you just read. The check is worth nothing if the value comes from the same place the recipient came from, because the whole point is forcing a round trip through the stored payload so an agent working off a stale plan names the wrong address and gets stopped.",
         },
+        { kind: "h", id: "verify-the-hash", text: "Verify the hash yourself" },
         {
           kind: "p",
           text: "You get `canonical_payload` back next to the hash so you can verify the digest yourself instead of trusting ours. The layout is `v1|<revision>|<channel>|<connection_id>|<to>|<subject>|<body>` and every field is written as `<byteLength>:<value>`. Length-prefixed, not just joined, because a plain separator collides. `to = \"a|b\", subject = \"c\"` and `to = \"a\", subject = \"b|c\"` would produce the same string, and a collision here is a confirmed-payload bypass. An absent field is `-`, which no real value can look like. Newlines get normalised to `\\n`.",
@@ -177,6 +190,7 @@ mine = hashlib.sha256(d["canonical_payload"].encode()).hexdigest()
 print("match" if mine == d["review_hash"] else "MISMATCH, do not confirm")
 '`,
         },
+        { kind: "h", id: "why-revision-is-in-the-digest", text: "Why the revision is in the digest" },
         {
           kind: "p",
           text: "`revision` is folded into the digest, and that is what closes the confirm-then-mutate hole. Without it you could edit a draft A to B and back to A, and the stale confirmation of A would be valid again. Every edit bumps the revision, so every confirmation is tied to one specific version.",
@@ -188,6 +202,7 @@ print("match" if mine == d["review_hash"] else "MISMATCH, do not confirm")
       id: "idempotency",
       title: "Idempotency and the double tap",
       blocks: [
+        { kind: "h", id: "two-sends-one-delivery", text: "Two sends, one delivery" },
         {
           kind: "p",
           text: "Once a send has settled, two calls to `/send` on the same draft give you **byte-identical bodies**. Nothing in the response says which call produced it. The fact that the second one claimed nothing goes in the `X-Idempotent-Replay` header instead, so proving a double tap only sent once is a `diff` on two files rather than a careful read of two JSON blobs.",
@@ -203,6 +218,7 @@ curl -sS -H "Authorization: Bearer $KEY" -H 'content-type: application/json' \\
 
 diff first.json second.json && echo "identical, one delivery"`,
         },
+        { kind: "h", id: "a-key-names-one-message", text: "A key names one message" },
         {
           kind: "p",
           text: "An idempotency key names **one message**, not one request. Send a different payload under a key you already used and you get a 409 `IDEMPOTENCY_KEY_REUSED` instead of a silent overwrite, so a client that reuses keys carelessly gets told about it rather than quietly sending something other than what it thinks it sent.",
@@ -220,6 +236,7 @@ diff first.json second.json && echo "identical, one delivery"`,
       id: "failures",
       title: "Failures, retries, and the one you must not retry",
       blocks: [
+        { kind: "h", id: "the-attempt-timeline", text: "The attempt timeline" },
         {
           kind: "p",
           text: "A send that fails is not a send that vanished. `GET /sends/{id}` gives you the full attempt timeline. What was tried, when, what the provider said back, and how we classified the error. So a failure is something you can explain rather than just report. Errors get classified *before* anything decides whether to retry them.",
@@ -230,6 +247,7 @@ diff first.json second.json && echo "identical, one delivery"`,
           title: "`unknown` is a refusal to guess, not a failure",
           text: "It means the attempt came back with no verdict, so the message may or may not have gone out. Retrying under the same key could double-send, so `POST /sends/{id}/retry` answers **409 `INDETERMINATE`** and stays refused. An autonomous client has to escalate here. Reconcile at the provider, or clone the draft under a *new* idempotency key. Never loop on it.",
         },
+        { kind: "h", id: "when-to-retry", text: "When to retry" },
         {
           kind: "p",
           text: "A `failed_transient` with `next_retry_at` set is still going. The scheduler will try again on its own and a manual retry on top of that is wasted work, so only retry when that field is missing.",
@@ -241,9 +259,10 @@ diff first.json second.json && echo "identical, one delivery"`,
       id: "agents",
       title: "Using this from an agent",
       blocks: [
+        { kind: "h", id: "machine-readable-copies", text: "Machine-readable copies" },
         {
           kind: "p",
-          text: "Everything on this page is also plain text at a stable URL, so a coding agent can read the API with no browser and no HTML parsing. Point Claude Code, Codex, Cursor, or anything else that can run `curl`, at one of these.",
+          text: "Everything in these docs is also plain text at a stable URL, so a coding agent can read the API with no browser and no HTML parsing. Point Claude Code, Codex, Cursor, or anything else that can run `curl`, at one of these.",
         },
         {
           kind: "table",
@@ -273,6 +292,7 @@ curl -sS -o AGENTS.md ${origin}/documentation/AGENTS.md`,
           title: "Two different origins",
           text: "The docs are served by the Next.js app and the API itself is served by the Convex deployment at `" + BASE_URL + "`. So the `.txt` and `.json` files live on the app origin and every `/api/v1` route lives on the Convex one. Both are public and the docs need no credential at all.",
         },
+        { kind: "h", id: "the-walkthrough-script", text: "The walkthrough script" },
         {
           kind: "p",
           text: "There is also a full end-to-end script in the repo at `docs/api-walkthrough.sh`. It runs search, poll, results, rerun, draft, confirm, send, double-send, retry, outbox, and asserts the two send responses are byte-identical. All it needs is `curl` and `python3`.",
@@ -289,6 +309,7 @@ curl -sS -o AGENTS.md ${origin}/documentation/AGENTS.md`,
       id: "conventions",
       title: "Conventions",
       blocks: [
+        { kind: "h", id: "shapes-and-rules", text: "Shapes and rules" },
         {
           kind: "list",
           items: [
@@ -301,6 +322,7 @@ curl -sS -o AGENTS.md ${origin}/documentation/AGENTS.md`,
             "**Lists are capped.** Searches, sends and per-search source runs at 50, connections at 100, results at 200, attempt timelines at 32. There is no pagination cursor. This is an assessment surface, not a warehouse.",
           ],
         },
+        { kind: "h", id: "versioning-and-aliases", text: "Versioning and aliases" },
         {
           kind: "p",
           text: "Every route lives under `/api/v1`. The draft POSTs are **also** reachable at the bare paths the spec writes literally, so `POST /drafts`, `POST /drafts/{id}/confirm` and `POST /drafts/{id}/send` all work without the prefix. Both mount points hit one routing table and one handler, so the alias cannot drift from the versioned route because there is only one implementation of it.",

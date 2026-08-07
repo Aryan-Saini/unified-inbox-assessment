@@ -1,23 +1,41 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import type { DocSection, GroupIcon } from "./pages";
 import {
   BracesIcon,
-  ChevronIcon,
+  InboxGlyph,
   LayersIcon,
   LockIcon,
-  InboxGlyph,
   MenuGlyph,
   PlugGlyph,
   RocketIcon,
   SearchGlyph,
   SparkIcon,
+  BookGlyph,
   XGlyph,
 } from "./docs-icons";
 
+/**
+ * The sidebar, in two halves.
+ *
+ * The top half switches *sections* — Guide, API reference, Appendix — and the
+ * bottom half is the tree of whichever one you are in. That split is the whole
+ * reason this reads as a site rather than a list: a reader looking up an
+ * endpoint never scrolls past the guide to reach it, and the tree stays short
+ * enough to hold in one glance.
+ *
+ * Everything here is a real link to a real page. The old rail was anchors into
+ * one enormous document, which meant "where am I" had to be inferred by
+ * measuring scroll position against every heading on every frame. Now the URL
+ * says it, so `usePathname` is the entire mechanism.
+ */
+
 /** Icons cross the server/client boundary as names — components cannot. */
-const GROUP_ICONS = {
+const ICONS: Record<GroupIcon, (p: { className?: string }) => React.ReactElement> = {
   rocket: RocketIcon,
   lock: LockIcon,
   spark: SparkIcon,
@@ -25,79 +43,20 @@ const GROUP_ICONS = {
   layers: LayersIcon,
   plug: PlugGlyph,
   inbox: InboxGlyph,
-} as const;
+  book: BookGlyph,
+};
 
-export type GroupIcon = keyof typeof GROUP_ICONS;
-
-export interface NavItem {
-  id: string;
-  label: string;
-  /** Rendered before the label, for endpoint rows. */
-  method?: "GET" | "POST";
-}
-
-export interface NavGroup {
-  label: string;
-  icon: GroupIcon;
-  items: NavItem[];
-}
-
-/* ---------------------------------------------------------------- scroll spy */
-
-/**
- * Which section the reader is actually looking at.
- *
- * Deliberately not `IntersectionObserver`: these sections are wildly uneven —
- * a two-paragraph note and a thousand-pixel endpoint card — so "most visible"
- * flickers between neighbours on a slow scroll. "The last heading that has
- * crossed the header" is what a reader means by where they are, and it is
- * stable because it only changes when a heading passes one line.
- */
-function useActiveSection(ids: string[]): string | null {
-  const [active, setActive] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (ids.length === 0) return;
-
-    let frame = 0;
-    const measure = () => {
-      frame = 0;
-      // The sticky header is 60px; a heading is "reached" a little below it.
-      const line = 96;
-      let current: string | null = null;
-      for (const id of ids) {
-        const el = document.getElementById(id);
-        if (el === null) continue;
-        if (el.getBoundingClientRect().top <= line) current = id;
-      }
-      // Bottom of the page: the last section can be too short to ever cross the
-      // line, which would leave the final entry unreachable.
-      if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 2) {
-        current = ids[ids.length - 1];
-      }
-      setActive(current);
-    };
-
-    const onScroll = () => {
-      if (frame === 0) frame = requestAnimationFrame(measure);
-    };
-
-    measure();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    return () => {
-      if (frame !== 0) cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-    };
-  }, [ids]);
-
-  return active;
+/** Section a path belongs to, or the first one when nothing matches. */
+function activeSection(sections: DocSection[], pathname: string): DocSection {
+  const owner = sections.find((section) =>
+    section.groups.some((group) => group.pages.some((page) => page.href === pathname)),
+  );
+  return owner ?? sections[0];
 }
 
 /* ---------------------------------------------------------------------- rows */
 
-/** The app's `StatusPill` shape and tints: emerald reads, indigo writes. */
+/** The app's `StatusPill` tints: emerald reads, indigo writes. */
 function MethodTag({ method }: { method: "GET" | "POST" }) {
   return (
     <span
@@ -112,44 +71,80 @@ function MethodTag({ method }: { method: "GET" | "POST" }) {
   );
 }
 
-function ItemRow({
-  item,
+function SectionRow({
+  section,
   active,
   onNavigate,
 }: {
-  item: NavItem;
+  section: DocSection;
+  active: boolean;
+  onNavigate?: () => void;
+}) {
+  const Icon = ICONS[section.icon];
+  const first = section.groups[0].pages[0];
+
+  return (
+    <Link
+      href={first.href}
+      onClick={onNavigate}
+      aria-current={active ? "true" : undefined}
+      // A filled row for the section you are in, which is how the app marks
+      // the thing you are looking at everywhere else — the search history and
+      // the outbox rail both do it.
+      className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] font-medium transition-colors ${
+        active
+          ? "bg-indigo-500/10 text-indigo-200"
+          : "text-neutral-400 hover:bg-white/5 hover:text-white"
+      }`}
+    >
+      <Icon className={`h-4 w-4 shrink-0 ${active ? "text-indigo-300" : "text-neutral-500"}`} />
+      {section.label}
+    </Link>
+  );
+}
+
+function PageRow({
+  href,
+  label,
+  active,
+  onNavigate,
+}: {
+  href: string;
+  label: string;
   active: boolean;
   onNavigate?: () => void;
 }) {
   return (
-    <a
-      href={`#${item.id}`}
+    <Link
+      href={href}
       onClick={onNavigate}
-      aria-current={active ? "location" : undefined}
-      // The app marks the thing you are reading with a filled row — the search
-      // history and the outbox rail both do it — so the docs do too rather than
-      // introducing a third idiom for "you are here".
-      className={`group flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors ${
-        active
-          ? "bg-white/[0.07] text-white"
-          : "text-neutral-400 hover:bg-white/5 hover:text-white"
+      aria-current={active ? "page" : undefined}
+      className={`flex items-center gap-2 rounded-lg py-1.5 pr-2.5 pl-4 text-[13px] transition-colors ${
+        active ? "text-indigo-300" : "text-neutral-400 hover:bg-white/5 hover:text-white"
       }`}
     >
-      {item.method === undefined ? null : <MethodTag method={item.method} />}
-      <span className="min-w-0 flex-1 truncate">{item.label}</span>
-    </a>
+      {/* A dot rather than a fill: the filled treatment is already spoken for
+          by the section switcher above, and using it twice in one column would
+          leave two rows claiming to be the current thing. */}
+      <span
+        aria-hidden
+        className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-indigo-400" : "bg-transparent"}`}
+      />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+    </Link>
   );
 }
 
-/* --------------------------------------------------------------------- panel */
+/* -------------------------------------------------------------------- panel */
 
 function NavPanel({
-  groups,
+  sections,
   onNavigate,
 }: {
-  groups: NavGroup[];
+  sections: DocSection[];
   onNavigate?: () => void;
 }) {
+  const pathname = usePathname();
   const [filter, setFilter] = useState("");
   const input = useRef<HTMLInputElement>(null);
 
@@ -172,41 +167,44 @@ function NavPanel({
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  const ids = useMemo(
-    () => groups.flatMap((group) => group.items.map((item) => item.id)),
-    [groups],
-  );
-  const active = useActiveSection(ids);
-
+  const current = useMemo(() => activeSection(sections, pathname), [sections, pathname]);
   const needle = filter.trim().toLowerCase();
-  const shown = groups
-    .map((group) => ({
-      ...group,
-      items:
-        needle === ""
-          ? group.items
-          : group.items.filter(
-              (item) =>
-                item.label.toLowerCase().includes(needle) ||
-                (item.method ?? "").toLowerCase().includes(needle),
-            ),
-    }))
-    // A group whose every child was filtered out is noise, not context.
-    .filter((group) => group.items.length > 0 || group.label.toLowerCase().includes(needle));
+
+  /**
+   * Filtering deliberately leaves the current section: a reader who types
+   * "retry" wants the page, wherever it lives, and being shown only the
+   * matches inside the section they happen to be in is the behaviour that
+   * makes a filter feel broken.
+   */
+  const matches =
+    needle === ""
+      ? null
+      : sections.flatMap((section) =>
+          section.groups.flatMap((group) =>
+            group.pages
+              .filter(
+                (page) =>
+                  page.title.toLowerCase().includes(needle) ||
+                  page.blurb.toLowerCase().includes(needle) ||
+                  page.toc.some((entry) => entry.label.toLowerCase().includes(needle)),
+              )
+              .map((page) => ({ page, section: section.label })),
+          ),
+        );
 
   return (
     <div className="flex h-full flex-col">
-      <div className="shrink-0 px-3 pt-4 pb-2">
+      <div className="shrink-0 px-3 pt-4 pb-3">
         <label className="relative block">
-          <SearchGlyph className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-neutral-600" />
+          <SearchGlyph className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-600" />
           <input
             ref={input}
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
             type="search"
-            placeholder="Filter sections"
-            aria-label="Filter sections"
-            className="h-9 w-full rounded-lg border border-line-strong bg-white/[0.03] pr-14 pl-8.5 text-[13px] text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-neutral-600"
+            placeholder="Search the docs"
+            aria-label="Search the docs"
+            className="h-9.5 w-full rounded-lg border border-line-strong bg-white/[0.03] pr-14 pl-9 text-[13px] text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-neutral-600"
           />
           {/* Hidden once there is a value: the hint has done its job, and it
               would otherwise sit on top of what was typed. */}
@@ -225,60 +223,117 @@ function NavPanel({
         </label>
       </div>
 
-      <nav
-        aria-label="Documentation sections"
-        className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-3 pb-8"
-      >
-        {shown.length === 0 ? (
-          <p className="px-2 py-6 text-center text-[12px] text-neutral-600">
-            Nothing matches “{filter}”.
-          </p>
-        ) : null}
+      {matches === null ? (
+        <>
+          <div className="shrink-0 space-y-0.5 px-3 pb-4">
+            {sections.map((section) => (
+              <SectionRow
+                key={section.id}
+                section={section}
+                active={section.id === current.id}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </div>
 
-        {shown.map((group) => {
-          const Icon = GROUP_ICONS[group.icon];
-          return (
-            <div key={group.label} className="mt-4 first:mt-1">
-              <p className="flex items-center gap-2 px-2.5 py-1.5 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
-                <Icon className="h-3.5 w-3.5 shrink-0" />
-                {group.label}
-              </p>
-              <div className="mt-0.5 space-y-px">
-                {group.items.map((item) => (
-                  <ItemRow
-                    key={item.id}
-                    item={item}
-                    active={item.id === active}
-                    onNavigate={onNavigate}
-                  />
-                ))}
+          <nav
+            aria-label={`${current.label} pages`}
+            className="scrollbar-thin min-h-0 flex-1 overflow-y-auto border-t border-line px-3 pt-4 pb-10"
+          >
+            {current.groups.map((group, i) => (
+              <div key={group.label ?? i} className="mt-5 first:mt-0">
+                {group.label === undefined ? null : (
+                  <p className="px-2.5 pb-1.5 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
+                    {group.label}
+                  </p>
+                )}
+                <div className="space-y-px">
+                  {group.pages.map((page) => (
+                    <div key={page.href}>
+                      <PageRow
+                        href={page.href}
+                        label={page.navLabel ?? page.title}
+                        active={page.href === pathname}
+                        onNavigate={onNavigate}
+                      />
+                      {/* The current page's own contents, inline, the way Expo
+                          expands the branch you are standing on. Only the
+                          current one: expanded everywhere it is a wall. */}
+                      {page.href === pathname && page.toc.length > 0 ? (
+                        <div className="mt-0.5 mb-1.5 ml-[13px] space-y-px border-l border-line pl-2">
+                          {page.toc.map((entry) => (
+                            <a
+                              key={entry.id}
+                              href={`#${entry.id}`}
+                              onClick={onNavigate}
+                              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[12.5px] text-neutral-500 transition-colors hover:bg-white/5 hover:text-neutral-200"
+                            >
+                              {entry.method === undefined ? null : (
+                                <MethodTag method={entry.method} />
+                              )}
+                              <span className="min-w-0 flex-1 truncate">{entry.label}</span>
+                            </a>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </nav>
+            ))}
+          </nav>
+        </>
+      ) : (
+        <nav
+          aria-label="Search results"
+          className="scrollbar-thin min-h-0 flex-1 overflow-y-auto border-t border-line px-3 pt-3 pb-10"
+        >
+          {matches.length === 0 ? (
+            <p className="px-2 py-6 text-center text-[12px] text-neutral-600">
+              Nothing matches “{filter}”.
+            </p>
+          ) : (
+            matches.map(({ page, section }) => (
+              <Link
+                key={page.href}
+                href={page.href}
+                onClick={onNavigate}
+                className="block rounded-lg px-2.5 py-2 transition-colors hover:bg-white/5"
+              >
+                <span className="block text-[13px] text-neutral-200">{page.title}</span>
+                <span className="block text-[11px] text-neutral-600">{section}</span>
+              </Link>
+            ))
+          )}
+        </nav>
+      )}
     </div>
   );
 }
 
-/* ------------------------------------------------------------------- exports */
+/* ------------------------------------------------------------------ exports */
 
-export function DocsSidebar({ groups }: { groups: NavGroup[] }) {
+export function DocsSidebar({ sections }: { sections: DocSection[] }) {
   return (
-    <aside className="sticky top-14 hidden h-[calc(100dvh-3.5rem)] w-[280px] shrink-0 border-r border-line bg-ink-900 lg:block">
-      <NavPanel groups={groups} />
+    <aside className="sticky top-14 hidden h-[calc(100dvh-3.5rem)] w-[292px] shrink-0 border-r border-line bg-ink-900 lg:block">
+      <NavPanel sections={sections} />
     </aside>
   );
 }
 
 /**
- * The same tree, as a drawer, below `lg`.
+ * The same tree, as a full-screen sheet, below `lg`.
  *
- * A drawer rather than the disclosure this page used to have: the list is now
- * long enough that inlining it pushed the first paragraph below the fold on a
- * phone, and a reader who opens contents wants to leave immediately anyway.
+ * A sheet rather than a drawer with the page peeking behind it, because the
+ * app answers this question the same way — `InboxApp` renders its mobile nav
+ * as `fixed inset-0 bg-ink-900` — and a second mobile-nav idiom in one product
+ * is a seam.
  */
-export function MobileNav({ groups }: { groups: NavGroup[] }) {
+export function MobileNav({ sections }: { sections: DocSection[] }) {
+  // Every link inside the panel closes it through `onNavigate`, which is why
+  // there is no effect watching the pathname: the sheet staying up over the
+  // page it just took you to reads as the tap having failed, and closing on
+  // the click itself is both immediate and one render cheaper.
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -300,46 +355,26 @@ export function MobileNav({ groups }: { groups: NavGroup[] }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label="Open documentation sections"
+        aria-label="Open documentation navigation"
         aria-expanded={open}
         className="flex h-9 items-center gap-1.5 rounded-lg border border-line-strong px-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-600 hover:text-white lg:hidden"
       >
         <MenuGlyph className="h-4 w-4" />
-        <span className="hidden min-[420px]:inline">Sections</span>
+        <span className="hidden min-[420px]:inline">Docs</span>
       </button>
 
       {/*
        * Through a portal, for the reason `Modal` in `app/(inbox)/ui.tsx` is:
        * `fixed` is only the viewport when no ancestor establishes a containing
-       * block, and the trigger lives inside a `backdrop-blur` header — which
-       * does. Laid out in place, `inset-0` resolved against the 390x56 header,
-       * so the backdrop covered a strip, the panel did not cover the page, and
-       * the header's own buttons sat above it. Guarded for SSR: the first
-       * server pass is closed, so only the trigger renders there anyway.
+       * block, and this trigger lives inside a `backdrop-blur` header — which
+       * does. Laid out in place, `inset-0` resolved against the header's own
+       * box, so the sheet covered a strip and the page showed through below it.
        */}
       {open && typeof document !== "undefined"
         ? createPortal(
-            /**
-             * A full-screen sheet, not a drawer with the page peeking behind it.
-             *
-             * Two reasons. The app already answers this question the same way —
-             * `InboxApp` renders its mobile nav as `fixed inset-0 bg-ink-900`,
-             * because a phone has no room for a useful peek of the content
-             * behind — so a second, different mobile-nav idiom in the same
-             * product would be a seam. And it removes the backdrop entirely:
-             * there is nothing left showing through to dim.
-             *
-             * Through a portal for the reason `Modal` in `app/(inbox)/ui.tsx`
-             * is: this is rendered inside the page header, which carries
-             * `backdrop-blur`, and `backdrop-filter` makes an element a
-             * containing block for `fixed` descendants. Left in place, `inset-0`
-             * resolved against the header's 56px box instead of the viewport,
-             * so the sheet covered a strip at the top and the page showed
-             * through everything below it.
-             */
             <div className="slide-in-left fixed inset-0 z-50 flex flex-col bg-ink-900 lg:hidden">
               <div className="flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
-                <span className="text-[13px] font-semibold text-white">Sections</span>
+                <span className="text-[13px] font-semibold text-white">Documentation</span>
                 <button
                   onClick={() => setOpen(false)}
                   aria-label="Close navigation"
@@ -349,7 +384,7 @@ export function MobileNav({ groups }: { groups: NavGroup[] }) {
                 </button>
               </div>
               <div className="min-h-0 flex-1">
-                <NavPanel groups={groups} onNavigate={() => setOpen(false)} />
+                <NavPanel sections={sections} onNavigate={() => setOpen(false)} />
               </div>
             </div>,
             document.body,
@@ -358,5 +393,3 @@ export function MobileNav({ groups }: { groups: NavGroup[] }) {
     </>
   );
 }
-
-export { ChevronIcon };

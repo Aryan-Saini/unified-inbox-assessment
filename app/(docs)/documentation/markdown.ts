@@ -60,6 +60,9 @@ function fieldRows(fields: Field[]): string[][] {
 
 function block(b: Block): string {
   switch (b.kind) {
+    case "h":
+      // `###`, because a guide section is already `##` in the full document.
+      return `### ${b.text}`;
     case "p":
       return b.text;
     case "code":

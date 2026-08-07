@@ -136,6 +136,27 @@ export const ChevronIcon = (p: Props) => (
   </Svg>
 );
 
+/** The two directions of the previous/next cards. */
+export const ArrowLeftIcon = (p: Props) => (
+  <Svg {...p}>
+    <path d="M19 12H5M10.5 6.5 5 12l5.5 5.5" />
+  </Svg>
+);
+
+export const ArrowRightIcon = (p: Props) => (
+  <Svg {...p}>
+    <path d="M5 12h14M13.5 6.5 19 12l-5.5 5.5" />
+  </Svg>
+);
+
+/** "On this page" — a document with its lines showing. */
+export const ContentsGlyph = (p: Props) => (
+  <Svg {...p}>
+    <rect x="4" y="3.5" width="16" height="17" rx="2.5" />
+    <path d="M8 8.5h8M8 12h8M8 15.5h5" />
+  </Svg>
+);
+
 export const ArrowUpRightIcon = (p: Props) => (
   <Svg {...p}>
     <path d="M7 17 17 7M8.5 7H17v8.5" />
