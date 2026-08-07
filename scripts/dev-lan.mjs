@@ -97,7 +97,7 @@ console.log(`\nPhone: https://${host}:${port} — accept the certificate warning
  * `http://localhost:3000`, which on a phone is the phone. `resolveAppOrigin`
  * refuses a private-network origin unless this flag is set, so setting it here
  * ties "the LAN is allowed" to "I am deliberately serving the LAN", and it never
- * reaches the hand-in deployment.
+ * reaches the deployed environment.
  *
  * Idempotent, and deliberately non-fatal: `dev:lan` is also how you work offline
  * or on a laptop with no Convex credentials, and neither should stop the server

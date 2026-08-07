@@ -4,7 +4,7 @@
  * It holds two unrelated things that happen to share an owner: the Convex
  * production deploy key, and the credentials the post-deploy verification uses.
  *
- *   CONVEX_DEPLOY_KEY   Convex dashboard → hand-in deployment → Settings →
+ *   CONVEX_DEPLOY_KEY   Convex dashboard → deployed environment → Settings →
  *                       Deploy Keys → Generate Production Deploy Key
  *   SMOKE_BASE_URL      https://scintillating-moose-307.convex.site
  *   SMOKE_API_KEY       a uik_… key, from the app's Settings → API keys

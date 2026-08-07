@@ -38,13 +38,13 @@ against one or the other in normal work:
 | Environment | Convex deployment | Notes |
 |---|---|---|
 | **dev** | `judicious-wildcat-326` | Day-to-day. `npx convex dev` pushes `convex/` on save and must stay running while developing. |
-| **hand-in** (`prod`) | `scintillating-moose-307` | **The deployment being submitted** — what the graded deployed URL and its real Gmail/Slack OAuth point at. Push with `pnpm deploy:handin`; `pnpm dev:handin` runs Next locally against it. |
+| **deployed** (`prod`) | `scintillating-moose-307` | **The deployment being submitted** — what the graded deployed URL and its real Gmail/Slack OAuth point at. Push with `pnpm deploy:deployed`; `pnpm dev:deployed` runs Next locally against it. |
 
-Convex only has the deployment *types* `dev` and `prod`, so the hand-in
+Convex only has the deployment *types* `dev` and `prod`, so the deployed
 deployment **is** the `prod` one and `--prod` targets it. That makes it Convex's
 production tier, not a production application.
 
-Treat the hand-in deployment as the deliverable: it must stay current with `main`
+Treat the deployed environment as the deliverable: it must stay current with `main`
 and keep working real OAuth credentials, because a reviewer exercises it directly.
 Nothing else depends on it, so it is not "protected" — just don't leave it stale
 or half-migrated.
@@ -89,8 +89,8 @@ reviewer opens should be a build somebody watched succeed, not one that a CI
 runner did on their behalf while nobody was looking.
 
 `main` is the production branch, so that is what gets built and deployed. The
-Convex side is separate and unaffected: `pnpm deploy:handin` still pushes
-`convex/` to the hand-in deployment, and it has to be done as well.
+Convex side is separate and unaffected: `pnpm deploy:deployed` still pushes
+`convex/` to the deployed environment, and it has to be done as well.
 
 ## Environment variables
 
@@ -99,7 +99,7 @@ Two separate places, and mixing them up is the usual cause of a confusing failur
 - **`.env.local` is read by Next.js only** — Clerk keys plus the `CONVEX_*` URLs
   that `npx convex dev` writes for you.
 - **Everything the backend needs is set on the Convex deployment**, with
-  `npx convex env set <NAME> <value>` (add `--prod` for hand-in). Per-deployment
+  `npx convex env set <NAME> <value>` (add `--prod` for deployed). Per-deployment
   by design: `TOKEN_ENCRYPTION_KEY` and `CLERK_WEBHOOK_SIGNING_SECRET` must
   differ between the two.
 

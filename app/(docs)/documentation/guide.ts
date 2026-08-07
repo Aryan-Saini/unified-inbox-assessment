@@ -70,7 +70,7 @@ is current, and after any edit the one you are holding is stale.`;
  * A function rather than a constant because half the value of the agent section
  * is that its URLs are copy-pasteable, and the app origin is not knowable at
  * build time. It differs between `localhost:3000`, a Codespace and the deployed
- * hand-in. Callers read it off the incoming request (`docsOrigin` in
+ * deployed. Callers read it off the incoming request (`docsOrigin` in
  * `origin.ts`) and every URL below comes out absolute and correct.
  */
 export function guide(origin: string): Guide[] {

@@ -102,7 +102,7 @@ const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
  * the same argument that lets loopback through, one hop wider. It is still a
  * step out from *this machine only*, so it is off unless
  * `ALLOW_PRIVATE_NETWORK_ORIGINS` is `"true"`, which `dev:lan` sets on the dev
- * deployment. The hand-in deployment leaves it unset and keeps the strict rule.
+ * deployment. The deployed environment leaves it unset and keeps the strict rule.
  */
 function isPrivateNetworkHost(hostname: string): boolean {
   // mDNS resolves on the local link and nowhere else.

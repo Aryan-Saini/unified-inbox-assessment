@@ -6,7 +6,7 @@ import { headers } from "next/headers";
  * Read off the request rather than configured, because every URL in the agent
  * section is meant to be pasted into a shell — and the right answer differs
  * between `http://localhost:3000`, a Codespace forwarded port and the deployed
- * hand-in. A hand-set env var is exactly the thing that goes stale and hands an
+ * deployed. A hand-set env var is exactly the thing that goes stale and hands an
  * agent a `curl` that 404s.
  *
  * `x-forwarded-*` first: behind Vercel or a Codespace proxy, `host` is the

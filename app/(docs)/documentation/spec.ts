@@ -25,7 +25,7 @@ export const BASE_URL_PLACEHOLDER = "https://<deployment>.convex.site";
  * page.
  *
  * `NEXT_PUBLIC_CONVEX_SITE_URL` is preferred but **must not be required**:
- * `npx convex dev` writes it locally and `dev:handin` sets it, but nothing sets
+ * `npx convex dev` writes it locally and `dev:deployed` sets it, but nothing sets
  * it on a deployed frontend, and a reviewer opening the deployed docs would then
  * find every example addressed to `<deployment>`. `NEXT_PUBLIC_CONVEX_URL` is
  * guaranteed present — `ConvexClientProvider` throws without it — and Convex
