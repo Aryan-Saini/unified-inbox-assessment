@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ConvexClientProvider } from "../ConvexClientProvider";
 import "../globals.css";
@@ -13,9 +13,9 @@ import "../globals.css";
  * searches, connections and sends from live Convex subscriptions.
  */
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const interSans = Inter({ variable: "--font-inter", subsets: ["latin"] });
+const monoFace = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
   subsets: ["latin"],
 });
 
@@ -42,7 +42,7 @@ export default function InboxLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${interSans.variable} ${monoFace.variable} h-full antialiased`}
     >
       <body
         suppressHydrationWarning

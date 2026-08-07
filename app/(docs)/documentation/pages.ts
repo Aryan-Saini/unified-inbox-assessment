@@ -79,6 +79,8 @@ export interface DocPage {
 /** A labelled run of pages inside a section. An absent label renders bare. */
 export interface PageGroup {
   label?: string;
+  /** Sits before the label. A group without a label has nothing to put it on. */
+  icon?: GroupIcon;
   pages: DocPage[];
 }
 
@@ -184,10 +186,12 @@ export function docSections(origin: string): DocSection[] {
         { pages: [overview] },
         {
           label: "Get started",
+          icon: "spark",
           pages: [byId("quickstart"), byId("authentication"), byId("agents")].map(guidePage),
         },
         {
           label: "Core concepts",
+          icon: "lock",
           pages: [
             byId("send-protocol"),
             byId("idempotency"),
@@ -201,7 +205,7 @@ export function docSections(origin: string): DocSection[] {
       id: "reference",
       label: "API reference",
       icon: "braces",
-      groups: [{ label: "Endpoints", pages: SECTIONS.map(referencePage) }],
+      groups: [{ label: "Endpoints", icon: "plug", pages: SECTIONS.map(referencePage) }],
     },
     {
       id: "appendix",

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "../globals.css";
 
 /**
@@ -13,15 +13,15 @@ import "../globals.css";
  *
  * It shares `globals.css` with the app rather than carrying a palette of its
  * own: the docs are part of this product, so `ink-*`, `line`, the indigo accent
- * and the Geist pair are the same tokens the inbox shell uses. The only thing
+ * and the Inter/JetBrains pair are the same tokens the inbox shell uses. The one thing
  * it does differently is scroll the document — the shell owns its viewport and
  * manages its own panes, which is right for an app and wrong for a long page of
  * prose.
  */
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const interSans = Inter({ variable: "--font-inter", subsets: ["latin"] });
+const monoFace = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
   subsets: ["latin"],
 });
 
@@ -47,7 +47,7 @@ export default function DocsLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      className={`${interSans.variable} ${monoFace.variable} antialiased`}
     >
       {/* `overflow-y-auto` undoes the shell's rule that the page never scrolls:
           `globals.css` sets that for the app, and this is the one route where

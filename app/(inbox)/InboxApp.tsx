@@ -681,7 +681,7 @@ export function InboxApp({ view = "search" }: { view?: InboxView }) {
                           type="button"
                           onClick={() => rerun()}
                           title="Re-run this search"
-                          className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[12.5px] font-medium text-neutral-400 transition-colors hover:bg-white/[0.05] hover:text-white"
+                          className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[13.5px] font-medium text-neutral-400 transition-colors hover:bg-white/[0.05] hover:text-white"
                         >
                           <RerunIcon className="h-3.5 w-3.5" />
                           <span className="hidden sm:inline">Re-run</span>
@@ -695,7 +695,7 @@ export function InboxApp({ view = "search" }: { view?: InboxView }) {
                                 ? "Restore this search"
                                 : "Archive this search"
                             }
-                            className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[12.5px] font-medium text-neutral-400 transition-colors hover:bg-white/[0.05] hover:text-white"
+                            className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[13.5px] font-medium text-neutral-400 transition-colors hover:bg-white/[0.05] hover:text-white"
                           >
                             {activeRecord.archived ? (
                               <UnarchiveIcon className="h-3.5 w-3.5" />
@@ -780,7 +780,7 @@ export function InboxApp({ view = "search" }: { view?: InboxView }) {
                 ) : (
                   <CheckIcon className="h-4 w-4 shrink-0 text-emerald-400" />
                 )}
-                <span className="min-w-0 flex-1 truncate py-1 text-[13px] text-neutral-200">
+                <span className="min-w-0 flex-1 truncate py-1 text-[14.5px] text-neutral-200">
                   {t.text}
                 </span>
                 {t.action ? (
@@ -789,7 +789,7 @@ export function InboxApp({ view = "search" }: { view?: InboxView }) {
                       t.action?.run();
                       setToasts((prev) => prev.filter((x) => x.id !== t.id));
                     }}
-                    className="shrink-0 rounded-full bg-white/[0.06] px-3 py-1.5 text-[12px] font-semibold whitespace-nowrap text-indigo-300 transition-colors hover:bg-indigo-500/15 hover:text-indigo-200"
+                    className="shrink-0 rounded-full bg-white/[0.06] px-3 py-1.5 text-[13px] font-semibold whitespace-nowrap text-indigo-300 transition-colors hover:bg-indigo-500/15 hover:text-indigo-200"
                   >
                     {t.action.label}
                   </button>

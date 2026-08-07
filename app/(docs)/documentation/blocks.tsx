@@ -77,7 +77,7 @@ export function CodeBlock({
             line is unbreakable, and a flex or grid child will not shrink below
             its widest unbreakable content — without it the page grows a
             horizontal scrollbar instead of the block doing it. */}
-        <pre className="scrollbar-thin overflow-x-auto px-4 py-3.5 text-[12.5px] leading-relaxed">
+        <pre className="scrollbar-thin overflow-x-auto px-4 py-3.5 text-[13.5px] leading-[1.7]">
           <code className="font-mono text-neutral-300">{code}</code>
         </pre>
       </figure>
@@ -106,7 +106,7 @@ export function DocTable({ head, rows }: { head: string[]; rows: string[][] }) {
       {/* `min-w` so the box scrolls rather than crushing itself: left to
           `w-full` alone, auto table layout gave the name column less room than
           the word in it and broke `order` across two lines. */}
-      <table className="w-full min-w-[34rem] border-collapse text-left text-[13.5px]">
+      <table className="w-full min-w-[34rem] border-collapse text-left text-[14.5px]">
         <thead>
           <tr className="border-b border-line bg-ink-850/60">
             {head.map((cell) => (
@@ -188,10 +188,10 @@ export function NoteBox({
         className={`mt-0.5 h-4 w-4 shrink-0 ${warn ? "text-amber-300" : "text-indigo-300"}`}
       />
       <div className="min-w-0">
-        <p className={`text-[13px] font-semibold ${warn ? "text-amber-200" : "text-indigo-200"}`}>
+        <p className={`text-[15px] font-semibold ${warn ? "text-amber-200" : "text-indigo-200"}`}>
           <Inline text={title} />
         </p>
-        <div className="mt-1 text-[14px] leading-relaxed text-neutral-300">{children}</div>
+        <div className="mt-1 text-[15px] leading-[1.6] text-neutral-300">{children}</div>
       </div>
     </aside>
   );
@@ -201,7 +201,7 @@ export function NoteBox({
 
 export function Prose({ text }: { text: string }) {
   return (
-    <p className="my-4 text-[14.5px] leading-[1.75] text-neutral-400">
+    <p className="my-5 text-[16px] leading-[1.625] text-neutral-400">
       <Inline text={text} />
     </p>
   );
@@ -228,15 +228,18 @@ export function SubSectionHeading({
   children: React.ReactNode;
 }) {
   return (
+    // 25/35 bold at -0.0134em, which is the step below the page title. The
+    // tracking is measured rather than `tracking-tight`: Tailwind's -0.025em is
+    // roughly double this and closes Inter's headings up until they smudge.
     <h2
       id={id}
-      className="group scroll-mt-24 pt-9 pb-0.5 text-[17px] font-semibold tracking-tight text-white"
+      className="group scroll-mt-24 pt-10 pb-1 text-[25px] leading-[35px] font-bold tracking-[-0.0134em] text-white"
     >
       <a href={`#${id}`} className="inline-flex items-baseline gap-2">
         {children}
         <span
           aria-hidden
-          className="text-[14px] text-neutral-700 opacity-0 transition-opacity group-hover:opacity-100"
+          className="text-[18px] text-neutral-700 opacity-0 transition-opacity group-hover:opacity-100"
         >
           #
         </span>
@@ -272,7 +275,7 @@ export function BlockView({ block }: { block: Block }) {
       const List = block.ordered === true ? "ol" : "ul";
       return (
         <List
-          className={`my-4 space-y-2.5 pl-5 text-[14.5px] leading-[1.75] text-neutral-400 ${
+          className={`my-5 space-y-2.5 pl-5 text-[16px] leading-[1.625] text-neutral-400 ${
             block.ordered === true ? "list-decimal" : "list-disc"
           } marker:text-neutral-600`}
         >

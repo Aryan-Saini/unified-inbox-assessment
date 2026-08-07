@@ -58,13 +58,13 @@ function HistoryRow({
         {record.isSeed ? (
           <span
             title="Demo data"
-            className="shrink-0 rounded border border-line px-1 text-[10px] leading-[1.4] text-neutral-500"
+            className="shrink-0 rounded border border-line px-1 text-[11px] leading-[1.4] text-neutral-500"
           >
             demo
           </span>
         ) : null}
         <span
-          className={`min-w-0 flex-1 truncate text-[13px] ${
+          className={`min-w-0 flex-1 truncate text-[14.5px] ${
             active ? "text-white" : "text-neutral-300"
           }`}
         >
@@ -79,7 +79,7 @@ function HistoryRow({
             and fixed field per number: sized to their content, a two-digit count
             pushed the clock a character left of where a one-digit count put it,
             and neither glyph lined up with the row above. */}
-        <span className="flex shrink-0 items-center gap-2 text-[11px] tabular-nums transition-opacity group-hover:opacity-0">
+        <span className="flex shrink-0 items-center gap-2 text-[12px] tabular-nums transition-opacity group-hover:opacity-0">
           <span
             className="flex w-9 items-center justify-end gap-1 text-emerald-300/85"
             title={record.pending ? "Searching" : `${record.resultCount} results`}
@@ -207,7 +207,7 @@ export function Sidebar({
           <Logo className="h-7 w-7 text-white" />
         </span>
         <span
-          className={`min-w-0 flex-1 truncate text-[13px] font-semibold tracking-tight text-white transition-opacity duration-200 ${
+          className={`min-w-0 flex-1 truncate text-[14.5px] font-semibold tracking-tight text-white transition-opacity duration-200 ${
             isCollapsed ? "pointer-events-none opacity-0" : "opacity-100"
           }`}
         >
@@ -260,11 +260,11 @@ export function Sidebar({
         ) : (
           <button
             onClick={onNewSearch}
-            className="flex w-full items-center gap-2 rounded-lg border border-line-strong bg-white/[0.03] px-2.5 py-2 text-[13px] font-medium text-neutral-200 transition-colors hover:border-neutral-600 hover:bg-white/[0.06] hover:text-white"
+            className="flex w-full items-center gap-2 rounded-lg border border-line-strong bg-white/[0.03] px-2.5 py-2 text-[14.5px] font-medium text-neutral-200 transition-colors hover:border-neutral-600 hover:bg-white/[0.06] hover:text-white"
           >
             <PlusIcon className="h-4 w-4 shrink-0" />
             <span className="flex-1 text-left">New search</span>
-            <kbd className="rounded border border-line-strong px-1.5 py-0.5 font-sans text-[10px] text-neutral-500">
+            <kbd className="rounded border border-line-strong px-1.5 py-0.5 font-sans text-[11px] text-neutral-500">
               ⌘K
             </kbd>
           </button>
@@ -276,13 +276,13 @@ export function Sidebar({
         {isCollapsed ? null : (
           <>
             <div className="flex items-center justify-between px-2.5 pt-1 pb-1.5">
-              <span className="text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
+              <span className="text-[12px] font-semibold tracking-wider text-neutral-500 uppercase">
                 Searches
               </span>
             </div>
 
             {recent.length === 0 ? (
-              <p className="px-2.5 py-3 text-[12px] leading-relaxed text-neutral-600">
+              <p className="px-2.5 py-3 text-[13px] leading-relaxed text-neutral-600">
                 No active searches. Archived runs are still below.
               </p>
             ) : (
@@ -305,7 +305,7 @@ export function Sidebar({
                 <button
                   onClick={() => setArchiveOpen((v) => !v)}
                   aria-expanded={archiveOpen}
-                  className="flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase transition-colors hover:text-neutral-300"
+                  className="flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-semibold tracking-wider text-neutral-500 uppercase transition-colors hover:text-neutral-300"
                 >
                   <ChevronDownIcon
                     className={`h-3.5 w-3.5 transition-transform duration-200 ${
@@ -313,7 +313,7 @@ export function Sidebar({
                     }`}
                   />
                   Archived
-                  <span className="ml-auto font-sans text-[11px] tracking-normal normal-case">
+                  <span className="ml-auto font-sans text-[12px] tracking-normal normal-case">
                     {archived.length}
                   </span>
                 </button>
@@ -351,7 +351,7 @@ export function Sidebar({
           onClick={onOpenOutbox}
           title="Outgoing"
           aria-current={outboxActive ? "page" : undefined}
-          className={`flex items-center gap-2 rounded-lg text-[13px] transition-colors ${
+          className={`flex items-center gap-2 rounded-lg text-[14.5px] transition-colors ${
             outboxActive
               ? "bg-white/[0.07] text-white"
               : "text-neutral-400 hover:bg-white/5 hover:text-white"
@@ -363,7 +363,7 @@ export function Sidebar({
         <button
           onClick={onOpenSettings}
           title="Settings"
-          className={`flex items-center gap-2 rounded-lg text-[13px] text-neutral-400 transition-colors hover:bg-white/5 hover:text-white ${
+          className={`flex items-center gap-2 rounded-lg text-[14.5px] text-neutral-400 transition-colors hover:bg-white/5 hover:text-white ${
             isCollapsed ? "h-9 w-9 justify-center" : "w-full px-2.5 py-2"
           }`}
         >
@@ -382,7 +382,7 @@ export function Sidebar({
           target="_blank"
           rel="noreferrer noopener"
           title="API documentation"
-          className={`flex items-center gap-2 rounded-lg text-[13px] text-neutral-400 transition-colors hover:bg-white/5 hover:text-white ${
+          className={`flex items-center gap-2 rounded-lg text-[14.5px] text-neutral-400 transition-colors hover:bg-white/5 hover:text-white ${
             isCollapsed ? "h-9 w-9 justify-center" : "w-full px-2.5 py-2"
           }`}
         >
@@ -399,7 +399,7 @@ export function Sidebar({
         <SignOutButton redirectUrl="/auth">
           <button
             title="Sign out"
-            className={`flex items-center gap-2 rounded-lg text-[13px] text-neutral-400 transition-colors hover:bg-white/5 hover:text-white ${
+            className={`flex items-center gap-2 rounded-lg text-[14.5px] text-neutral-400 transition-colors hover:bg-white/5 hover:text-white ${
               isCollapsed ? "h-9 w-9 justify-center" : "w-full px-2.5 py-2"
             }`}
           >
