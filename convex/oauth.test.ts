@@ -21,7 +21,11 @@ import { insertUser } from "./test/fixtures";
 
 const modules = import.meta.glob("./**/*.ts");
 
-const ENV_KEYS = ["APP_BASE_URL", "APP_ORIGIN_ALLOWLIST"] as const;
+const ENV_KEYS = [
+  "APP_BASE_URL",
+  "APP_ORIGIN_ALLOWLIST",
+  "ALLOW_PRIVATE_NETWORK_ORIGINS",
+] as const;
 
 /** Restore whatever the runner had, so these tests cannot leak into others. */
 const saved = new Map<string, string | undefined>();

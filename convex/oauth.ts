@@ -89,6 +89,57 @@ export function sanitizeReturnTo(returnTo: string | undefined): string {
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
 /**
+ * Hosts that can only mean a machine on the visitor's own network.
+ *
+ * Loopback covers `pnpm dev`, but not a phone: `dev:lan` serves the app on this
+ * machine's LAN address (`https://10.0.0.124:3000`), which is not loopback, so
+ * the callback used to fall back to `APP_BASE_URL` and land the phone on *its
+ * own* localhost. Registering the address instead is a losing game — DHCP
+ * reassigns it, and a different network hands out a different one entirely.
+ *
+ * These ranges are not routable from the public internet, so the reachable set
+ * is "something on the LAN the visitor is already on" rather than "anywhere" —
+ * the same argument that lets loopback through, one hop wider. It is still a
+ * step out from *this machine only*, so it is off unless
+ * `ALLOW_PRIVATE_NETWORK_ORIGINS` is `"true"`, which `dev:lan` sets on the dev
+ * deployment. The hand-in deployment leaves it unset and keeps the strict rule.
+ */
+function isPrivateNetworkHost(hostname: string): boolean {
+  // mDNS resolves on the local link and nowhere else.
+  if (hostname.endsWith(".local")) return true;
+
+  const v4 = parseIpv4(hostname);
+  if (v4 !== undefined) {
+    const [a, b] = v4;
+    if (a === 10) return true; //            10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+    if (a === 192 && b === 168) return true; //  192.168.0.0/16
+    if (a === 169 && b === 254) return true; //  169.254.0.0/16, link-local
+    return false;
+  }
+
+  // `URL` keeps an IPv6 literal bracketed, so anything unbracketed is a name and
+  // was already handled above — `10.0.0.124.evil.test` fails `parseIpv4` and
+  // arrives here, where it must not pass.
+  if (!hostname.startsWith("[") || !hostname.endsWith("]")) return false;
+  const v6 = hostname.slice(1, -1).toLowerCase();
+  // fc00::/7 unique-local, fe80::/10 link-local.
+  return /^f[cd]/.test(v6) || /^fe[89ab]/.test(v6);
+}
+
+/** A dotted quad as four numbers, or `undefined` for anything else. Strict on
+ *  purpose: a hostname that merely starts with digits is not an address. */
+function parseIpv4(hostname: string): number[] | undefined {
+  const parts = hostname.split(".");
+  if (parts.length !== 4) return undefined;
+
+  const octets = parts.map((part) => (/^\d{1,3}$/.test(part) ? Number(part) : NaN));
+  return octets.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)
+    ? octets
+    : undefined;
+}
+
+/**
  * Reduce a caller-supplied origin to one this deployment is willing to return to.
  *
  * The frontend's origin is not something the backend can know: the port changes
@@ -100,6 +151,9 @@ const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
  *
  * - a **loopback** origin is allowed on any port. It names the visitor's own
  *   machine and nobody else's, which is what makes the dev port stop mattering.
+ * - a **private-network** origin is allowed on any port when
+ *   `ALLOW_PRIVATE_NETWORK_ORIGINS` is `"true"`, which is what lets a phone on
+ *   the same Wi-Fi finish a flow (`isPrivateNetworkHost`). Off by default.
  * - anything else must appear in `APP_BASE_URL` or `APP_ORIGIN_ALLOWLIST`
  *   (comma-separated), so a deployed frontend is registered exactly once.
  *
@@ -120,6 +174,13 @@ export function resolveAppOrigin(proposed: string | undefined): string | undefin
   if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
 
   if (LOOPBACK_HOSTS.has(url.hostname)) return url.origin;
+
+  if (
+    process.env.ALLOW_PRIVATE_NETWORK_ORIGINS === "true" &&
+    isPrivateNetworkHost(url.hostname)
+  ) {
+    return url.origin;
+  }
 
   return allowedOrigins().includes(url.origin) ? url.origin : undefined;
 }

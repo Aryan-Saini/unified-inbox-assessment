@@ -47,3 +47,6 @@ next-env.d.ts
 
 # Dev certificate from `pnpm dev:lan` (mkcert appends this line itself)
 /certificates/
+
+# Local demo prep — notes, scripts, drafts. Not part of the submission.
+/assessment/
