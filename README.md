@@ -1048,8 +1048,17 @@ The frontend is a third thing, on Vercel, and it does **not** deploy on push:
 uploaded. `main` is the production branch.
 
 ```bash
-pnpm deploy:vercel   # vercel build --prod, then vercel deploy --prebuilt --prod
+pnpm deploy:vercel   # pull, vercel build --prod, vercel deploy --prebuilt --prod
 ```
+
+[`scripts/deploy-vercel.mjs`](scripts/deploy-vercel.mjs) pulls the production
+environment first, because `NEXT_PUBLIC_*` values are inlined into the bundle at
+build time and the building machine is now this one. Without it the build falls
+back to `.env.local` and the deployment quietly talks to the *dev* Convex
+deployment. The three public values are stored **plain** on the project so the
+pull actually returns them — a sensitive variable comes back empty — while
+`CLERK_SECRET_KEY` and the rest stay sensitive and are read at runtime by the
+server. The script refuses to build if any of the three pulls empty.
 
 A push should be free — `staging` gets pushed often and mid-change, and none of
 those pushes are a deliverable. This also means the build a reviewer opens is one

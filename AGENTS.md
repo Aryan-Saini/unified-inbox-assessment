@@ -55,12 +55,27 @@ or half-migrated.
 nothing**. The frontend ships by building locally and uploading that build:
 
 ```bash
-pnpm deploy:vercel   # vercel build --prod, then vercel deploy --prebuilt --prod
+pnpm deploy:vercel   # scripts/deploy-vercel.mjs: pull, build --prod, deploy --prebuilt --prod
 ```
 
 It is pinned to the `personal` Vercel account, because that is the only account
 this project belongs to and picking the wrong one fails silently — it succeeds
 and puts the app on a URL nobody is looking at.
+
+The script pulls the production environment before building, and that pull is not
+a formality. `NEXT_PUBLIC_*` values are **inlined into the bundle at build time**,
+so the machine doing the build has to hold them — which used to be a Vercel
+builder and is now this one. Without the pull, `next build` falls back to
+`.env.local`, which points at the *dev* Convex deployment, and the deployed app
+talks to the wrong backend while looking perfectly healthy.
+
+That is why `NEXT_PUBLIC_CONVEX_URL`, `NEXT_PUBLIC_CONVEX_SITE_URL` and
+`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` are stored **plain** on the Vercel project
+rather than sensitive: a sensitive variable is never handed back, so it pulls as
+an empty string and the build inlines nothing. All three are public by
+construction — they ship inside the bundle to every visitor. `CLERK_SECRET_KEY`
+and friends stay sensitive; the server reads those at runtime and they never
+reach this machine. The script fails loudly if any of the three pulls empty.
 
 Two reasons it works this way. A push should be free — `staging` gets pushed
 often and mid-change, and none of those pushes are a deliverable. And the thing a
