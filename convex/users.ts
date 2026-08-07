@@ -63,38 +63,74 @@ export const viewer = query({
 });
 
 /**
- * Idempotently upsert the calling Clerk user into Convex.
- * Called on mount by the client once Clerk reports an authenticated session.
+ * Idempotently upsert the calling Clerk user into Convex, and return the row.
  *
- * The Clerk webhook (`convex/http.ts` -> `convex/clerk.ts`) is the authoritative
- * sync. This stays as the fallback that closes the gap the webhook cannot: a
- * webhook is asynchronous, so a brand-new user can reach the app before
- * `user.created` lands. Both paths upsert on `clerkUserId`, so whichever wins
- * the race, the other is a no-op patch.
+ * This is what `AuthGate` awaits before it mounts the app, so it is the thing
+ * that makes "signed in" and "has a user row" the same moment. Everything the
+ * row needs is already in the Convex JWT (`subject`, `email`, `name`,
+ * `pictureUrl`), so there is nothing to wait for — a user who arrives without a
+ * row gets issued one here rather than being told to come back later.
+ *
+ * The Clerk webhook (`convex/http.ts` -> `convex/clerk.ts`) is still the
+ * authoritative sync; this closes the gap it cannot, because a webhook is
+ * asynchronous and can be slow, retried, or — with a misconfigured signing
+ * secret — never delivered at all.
+ *
+ * ## Why this cannot issue two rows for one person
+ *
+ * Both writers (`store` here, `upsertFromClerk` there) read
+ * `by_clerk_user_id` for the same `clerkUserId` and only insert when that read
+ * comes back empty. Convex mutations are serializable transactions, so if two
+ * of them interleave — two tabs mounting at once, or this racing the webhook —
+ * the second one's read set overlaps the first one's write, Convex detects the
+ * conflict and re-runs it, and the re-run sees the row and patches instead.
+ * The empty read and the insert can never be separated by another writer, which
+ * is exactly the guarantee a duplicate would need.
+ *
+ * That property is load-bearing, so keep the shape: read the index inside the
+ * same mutation that writes, and never move the existence check into an action
+ * or a separate call. `.unique()` is the backstop — if a duplicate ever did
+ * appear, every read throws loudly rather than silently picking one row.
  */
 export const store = mutation({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (identity === null) {
-      throw new Error("store called without an authenticated identity");
-    }
-
-    const existing = await currentUser(ctx);
-    const fields = {
-      email: identity.email,
-      name: identity.name,
-      imageUrl: identity.pictureUrl,
-    };
-
-    if (existing !== null) {
-      await ctx.db.patch(existing._id, fields);
-      return existing._id;
-    }
-
-    return await ctx.db.insert("users", {
-      clerkUserId: identity.subject,
-      ...fields,
-    });
+    const user = await ensureUser(ctx);
+    return { userId: user._id };
   },
 });
+
+/**
+ * The calling user's row, created from the JWT if it is not there yet.
+ *
+ * The write-path counterpart to `requireUser`: any mutation holding a valid
+ * Convex identity can call this instead of throwing at a missing row, because
+ * every field the row needs is in the token. Read paths keep `requireUser` —
+ * a query cannot write.
+ *
+ * See `store` above for why concurrent callers cannot produce two rows.
+ */
+export async function ensureUser(ctx: MutationCtx) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (identity === null) throw new Error("Not signed in.");
+
+  const fields = {
+    email: identity.email,
+    name: identity.name,
+    imageUrl: identity.pictureUrl,
+  };
+
+  const existing = await currentUser(ctx);
+  if (existing !== null) {
+    await ctx.db.patch(existing._id, fields);
+    return { ...existing, ...fields };
+  }
+
+  const userId = await ctx.db.insert("users", {
+    clerkUserId: identity.subject,
+    ...fields,
+  });
+  const created = await ctx.db.get(userId);
+  if (created === null) throw new Error("User row vanished immediately after insert.");
+  return created;
+}

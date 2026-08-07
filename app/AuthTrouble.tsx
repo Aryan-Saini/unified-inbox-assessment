@@ -3,16 +3,18 @@
 import { SignOutButton } from "@clerk/nextjs";
 
 /**
- * Which of the three ways the sign-in handshake dead-ends we are looking at.
+ * Which of the two ways the sign-in handshake dead-ends we are looking at.
  *
  * - `unreachable` — clerk-js never finished loading, so nobody knows yet whether
  *   there is a session at all. Nothing under Clerk works, sign-out included.
  * - `rejected` — Clerk has a session and Convex refused the token it was traded
  *   for (`aud`, or `CLERK_JWT_ISSUER_DOMAIN` pointing at the other deployment).
- * - `syncing` — Convex accepted the identity but the user row has not landed, so
- *   `requireUser` would throw "your account is still syncing".
+ *
+ * Both are misconfigurations that waiting does not fix, which is the bar for
+ * showing a panel at all. A missing user row used to be a third case; `AuthGate`
+ * now issues the row itself, so it never reaches the screen.
  */
-export type TroubleReason = "unreachable" | "rejected" | "syncing";
+export type TroubleReason = "unreachable" | "rejected";
 
 /**
  * The escape hatch every gate falls through to instead of spinning forever.
@@ -21,7 +23,7 @@ export type TroubleReason = "unreachable" | "rejected" | "syncing";
  * never mounts, so its sign-out never renders, and `/auth` sends a Clerk-signed-in
  * visitor straight back. So the splash has to become something with a way out.
  *
- * Reloading retries the whole handshake (`StoreUser` runs again on mount), and
+ * Reloading retries the whole handshake from the top, and
  * signing out clears the Clerk cookie, which is what makes `/auth` reachable
  * again. `unreachable` gets no sign-out button on purpose — `SignOutButton` needs
  * the clerk-js that just failed to load, so it would be a button that cannot work.
@@ -61,10 +63,6 @@ const COPY: Record<TroubleReason, { title: string; body: string }> = {
   rejected: {
     title: "We can't verify your account",
     body: "You're signed in, but the backend would not accept this session. If this keeps happening, the deployment's Clerk issuer or audience is misconfigured.",
-  },
-  syncing: {
-    title: "Your account is still syncing",
-    body: "You're signed in, but your account record hasn't arrived yet. This normally takes a moment.",
   },
 };
 

@@ -443,7 +443,7 @@ pnpm dev:lan                   # instead of pnpm dev
 `pnpm dev` over the LAN — `http://192.168.x.x:3000` — cannot sign anyone in. That
 origin is not a *secure context*, so the browser withholds `crypto.subtle` and
 `crypto.randomUUID`, and clerk-js stops before its first Frontend API call without
-throwing. The only symptom is "Checking your session…" forever; `localhost` is
+throwing. The only symptom is "Loading…" forever; `localhost` is
 exempt, which is why it only shows up on a second device. (The gates now give up
 after six seconds and say so, rather than spinning.)
 
@@ -539,10 +539,14 @@ Three checks, and each exists because the one outside it cannot cover the case:
 2. **`AuthGate` / `GuestGate`** cover the async window the server cannot see.
    Clerk resolves its session in the browser and Convex then exchanges it for its
    own token; until both land, the page shows `AuthSplash` instead of a shell
-   whose queries would throw. `AuthGate` also waits for `viewer.stored`, so a
-   brand-new user waits for their row rather than reading "your account is still
-   syncing". `GuestGate` is what finishes sign-in: `LoginForm` never navigates, so
-   the redirect happens the moment Clerk reports a session.
+   whose queries would throw. `AuthGate` also *issues* the user row: it awaits
+   `users.store`, which upserts the Clerk identity straight out of the JWT, so a
+   brand-new user whose `user.created` webhook is late (or never configured) is
+   given a row instead of an error. The upsert reads and writes
+   `by_clerk_user_id` inside one serializable transaction, so two tabs — or this
+   racing the webhook — still produce exactly one row. `GuestGate` is what
+   finishes sign-in: `LoginForm` never navigates, so the redirect happens the
+   moment Clerk reports a session.
 
    **Only Clerk sends anyone back to `/auth`**, and that rule is load-bearing:
    Clerk is the only thing `proxy.ts` can see, so redirecting because *Convex*
@@ -552,12 +556,15 @@ Three checks, and each exists because the one outside it cannot cover the case:
    session revoked in the dashboard or ended in another tab seconds earlier — so a
    client-driven bounce carries `?signed_out=1` (`app/authParams.ts`) and the proxy
    takes the client's word for that one request. `useHardRedirect` strips the param
-   from anything it carries onward, so it never outlives the bounce. Signed into Clerk but not ready is
-   therefore an error state rather than a redirect — after a few seconds the splash
-   becomes `AuthTrouble`, which offers **Try again** (a reload, which retries the
-   upsert through `StoreUser`) and **Sign out** (which clears the Clerk cookie, and
-   so is what makes `/auth` reachable again). Without that panel the two dead ends
-   have no exit: the shell never mounts, so its own sign-out never renders.
+   from anything it carries onward, so it never outlives the bounce. Signed into
+   Clerk but *refused* by Convex is therefore an error state rather than a
+   redirect — after a few seconds the splash becomes `AuthTrouble`, which offers
+   **Try again** (a reload, which retries the whole handshake) and **Sign out**
+   (which clears the Clerk cookie, and so is what makes `/auth` reachable again).
+   Without that panel the two dead ends have no exit: the shell never mounts, so
+   its own sign-out never renders. Only those two — clerk-js never started, and a
+   token Convex refuses — get a panel, because they are the only ones waiting
+   does not fix. Everything else stays a single unlabelled `AuthSplash`.
 3. **`useAuthedQuery`** holds every query at `"skip"` until Convex reports an
    authenticated identity. The gates already make an early call unlikely; this
    makes it impossible, including during SSR and on the frame after a sign out.

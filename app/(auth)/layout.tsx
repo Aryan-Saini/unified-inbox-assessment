@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ConvexClientProvider } from "../ConvexClientProvider";
 import { Logo } from "../Logo";
-import { StoreUser } from "../StoreUser";
 import "../globals.css";
 
 const geistSans = Geist({
@@ -45,7 +44,10 @@ export default function RootLayout({
         {/* Clerk v7 places ClerkProvider inside <body>, not around <html>. */}
         <ClerkProvider>
           <ConvexClientProvider>
-            <StoreUser />
+            {/* The user row is not upserted here: `/auth` reads nothing from
+                the backend, and a signed-in visitor is redirected to the
+                dashboard, where `AuthGate` issues the row before anything
+                mounts. */}
             {/* No sign-out here any more: this group only serves `/auth`, and a
                 signed-in visitor is redirected off it before anything renders.
                 Signing out lives in the shell's sidebar instead. */}

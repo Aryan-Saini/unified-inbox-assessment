@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ConvexClientProvider } from "../ConvexClientProvider";
-import { StoreUser } from "../StoreUser";
 import "../globals.css";
 
 /**
@@ -52,7 +51,6 @@ export default function InboxLayout({
         {/* Clerk v7 places ClerkProvider inside <body>, not around <html>. */}
         <ClerkProvider>
           <ConvexClientProvider>
-            <StoreUser />
             {children}
           </ConvexClientProvider>
         </ClerkProvider>

@@ -32,8 +32,7 @@ export function GuestGate({ children }: { children: React.ReactNode }) {
   const unreachable = useStalled(!isLoaded);
 
   if (unreachable) return <AuthTrouble reason="unreachable" />;
-  if (!isLoaded) return <AuthSplash label="Checking your session" />;
-  if (isSignedIn) return <AuthSplash label="Opening your inbox" />;
+  if (!isLoaded || isSignedIn) return <AuthSplash />;
 
   return <>{children}</>;
 }

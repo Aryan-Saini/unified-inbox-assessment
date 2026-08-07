@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { useConvexAuth, useQuery } from "convex/react";
+import { useConvexAuth, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { AuthSplash } from "./AuthSplash";
 import { AuthTrouble } from "./AuthTrouble";
@@ -11,6 +12,9 @@ import { useStalled } from "./useStalled";
 
 /** Module scope so the params object is stable across renders. */
 const SIGNED_OUT_MARK = { [SIGNED_OUT_PARAM]: "1" };
+
+/** Backoff between `store` retries, capped. */
+const RETRY_MS = [400, 1000, 2000, 4000] as const;
 
 /**
  * The gate every signed-in screen sits behind.
@@ -23,23 +27,60 @@ const SIGNED_OUT_MARK = { [SIGNED_OUT_PARAM]: "1" };
  * is why no query underneath needs to defend itself against being called signed
  * out.
  *
- * `stored` is part of that condition on purpose: an identity Convex accepts but
- * has not persisted yet makes `requireUser` throw "your account is still
- * syncing", so a brand-new user waits here for the row instead of seeing that.
+ * The third step is the user row, and this gate *creates* it rather than waiting
+ * for it. The Clerk webhook is the authoritative sync, but it is asynchronous and
+ * can be late or (with a bad signing secret) never arrive — and a missing row is
+ * not something the person can do anything about. Everything the row needs is in
+ * the Convex JWT already, so `users.store` issues it on the spot; the mutation
+ * upserts on `clerkUserId` inside one transaction, so racing the webhook or a
+ * second tab still yields exactly one row. That is why there is no "your account
+ * is still syncing" screen any more — the case it described now fixes itself
+ * while the loading state is still on screen.
  *
- * The three ways that goes wrong all end at `AuthTrouble` rather than a redirect
- * or an endless spinner — see the comments on `signedOut`, `unreachable` and
- * `stalled`.
+ * Only the two states nobody can resolve by waiting still end at `AuthTrouble`:
+ * clerk-js never started, or Convex refused the token. Everything else is a load.
  */
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
   const { isLoading, isAuthenticated } = useConvexAuth();
+  const store = useMutation(api.users.store);
 
-  // Held at "skip" until Convex accepts the token: this query is safe signed
-  // out, but skipping keeps the rule "no query fires before auth" absolute.
-  const viewer = useQuery(api.users.viewer, isAuthenticated ? {} : "skip");
+  /** Set once `store` has returned — i.e. the row is known to exist. Mutations
+   *  are one-shot calls, not subscriptions, so this is the only way to hold the
+   *  gate closed until it resolves. Live data arrives afterwards, through the
+   *  children's own `useQuery` subscriptions. */
+  const [provisioned, setProvisioned] = useState(false);
 
-  const ready = isAuthenticated && viewer?.stored === true;
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+
+    // Retried rather than surfaced: a failure here is a transient backend blip,
+    // and the old behaviour — an error panel offering a reload — was a worse
+    // version of retrying. If it never succeeds, `stalled` below still has the
+    // last word.
+    void (async () => {
+      for (let attempt = 0; !cancelled; attempt++) {
+        try {
+          await store();
+          if (!cancelled) setProvisioned(true);
+          return;
+        } catch {
+          const wait = RETRY_MS[Math.min(attempt, RETRY_MS.length - 1)];
+          await new Promise((resolve) => setTimeout(resolve, wait));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      // Resets on sign-out, so the next identity re-runs the upsert instead of
+      // inheriting the previous one's "ready".
+      setProvisioned(false);
+    };
+  }, [isAuthenticated, store]);
+
+  const ready = isAuthenticated && provisioned;
 
   /**
    * Clerk, not Convex, decides who gets sent back to `/auth` — because Clerk is
@@ -59,24 +100,21 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const unreachable = useStalled(!isLoaded);
 
   /**
-   * Signed into Clerk but not ready, for longer than a handshake takes. Either
-   * Convex refused the JWT (`aud` or `CLERK_JWT_ISSUER_DOMAIN` wrong) or the row
-   * never landed.
+   * Signed into Clerk, and Convex has settled on "not authenticated" — the JWT
+   * was refused (`aud`, or `CLERK_JWT_ISSUER_DOMAIN` pointing at the other
+   * deployment). Nothing here retries its way out of that, so it is the one
+   * signed-in state that earns a panel.
    *
    * The clock only starts once Clerk has confirmed a session, which is what keeps
    * this distinct from `unreachable`: timing plain clerk-js startup here would put
    * "you're signed in, but…" on screen while nobody knows yet whether you are.
    */
-  const stalled = useStalled(isLoaded && isSignedIn === true && !ready);
+  const rejected = useStalled(
+    isLoaded && isSignedIn === true && !isLoading && !isAuthenticated,
+  );
 
   if (ready) return <>{children}</>;
-  if (signedOut) return <AuthSplash label="Taking you to sign in" />;
   if (unreachable) return <AuthTrouble reason="unreachable" />;
-  if (stalled) {
-    return <AuthTrouble reason={!isLoading && !isAuthenticated ? "rejected" : "syncing"} />;
-  }
-  if (!isLoaded || isLoading) {
-    return <AuthSplash label="Checking your session" />;
-  }
-  return <AuthSplash label="Setting up your account" />;
+  if (rejected) return <AuthTrouble reason="rejected" />;
+  return <AuthSplash />;
 }

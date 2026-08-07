@@ -21,6 +21,7 @@ import * as slack from "./oauth/slack";
 import { internalMutation, mutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { provider as providerValidator } from "./schema";
+import { ensureUser } from "./users";
 import type { Doc } from "./_generated/dataModel";
 
 type Provider = Doc<"connections">["provider"];
@@ -151,17 +152,10 @@ async function requireUser(ctx: MutationCtx) {
     throw new Error("Sign in before connecting an account.");
   }
 
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerk_user_id", (q) => q.eq("clerkUserId", identity.subject))
-    .unique();
-
-  if (user === null) {
-    // `StoreUser` upserts on mount and the Clerk webhook does the same, so this
-    // is a genuine race rather than a normal state — retrying works.
-    throw new Error("Your account is still syncing. Try again in a moment.");
-  }
-  return user;
+  // Issues the row when the Clerk webhook has not landed (or never will),
+  // rather than failing a connect the caller cannot do anything about. Upserts
+  // on `clerkUserId` in this same transaction, so racing the webhook is safe.
+  return await ensureUser(ctx);
 }
 
 /**
