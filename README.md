@@ -309,8 +309,8 @@ forwards port 3000.
 Open the repository in a Codespace. If you store
 `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, and
 `CLERK_JWT_ISSUER_DOMAIN` as repository Codespaces secrets, they are already
-available in the terminal. The devcontainer supplies the two public Convex URLs
-for `judicious-wildcat-326`, so starting the app is one command:
+available in the terminal. The devcontainer points the app at the local-dev
+Convex deployment, `judicious-wildcat-326`, so starting the app is one command:
 
 ```bash
 pnpm dev
