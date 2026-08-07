@@ -54,6 +54,7 @@ import { redactError } from "./core/redact";
 import { SENDERS } from "./core/registry";
 import { AdapterError, toAdapterError } from "./core/types";
 import { draftContentKey, draftDigest, requireOwnDraft } from "./drafts";
+import { consume } from "./limits";
 import {
   channel as channelValidator,
   errorKind as errorKindValidator,
@@ -315,6 +316,9 @@ export const send = mutation({
   }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
+    // Metered on the public shell, matching the REST twin's `restWrite`: the
+    // claim is idempotent, but the provider call it can trigger is not free.
+    await consume(ctx, "restWrite", user._id);
     return await claimSend(ctx, { userId: user._id, draftId: args.draftId });
   },
 });
@@ -608,6 +612,24 @@ function classifySendFailure(
     signal.aborted ||
     causedByAbort(err);
 
+  // A 2xx post-dispatch means the provider *accepted* the message; if we still
+  // threw, the response was merely unreadable (a truncated/non-JSON body), not a
+  // rejection. Retrying that would deliver a second copy, so it is `unknown`
+  // (never auto-retried) rather than the `transient` a non-JSON 200 classifies
+  // as on the read path. A genuine commit-then-5xx stays retryable in the branch
+  // below and is reconcilable read-only via the deterministic `Message-ID`.
+  if (
+    !aborted &&
+    error.httpStatus !== undefined &&
+    error.httpStatus >= 200 &&
+    error.httpStatus < 300
+  ) {
+    return AdapterError.unknown(
+      `The ${channel} provider accepted the message (HTTP ${error.httpStatus}) but its response could not be read, so it is unknown whether a receipt exists. It will not be retried automatically to avoid sending a second copy.`,
+      { httpStatus: error.httpStatus, detail: error.detail ?? error.message },
+    );
+  }
+
   // Post-dispatch, only a failure the *provider actually answered* may keep its
   // classification — and an answered failure always carries an HTTP status (the
   // Slack 200-{ok:false} classifier attaches its 200 for exactly this reason).
@@ -768,6 +790,8 @@ export const retry = mutation({
   }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
+    // Metered on the public shell, matching the REST twin's `restWrite`.
+    await consume(ctx, "restWrite", user._id);
     return await retrySend(ctx, { userId: user._id, sendId: args.sendId });
   },
 });

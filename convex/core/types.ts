@@ -123,13 +123,11 @@ export function toAdapterError(err: unknown): AdapterError {
   }
 
   // Anything unrecognised is permanent on purpose: an unclassified error
-  // auto-retrying forever is worse than one an operator has to look at.
-  return AdapterError.permanent(message, { detail: stringifyCause(err) });
-}
-
-function stringifyCause(err: unknown): string | undefined {
-  if (!(err instanceof Error) || err.stack === undefined) return undefined;
-  return err.stack;
+  // auto-retrying forever is worse than one an operator has to look at. The
+  // stack is deliberately NOT attached as `detail`: `detail` is stored and
+  // surfaced to clients, and a stack trace is internal implementation detail
+  // that leaks file paths and shape — the message is enough to classify and show.
+  return AdapterError.permanent(message);
 }
 
 /**

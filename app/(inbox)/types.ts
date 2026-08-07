@@ -124,6 +124,9 @@ export interface Connection {
    * one can still be switched on (it will just keep reporting its error).
    */
   enabled: boolean;
+  /** Seed rows are badged in the UI so demo data is never mistaken for a real
+   *  grant — the same rule the outbox and search history already follow. */
+  isSeed: boolean;
 }
 
 /**

@@ -194,6 +194,12 @@ export const authenticate = internalMutation({
     if (!timingSafeEqual(row.hash, args.hash)) return null;
     if (row.revokedAt !== undefined) return null;
 
+    // A key must not outlive its owner. `deleteFromClerk` revokes keys on
+    // account deletion, but this is the last line: if the user row is gone, the
+    // key resolves to nobody rather than authenticating against orphaned grants.
+    const user = await ctx.db.get("users", row.userId);
+    if (user === null) return null;
+
     const now = Date.now();
     if (row.lastUsedAt === undefined || now - row.lastUsedAt > LAST_USED_GRANULARITY_MS) {
       await ctx.db.patch("apiKeys", row._id, { lastUsedAt: now });

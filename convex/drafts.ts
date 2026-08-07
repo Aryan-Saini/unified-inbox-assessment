@@ -30,6 +30,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { canonicalContent, canonicalPayload } from "./core/canonical";
 import { sha256Hex, timingSafeEqual } from "./core/crypto";
 import { appError } from "./core/errors";
+import { consume } from "./limits";
 import { channel as channelValidator, errorKind as errorKindValidator } from "./schema";
 import { requireUser } from "./users";
 
@@ -185,9 +186,9 @@ export interface CreateDraftArgs {
   subject?: string;
   body: string;
   idempotencyKey?: string;
+  /** The result being replied to. `replyToExternalId`/`threadId` are derived
+   *  from it server-side, never accepted from the client. */
   replyToResultId?: Id<"searchResults">;
-  replyToExternalId?: string;
-  threadId?: string;
   injectFailure?: Doc<"drafts">["injectFailure"];
 }
 
@@ -242,6 +243,34 @@ export async function createDraft(ctx: MutationCtx, args: CreateDraftArgs) {
       "An idempotency key must be between 8 and 128 characters.",
     );
   }
+  // The key is interpolated into the Gmail `X-Unified-Inbox-Key` header and is
+  // deliberately excluded from the confirmation digest, so a CR/LF (or any
+  // control char) in it would smuggle an unconfirmed header — a `Bcc:`, say —
+  // past the confirm screen. Restrict it to a header-safe charset; this still
+  // admits the minted `idem_<uuidhex>` form and ordinary client keys.
+  if (!/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) {
+    throw appError(
+      "INVALID_STATE",
+      "An idempotency key may contain only letters, digits and the characters . _ : -",
+    );
+  }
+
+  // Threading is derived from an OWNED result, never from a client-supplied
+  // `replyToExternalId`/`threadId`: `replyToExternalId` becomes the Gmail
+  // `In-Reply-To`/`References` header on the wire, so trusting the client would
+  // let a caller thread a reply onto — or inject a header through — a message it
+  // does not own. Both authenticated shells pass the same `replyToResultId`, so
+  // the derivation happens here once rather than in each shell.
+  let replyToExternalId: string | undefined;
+  let threadId: string | undefined;
+  if (args.replyToResultId !== undefined) {
+    const result = await ctx.db.get("searchResults", args.replyToResultId);
+    if (result === null || result.userId !== args.userId) {
+      throw appError("NOT_FOUND", "That result does not exist.");
+    }
+    replyToExternalId = result.externalId;
+    threadId = result.threadId;
+  }
 
   const candidate = {
     channel: args.channel,
@@ -280,8 +309,8 @@ export async function createDraft(ctx: MutationCtx, args: CreateDraftArgs) {
     revision: 1,
     injectFailure: args.injectFailure,
     replyToResultId: args.replyToResultId,
-    replyToExternalId: args.replyToExternalId,
-    threadId: args.threadId,
+    replyToExternalId,
+    threadId,
     isSeed: false,
     createdAt: now,
     updatedAt: now,
@@ -523,6 +552,8 @@ export const create = mutation({
     /** Supply one to make a retried create idempotent; otherwise we mint it. */
     idempotencyKey: v.optional(v.string()),
     replyToResultId: v.optional(v.id("searchResults")),
+    /** Accepted for backward compatibility but deliberately ignored: threading is
+     *  derived server-side from an owned `replyToResultId` (see `createDraft`). */
     replyToExternalId: v.optional(v.string()),
     threadId: v.optional(v.string()),
     /** Demo affordance; inert unless the deployment allows fault injection. */
@@ -531,6 +562,12 @@ export const create = mutation({
   returns: v.object({ draft: draftView, reused: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
+    // One write's worth of the API budget, charged on the public shell as well as
+    // the REST twin — otherwise the deployment mutation is an unmetered bypass.
+    await consume(ctx, "restWrite", user._id);
+    // Any client-supplied `replyToExternalId`/`threadId` on `args` are ignored:
+    // `createDraft` reads neither and derives threading from the owned
+    // `replyToResultId` instead.
     return await createDraft(ctx, { userId: user._id, ...args });
   },
 });
@@ -559,6 +596,8 @@ export const confirm = mutation({
   }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
+    // Metered on the public shell too, matching the REST twin's `restWrite`.
+    await consume(ctx, "restWrite", user._id);
     return await confirmDraft(ctx, { userId: user._id, ...args });
   },
 });

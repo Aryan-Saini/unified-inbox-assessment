@@ -264,6 +264,10 @@ export function ConnectorSwitchboard({
                         <StatusPill tone={STATUS[account.status].tone}>
                           {STATUS[account.status].label}
                         </StatusPill>
+                        {/* Same badge the outbox puts on a seeded send: a demo
+                            account holds no grant, and a status pill alone would
+                            let it read as a real one. */}
+                        {account.isSeed ? <StatusPill tone="idle">demo</StatusPill> : null}
                       </div>
                       {/* What this grant can actually do. Narrow scopes are a
                           claim worth being able to check rather than trust, and

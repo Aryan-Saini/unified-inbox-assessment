@@ -212,8 +212,13 @@ export async function dispatchSearch(
     // switched on keeps reporting its error, which is how a revoked grant stays
     // visible (and reconnectable) instead of quietly vanishing from the fan-out.
     // A disconnected account is `enabled: false` and so drops out here.
+    // Seeded connections hold no grant, so dispatching one can only ever
+    // produce a failed source in a real search — `resolveToken` refuses them
+    // before any provider call. Skipping them here keeps demo data out of live
+    // results instead of letting it surface as an unexplained failure.
     for (const connection of connections) {
       if (connection.provider !== source || !connection.enabled) continue;
+      if (connection.isSeed) continue;
       targets.push({
         source,
         label: connection.label,
