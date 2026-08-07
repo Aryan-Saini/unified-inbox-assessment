@@ -16,6 +16,7 @@ import { ConvexReactClient } from "convex/react";
 import { ConvexProviderWithAuth } from "convex/react";
 import { ComposeDialog } from "../../(inbox)/ComposeDialog";
 import { ResultsList } from "../../(inbox)/ResultsList";
+import { SettingsDialog } from "../../(inbox)/SettingsDialog";
 import { ConfirmDialog } from "../../(inbox)/ui";
 import {
   CONNECTIONS,
@@ -92,6 +93,29 @@ function Scene({ scene }: { scene: string }) {
           still explain what each one went through.
         </p>
       </ConfirmDialog>
+    );
+  }
+
+  /**
+   * The settings panel, for the API-keys tab and its link into the docs.
+   *
+   * The sidebar's link is deliberately *not* a scene here: `Sidebar` renders
+   * Clerk's `SignOutButton`, which throws outside a `ClerkProvider` — and this
+   * harness exists precisely because it needs neither a session nor a
+   * deployment. Wiring Clerk in for one still would cost the property that
+   * makes every other scene capturable on a bare machine.
+   */
+  if (scene === "settings") {
+    return (
+      <SettingsDialog
+        open
+        onClose={nudge}
+        connections={CONNECTIONS}
+        onReconnect={nudge}
+        onAddAccount={nudge}
+        onDisconnect={nudge}
+        onRemove={nudge}
+      />
     );
   }
 

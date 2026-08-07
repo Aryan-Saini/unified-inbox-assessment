@@ -60,7 +60,21 @@ const withClerk = clerkMiddleware(async (auth, request) => {
 });
 
 /**
- * `/ui-stress` — the screenshot harness — never reaches Clerk.
+ * The public API documentation, and the machine-readable copies beside it.
+ *
+ * These describe a public interface and carry no user data, so they are read
+ * without a session — which is the whole point: the instructions for getting a
+ * credential must not sit behind the credential, and an agent or a reviewer
+ * with a `curl` has no session to offer. Bypassing `clerkMiddleware` rather than
+ * merely not protecting the route matters because the handshake redirect it can
+ * issue would turn a `curl` of `llms.txt` into a 307 to Clerk.
+ */
+function isPublicDocs(pathname: string): boolean {
+  return pathname === "/documentation" || pathname.startsWith("/documentation/") || pathname === "/llms.txt";
+}
+
+/**
+ * `/ui-stress` — the screenshot harness — never reaches Clerk either.
  *
  * It is a development-only route (the page itself 404s outside `next dev`) that
  * renders components against fixtures, so it has no session and wants none. Left
@@ -71,10 +85,11 @@ export default function proxy(
   request: NextRequest,
   event: Parameters<typeof withClerk>[1],
 ) {
-  if (
-    process.env.NODE_ENV === "development" &&
-    request.nextUrl.pathname.startsWith("/ui-stress")
-  ) {
+  const { pathname } = request.nextUrl;
+
+  if (isPublicDocs(pathname)) return NextResponse.next();
+
+  if (process.env.NODE_ENV === "development" && pathname.startsWith("/ui-stress")) {
     return NextResponse.next();
   }
   return withClerk(request, event);

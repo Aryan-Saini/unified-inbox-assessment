@@ -340,7 +340,13 @@ const listConnections: Handler = async (ctx, rc) => {
 
 /* ------------------------------------------------------------------ the table */
 
-const ROUTES: Route[] = [
+/**
+ * Exported for one reason: `app/(docs)/documentation/docs.test.ts` compares this
+ * table against the documented endpoint list, so a route added here without
+ * being documented — or documented without existing — fails a test rather than
+ * shipping as a lie on the documentation page.
+ */
+export const ROUTES: Route[] = [
   { method: "POST", pattern: "/searches", handler: runSearch },
   { method: "GET", pattern: "/searches", handler: listSearches },
   { method: "GET", pattern: "/searches/:id", handler: getSearch },

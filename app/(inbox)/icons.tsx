@@ -146,6 +146,14 @@ export const KeyIcon = (p: Props) => (
   </Svg>
 );
 
+/** API documentation. An open book, on the same 24-grid as the rest. */
+export const BookIcon = (p: Props) => (
+  <Svg {...p}>
+    <path d="M12 6.5C10.5 5.2 8.6 4.5 6 4.5H4v13h2c2.6 0 4.5.7 6 2 1.5-1.3 3.4-2 6-2h2v-13h-2c-2.6 0-4.5.7-6 2Z" />
+    <path d="M12 6.5v13" />
+  </Svg>
+);
+
 export const MenuIcon = (p: Props) => (
   <Svg {...p}>
     <path d="M4 7h16M4 12h16M4 17h16" />

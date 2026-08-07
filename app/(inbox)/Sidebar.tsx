@@ -6,9 +6,11 @@ import { Logo } from "../Logo";
 import type { SearchRecord } from "./types";
 import {
   ArchiveIcon,
+  BookIcon,
   ChevronDownIcon,
   ClockIcon,
   CloseIcon,
+  ExternalIcon,
   ListIcon,
   PanelLeftIcon,
   PlusIcon,
@@ -370,6 +372,28 @@ export function Sidebar({
             <span className="flex-1 text-left">Settings</span>
           )}
         </button>
+        {/* An anchor, not a router push, and a new tab: the docs are a separate
+            shell with no Convex subscription, so navigating there in place would
+            tear down the live search this rail is listing and make Back the only
+            way home. `noreferrer` alongside `noopener` because the docs page has
+            no business knowing which account was reading it. */}
+        <a
+          href="/documentation"
+          target="_blank"
+          rel="noreferrer noopener"
+          title="API documentation"
+          className={`flex items-center gap-2 rounded-lg text-[13px] text-neutral-400 transition-colors hover:bg-white/5 hover:text-white ${
+            isCollapsed ? "h-9 w-9 justify-center" : "w-full px-2.5 py-2"
+          }`}
+        >
+          <BookIcon className="h-4.5 w-4.5 shrink-0" />
+          {isCollapsed ? null : (
+            <>
+              <span className="flex-1 text-left">Documentation</span>
+              <ExternalIcon className="h-3.5 w-3.5 shrink-0 text-neutral-600" />
+            </>
+          )}
+        </a>
         {/* The only way out: `/auth` redirects a signed-in visitor straight back
             here, so signing out has to live inside the shell. */}
         <SignOutButton redirectUrl="/auth">
