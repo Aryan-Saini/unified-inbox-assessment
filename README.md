@@ -18,6 +18,7 @@ Search Gmail, Slack and the web from one place.
 | `/documentation` | The REST reference, plus markdown and OpenAPI copies for agents. **Public** |
 | `/` | Redirects to whichever of these you belong on |
 
+- [Reviewer login](#reviewer-login)
 - [Architecture](#architecture)
 - [Local setup](#local-setup)
 - [GitHub Codespaces](#github-codespaces)
@@ -28,6 +29,18 @@ Search Gmail, Slack and the web from one place.
 - [Tests](#tests)
 - [Deployments](#deployments)
 - [Known limits](#known-limits)
+
+---
+
+## Reviewer login
+
+The same test account works on both the [deployed Vercel app](https://unified-inbox-assessment.vercel.app)
+and a local or Codespaces copy:
+
+- Email: `test+clerk_test@test.com`
+- Verification code: `424242`
+
+This uses Clerk's documented [test email and verification-code flow](https://clerk.com/docs/guides/development/testing/test-emails-and-phones).
 
 ---
 
@@ -303,7 +316,7 @@ than by the browser.
 ## GitHub Codespaces
 
 [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) gives a Node
-20 image with pnpm via corepack, runs a frozen `pnpm install` on create, and
+22 image with pnpm via corepack, runs a frozen `pnpm install` on create, and
 forwards port 3000.
 
 Open the repository in a Codespace. If you store
