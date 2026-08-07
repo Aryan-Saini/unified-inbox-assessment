@@ -8,14 +8,24 @@ import { useKeyboardInset } from "../useKeyboardInset";
 import { CloseIcon } from "./icons";
 
 /**
- * A truncated label that shows the whole thing on hover.
+ * A truncated label that hands the whole value back — on hover with a mouse, in
+ * a sheet on a tap.
  *
  * Every long name in this UI is clamped to a width — an address may be 254
  * characters and a workspace may be named without spaces — which leaves the
  * ellipsis as the only account of what was cut. This gives it back, and only
- * when there is something to give back: the tooltip is suppressed unless the
+ * when there is something to give back: neither affordance appears unless the
  * text is actually overflowing its box, so a name that fits does not sprout a
  * bubble for no reason.
+ *
+ * The two routes exist because a phone has no hover. The tooltip below was the
+ * *whole* recovery path for a clamped name, which meant that on the device where
+ * the clamp bites hardest the full address was simply unreachable. A tap on a
+ * clipped label opens a bottom sheet with the value in it, wrapped and
+ * selectable — something you can read, rather than a bubble you cannot summon.
+ * Whether the gesture was a tap is read from the pointer event rather than from
+ * `(hover: none)`, for the same reason `ResultCard` does: the media query
+ * describes the device, and a touchscreen laptop is both.
  *
  * `title` was the cheap version and is deliberately not used: the OS tooltip
  * waits about a second, cannot be styled to match, and — the reason it had to
@@ -27,11 +37,14 @@ import { CloseIcon } from "./icons";
  */
 export function Truncated({
   text,
+  label = "Full text",
   className = "",
   children,
 }: {
-  /** The full value, shown on hover. */
+  /** The full value, shown on hover and in the sheet. */
   text: string;
+  /** Names the value in the sheet's header — "Sender", "Where this lives". */
+  label?: string;
   className?: string;
   /** Rendered in place of `text` when the visible form is richer than the
    *  string — "George at aryan-test", an address hung off a name. */
@@ -41,10 +54,35 @@ export function Truncated({
   const bubble = useRef<HTMLSpanElement | null>(null);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const [at, setAt] = useState<{ left: number; top: number } | null>(null);
+  const [sheet, setSheet] = useState(false);
+
+  /**
+   * Whether anything is actually cut, kept in state rather than measured at the
+   * moment of the gesture.
+   *
+   * Hover could ask on demand; the tap route cannot, because the affordance has
+   * to be *visible* — a label that opens a sheet says so with a dotted underline
+   * before it is touched, and one that fits must not. Re-measured on resize, so
+   * rotating a phone does not leave the hint lying.
+   */
+  const [clipped, setClipped] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el === null) return;
+    const measure = () => setClipped(el.scrollWidth > el.clientWidth + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [text, children]);
+
+  /** Set on the gesture that precedes the click, before the click decides. */
+  const fromTouch = useRef(false);
 
   const show = () => {
     const el = ref.current;
-    if (el === null) return;
+    if (el === null || fromTouch.current) return;
     // Nothing was cut, so there is nothing to reveal.
     if (el.scrollWidth <= el.clientWidth + 1) return;
     setAnchor(el.getBoundingClientRect());
@@ -53,6 +91,12 @@ export function Truncated({
   const hide = () => {
     setAnchor(null);
     setAt(null);
+  };
+
+  const open = () => {
+    if (!clipped) return;
+    hide();
+    setSheet(true);
   };
 
   /**
@@ -93,11 +137,52 @@ export function Truncated({
         onMouseLeave={hide}
         onFocus={show}
         onBlur={hide}
+        onPointerDown={(event) => {
+          fromTouch.current = event.pointerType !== "mouse";
+        }}
+        onClick={(event) => {
+          if (!fromTouch.current || !clipped) return;
+          // The label sits inside links and cards that answer to a tap of their
+          // own; reading what was cut is a different intent from following the
+          // row, so the gesture stops here.
+          event.preventDefault();
+          event.stopPropagation();
+          open();
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          if (!clipped) return;
+          event.preventDefault();
+          open();
+        }}
+        role={clipped ? "button" : undefined}
+        aria-label={clipped ? `${label}, truncated — open in full` : undefined}
         tabIndex={0}
-        className={`truncate ${className}`}
+        // The hint is drawn only when something was cut, and only where a tap is
+        // the way in: on a mouse the underline would promise a click that hover
+        // has already answered.
+        className={`truncate ${
+          clipped
+            ? "cursor-pointer decoration-neutral-600 decoration-dotted underline-offset-4 [@media(hover:none)]:underline"
+            : ""
+        } ${className}`}
       >
         {children ?? text}
       </span>
+
+      {/* The tap route. A sheet rather than a bubble: the value it exists to
+          show can be 254 characters, which is four lines on a phone — a
+          floating tooltip that size is a dialog wearing a disguise. */}
+      <Modal
+        open={sheet}
+        onClose={() => setSheet(false)}
+        title={label}
+        width="max-w-md"
+      >
+        <p className="px-5 py-4 text-[13px] leading-relaxed wrap-anywhere text-neutral-200 select-all">
+          {text}
+        </p>
+      </Modal>
 
       {anchor === null || typeof document === "undefined"
         ? null
@@ -112,7 +197,7 @@ export function Truncated({
                     { left: -9999, top: 0, visibility: "hidden" }
                   : { left: at.left, top: at.top }
               }
-              className="pointer-events-none fixed z-[80] max-w-[27rem] rounded-lg border border-line-strong bg-ink-900 px-2.5 py-1.5 text-[12px] leading-relaxed break-words text-neutral-100 shadow-[0_12px_40px_rgba(0,0,0,0.7)]"
+              className="pointer-events-none fixed z-[80] max-w-[27rem] rounded-lg border border-line-strong bg-ink-900 px-2.5 py-1.5 text-[12px] leading-relaxed wrap-anywhere text-neutral-100 shadow-[0_12px_40px_rgba(0,0,0,0.7)]"
             >
               {text}
             </span>,
@@ -195,9 +280,16 @@ export function Modal({
     };
   }, [open]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
-  return (
+  /**
+   * Through a portal, for the reason `Truncated`'s tooltip is: `fixed` is only
+   * the viewport when no ancestor has a transform, and the result cards animate
+   * in on one. A dialog opened from inside a card was laid out against the card
+   * — the right size for a box a third of the screen wide, in the wrong place,
+   * with a backdrop that covered the card and nothing else.
+   */
+  return createPortal(
     <div
       className={`fixed inset-0 z-50 flex justify-center sm:items-center ${
         mobileFullScreen ? "items-stretch" : "items-end"
@@ -215,7 +307,12 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        className={`pop-in relative flex w-full ${width} flex-col overflow-hidden border-line bg-ink-900 outline-none sm:max-h-[92vh] sm:rounded-2xl sm:border sm:shadow-[0_24px_80px_rgba(0,0,0,0.7)] ${
+        // `min-w-0` is load-bearing, not decoration: a flex item will not shrink
+        // below the widest unbreakable thing inside it, so a dialog titled with
+        // a 254-character address grew past `max-w-*` and past the viewport with
+        // it — centred, so it bled off *both* edges. The title wraps anywhere
+        // (below) and this lets the box believe it.
+        className={`pop-in relative flex w-full min-w-0 ${width} flex-col overflow-hidden border-line bg-ink-900 outline-none sm:max-h-[92vh] sm:rounded-2xl sm:border sm:shadow-[0_24px_80px_rgba(0,0,0,0.7)] ${
           mobileFullScreen
             ? // `h-full` rather than `h-dvh`: it resolves against the overlay's
               // content box, which is the window *minus* the keyboard, where
@@ -233,7 +330,12 @@ export function Modal({
             {heading ?? (
               <>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-[15px] font-semibold text-white">{title}</h2>
+                  {/* `wrap-anywhere`, not `break-words`: only the former also
+                      shrinks the element's *min-content* width, which is what
+                      the flex column above measures itself against. */}
+                  <h2 className="min-w-0 text-[15px] font-semibold wrap-anywhere text-white">
+                    {title}
+                  </h2>
                   {badge}
                 </div>
                 {subtitle ? (
@@ -263,7 +365,8 @@ export function Modal({
           </footer>
         ) : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -293,7 +396,9 @@ export function ConfirmDialog({
 }) {
   return (
     <Modal open={open} onClose={onClose} title={title} width="max-w-md">
-      <div className="px-5 py-4 text-[13px] leading-relaxed text-neutral-400">
+      {/* The body names the thing being removed, which is the same address that
+          made the title overflow — so it wraps on the same terms. */}
+      <div className="px-5 py-4 text-[13px] leading-relaxed wrap-anywhere text-neutral-400">
         {children}
       </div>
       <footer className="flex items-center justify-end gap-2.5 border-t border-line bg-ink-850/60 px-5 py-3.5">

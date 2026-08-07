@@ -420,7 +420,11 @@ function ResultCard({
             target="_blank"
             rel="noreferrer"
             onClick={interceptTap}
-            className="mt-2 block line-clamp-3 text-[14px] leading-relaxed text-neutral-100 decoration-neutral-600 underline-offset-2 hover:underline"
+            // No `block` beside `line-clamp-3`: the clamp sets its own
+            // `display: -webkit-box`, and whichever of the two Tailwind emits
+            // last wins — which was `block`, so a long chat message rendered at
+            // full height and pushed the row's actions off the card.
+            className="mt-2 line-clamp-3 text-[14px] leading-relaxed text-neutral-100 decoration-neutral-600 underline-offset-2 hover:underline"
           >
             <Highlight text={result.snippet} tokens={tokens} />
           </a>

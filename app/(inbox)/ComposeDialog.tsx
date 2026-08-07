@@ -402,10 +402,12 @@ export function ComposeDialog({
               payload — editable, and about to be sent back to them — when all
               they were ever doing was reminding you what this is a reply to. */}
           <div className="rounded-lg border border-line bg-ink-850/60 px-3.5 py-3">
-            <p className="text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
+            {/* The author is an address as often as it is a name, so this line
+                is subject to the same 254 characters as the To field. */}
+            <p className="text-[11px] font-semibold tracking-wider wrap-anywhere text-neutral-500 uppercase">
               {result.author ?? meta.name} wrote · {result.age} ago
             </p>
-            <p className="mt-2 max-h-28 overflow-y-auto border-l-2 border-line-strong pl-3 text-[13px] leading-relaxed whitespace-pre-wrap text-neutral-400 scrollbar-thin">
+            <p className="mt-2 max-h-28 overflow-y-auto border-l-2 border-line-strong pl-3 text-[13px] leading-relaxed whitespace-pre-wrap wrap-anywhere text-neutral-400 scrollbar-thin">
               {result.snippet}
             </p>
           </div>
@@ -420,8 +422,17 @@ export function ComposeDialog({
               <span className="mb-1.5 block text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
                 To
               </span>
-              <div className={`flex items-center gap-2 ${FIELD} px-3 py-2.5`}>
-                <span className="font-mono text-[13px] text-neutral-200">{to}</span>
+              {/* Wraps rather than truncates: this is the recipient on the step
+                  before a send, so it is the one string in the dialog that must
+                  be readable in full. A monospaced 254-character address has no
+                  space and no hyphen to break on, so it ran straight out of the
+                  field, out of the sheet and off the phone — `wrap-anywhere`
+                  gives it a break point, and `min-w-0` lets the field shrink to
+                  it instead of being pushed wide. */}
+              <div className={`flex items-start gap-2 ${FIELD} px-3 py-2.5`}>
+                <span className="min-w-0 font-mono text-[13px] wrap-anywhere text-neutral-200">
+                  {to}
+                </span>
               </div>
             </label>
           ) : null}
@@ -470,7 +481,7 @@ export function ComposeDialog({
                 className="flex items-start gap-3 px-3.5 py-2.5 text-[12.5px]"
               >
                 <dt className="w-32 shrink-0 text-neutral-500">{label}</dt>
-                <dd className="min-w-0 flex-1 font-mono break-words text-neutral-100">
+                <dd className="min-w-0 flex-1 font-mono wrap-anywhere text-neutral-100">
                   {value}
                 </dd>
               </div>
@@ -481,7 +492,7 @@ export function ComposeDialog({
             <span className="mb-1.5 block text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
               Exact body to be sent
             </span>
-            <pre className="scrollbar-thin max-h-56 overflow-y-auto rounded-lg border border-line bg-ink-950 px-3.5 py-3 font-mono text-[12px] leading-relaxed whitespace-pre-wrap text-neutral-200">
+            <pre className="scrollbar-thin max-h-56 overflow-y-auto rounded-lg border border-line bg-ink-950 px-3.5 py-3 font-mono text-[12px] leading-relaxed whitespace-pre-wrap wrap-anywhere text-neutral-200">
               {shownBody}
             </pre>
           </div>

@@ -25,7 +25,7 @@ function redirectTo(request: NextRequest, pathname: string) {
   return NextResponse.redirect(url);
 }
 
-export default clerkMiddleware(async (auth, request) => {
+const withClerk = clerkMiddleware(async (auth, request) => {
   const { userId } = await auth();
   const { pathname, searchParams } = request.nextUrl;
 
@@ -58,6 +58,27 @@ export default clerkMiddleware(async (auth, request) => {
 
   return NextResponse.next();
 });
+
+/**
+ * `/ui-stress` — the screenshot harness — never reaches Clerk.
+ *
+ * It is a development-only route (the page itself 404s outside `next dev`) that
+ * renders components against fixtures, so it has no session and wants none. Left
+ * to `clerkMiddleware` it gets the handshake redirect instead, which is a capture
+ * of Clerk's error page rather than of the UI.
+ */
+export default function proxy(
+  request: NextRequest,
+  event: Parameters<typeof withClerk>[1],
+) {
+  if (
+    process.env.NODE_ENV === "development" &&
+    request.nextUrl.pathname.startsWith("/ui-stress")
+  ) {
+    return NextResponse.next();
+  }
+  return withClerk(request, event);
+}
 
 export const config = {
   matcher: [

@@ -1134,6 +1134,27 @@ proves the count stays at one — lives on the `/outbox` card.
 Keyboard: `⌘K` focuses the search field, `⌘\` collapses the sidebar, `Esc`
 dismisses a dialog or the mobile nav sheet.
 
+### The stress harness
+
+Layout regressions are found and re-captured with a development-only route,
+`/ui-stress?scene=…`, which renders the surfaces that carry an arbitrarily long
+string — the result row, the reply dialog, the remove-account confirm — against
+the same awkward fixtures `convex/seed.ts` loads. It has no Clerk provider and no
+live Convex client, so it renders identically on a machine with no deployment and
+no session, and two captures across a change differ only where the code did.
+
+```bash
+pnpm exec playwright install chromium          # once
+node scripts/screenshots/capture.mjs /tmp/after   # phone + desktop PNGs
+node scripts/screenshots/overflow.mjs             # names what is cut off, exits 1 if any
+```
+
+`overflow.mjs` is the useful half: a screenshot shows *that* something bled,
+while it says which element ran past which box and by how many pixels — and it
+knows the difference between a deliberate `truncate` ellipsis and a string that
+was simply cut off. Before/after pairs live in
+[`docs/screenshots/before-after/`](docs/screenshots/before-after).
+
 ---
 
 ## Known limits

@@ -312,17 +312,26 @@ export function ResultIdentity({
           full width of the card before ellipsising, and the timestamp on the
           right was the only thing that stopped it. A cap makes the ellipsis
           land where a name stops being readable rather than where the card
-          runs out. The full value is on the element's title. */}
+          runs out.
+
+          The cap is much tighter on a phone. At 30rem it was wider than the
+          phone itself, which is the same as having no cap at all: the line ran
+          to the card's edge and stopped hard against the timestamp, with no
+          gutter to say it had been cut rather than merely fitted. 13rem leaves
+          that gutter, and the ellipsis reads as a control — which on touch it
+          now is: tapping either line opens the whole value in a sheet. */}
       <span className="min-w-0 flex-1">
         <Truncated
           text={fullName ?? label}
-          className="block max-w-[30rem] text-[13px] leading-tight text-neutral-200"
+          label="Sender"
+          className="block max-w-[13rem] text-[13px] leading-tight text-neutral-200 sm:max-w-[30rem]"
         >
           {name ?? label}
         </Truncated>
         <Truncated
           text={where}
-          className="mt-0.5 block max-w-[30rem] text-[11.5px] leading-tight text-neutral-500"
+          label="Where this lives"
+          className="mt-0.5 block max-w-[13rem] text-[11.5px] leading-tight text-neutral-500 sm:max-w-[30rem]"
         />
       </span>
     </>

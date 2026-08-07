@@ -80,12 +80,13 @@ export function AccountName({
   const shell = "min-w-0 flex-1 text-[13px] font-medium text-neutral-100";
 
   if (account.accountName === undefined || account.accountName === "") {
-    return <Truncated text={account.label} className={shell} />;
+    return <Truncated text={account.label} label="Account" className={shell} />;
   }
 
   return (
     <Truncated
       text={`${account.accountName} at ${account.label}`}
+      label="Account"
       className={shell}
     >
       {account.accountName}

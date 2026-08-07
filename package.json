@@ -34,6 +34,7 @@
     "convex-test": "^0.0.55",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
+    "playwright": "^1.62.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite": "8.2.0",
