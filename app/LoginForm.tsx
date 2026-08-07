@@ -605,7 +605,7 @@ const MFA_LABELS: Record<MfaStrategy, string> = {
 };
 
 const inputClass =
-  "h-12 w-full rounded-md border border-neutral-800 bg-neutral-950 px-4 text-[15px] text-white placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none";
+  "h-12 w-full rounded-md border border-neutral-800 bg-neutral-950 px-4 text-[16px] text-white placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none";
 
 function Submit({
   busy,
@@ -625,7 +625,7 @@ function Submit({
       type={onClick ? "button" : "submit"}
       onClick={onClick}
       disabled={busy || disabled}
-      className="h-12 w-full rounded-md bg-neutral-100 text-[15px] font-medium text-black transition-colors hover:bg-white disabled:opacity-60"
+      className="h-12 w-full rounded-md bg-neutral-100 text-[16px] font-medium text-black transition-colors hover:bg-white disabled:opacity-60"
     >
       {busy ? busyLabel : label}
     </button>

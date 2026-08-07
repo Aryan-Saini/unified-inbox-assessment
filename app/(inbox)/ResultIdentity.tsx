@@ -220,7 +220,7 @@ function SourceAvatar({
       {src === undefined ? (
         <span
           aria-hidden
-          className="flex h-8 w-8 items-center justify-center rounded-full text-[14px] leading-none font-semibold"
+          className="flex h-8 w-8 items-center justify-center rounded-full text-[15px] leading-none font-semibold"
           style={{
             backgroundColor: `hsl(${hue} 45% 28%)`,
             color: `hsl(${hue} 75% 85%)`,
@@ -324,14 +324,14 @@ export function ResultIdentity({
         <Truncated
           text={fullName ?? label}
           label="Sender"
-          className="block max-w-[13rem] text-[13px] leading-tight text-neutral-200 sm:max-w-[30rem]"
+          className="block max-w-[13rem] text-[14.5px] leading-tight text-neutral-200 sm:max-w-[30rem]"
         >
           {name ?? label}
         </Truncated>
         <Truncated
           text={where}
           label="Where this lives"
-          className="mt-0.5 block max-w-[13rem] text-[11.5px] leading-tight text-neutral-500 sm:max-w-[30rem]"
+          className="mt-0.5 block max-w-[13rem] text-[12.5px] leading-tight text-neutral-500 sm:max-w-[30rem]"
         />
       </span>
     </>

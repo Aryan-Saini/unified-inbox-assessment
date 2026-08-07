@@ -52,7 +52,7 @@ export function ScopeSummary({ scopes }: { scopes: string[] }) {
   return (
     <span
       title={names.join("\n")}
-      className="mt-0.5 inline-block cursor-help text-[11.5px] text-neutral-500 underline decoration-dotted decoration-neutral-700 underline-offset-2"
+      className="mt-0.5 inline-block cursor-help text-[12.5px] text-neutral-500 underline decoration-dotted decoration-neutral-700 underline-offset-2"
     >
       {scopes.length} {scopes.length === 1 ? "scope" : "scopes"}
     </span>
@@ -77,7 +77,7 @@ export function AccountName({
   // a legal one — pushed the status pill off the row instead of ellipsising.
   // The name yields, the pill does not, and `Truncated` hands the whole thing
   // back on hover.
-  const shell = "min-w-0 flex-1 text-[13px] font-medium text-neutral-100";
+  const shell = "min-w-0 flex-1 text-[14.5px] font-medium text-neutral-100";
 
   if (account.accountName === undefined || account.accountName === "") {
     return <Truncated text={account.label} label="Account" className={shell} />;
@@ -211,7 +211,7 @@ export function ConnectorSwitchboard({
         {/* Master switch */}
         <div className="flex items-center gap-3 rounded-xl border border-line bg-ink-850/60 p-3">
           <Logo className="h-6 w-6 shrink-0" />
-          <p className="min-w-0 flex-1 text-[13.5px] font-semibold text-white">
+          <p className="min-w-0 flex-1 text-[15px] font-semibold text-white">
             Turn on {meta.name} connector
           </p>
           <Switch
@@ -225,13 +225,13 @@ export function ConnectorSwitchboard({
         {/* Accounts */}
         <div className="mt-3.5">
             <div className="mb-2 flex items-center justify-between gap-3">
-              <h3 className="text-[11.5px] font-semibold tracking-wide text-neutral-500 uppercase">
+              <h3 className="text-[12.5px] font-semibold tracking-wide text-neutral-500 uppercase">
                 Accounts
               </h3>
               <Button
                 variant="outline"
                 onClick={() => onAddAccount(selected)}
-                className="!px-2.5 !py-1.5 !text-[12px]"
+                className="!px-2.5 !py-1.5 !text-[13px]"
               >
                 <PlusIcon className="h-3.5 w-3.5" />
                 Add account
@@ -239,7 +239,7 @@ export function ConnectorSwitchboard({
             </div>
 
             {accounts.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-line-strong px-3.5 py-6 text-center text-[13px] text-neutral-500">
+              <p className="rounded-xl border border-dashed border-line-strong px-3.5 py-6 text-center text-[14.5px] text-neutral-500">
                 No {meta.name} accounts yet. Add one to search it.
               </p>
             ) : (
@@ -282,7 +282,7 @@ export function ConnectorSwitchboard({
                         <Button
                           variant="ghost"
                           onClick={() => onReconnect(account.id)}
-                          className="!px-2.5 !py-1 !text-[12px]"
+                          className="!px-2.5 !py-1 !text-[13px]"
                         >
                           Reconnect
                         </Button>

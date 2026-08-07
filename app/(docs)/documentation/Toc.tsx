@@ -68,7 +68,7 @@ export function Toc({ entries }: { entries: TocEntry[] }) {
 
   return (
     <div className="pt-9 pr-6 pb-16">
-      <p className="mb-3 flex items-center gap-2 text-[12px] font-semibold text-neutral-300">
+      <p className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-neutral-300">
         <ContentsGlyph className="h-4 w-4 text-neutral-600" />
         On this page
       </p>
@@ -80,7 +80,7 @@ export function Toc({ entries }: { entries: TocEntry[] }) {
               key={entry.id}
               href={`#${entry.id}`}
               aria-current={current ? "location" : undefined}
-              className={`-ml-px block border-l py-1.5 pr-2 pl-3 text-[12.5px] leading-snug transition-colors ${
+              className={`-ml-px block border-l py-1.5 pr-2 pl-3 text-[13.5px] leading-snug transition-colors ${
                 current
                   ? "border-indigo-400 text-indigo-300"
                   : "border-transparent text-neutral-500 hover:text-neutral-200"
@@ -89,7 +89,7 @@ export function Toc({ entries }: { entries: TocEntry[] }) {
               {entry.method === undefined ? (
                 entry.label
               ) : (
-                <span className="font-mono text-[12px]">
+                <span className="font-mono text-[13px]">
                   <span className="text-neutral-600">{entry.method} </span>
                   {entry.label}
                 </span>

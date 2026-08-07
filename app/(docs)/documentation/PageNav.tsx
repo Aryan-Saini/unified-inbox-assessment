@@ -25,10 +25,10 @@ function NavCard({ page, direction }: { page: DocPage; direction: "previous" | "
     >
       <Arrow className="h-4 w-4 shrink-0 text-neutral-600 transition-colors group-hover:text-indigo-300" />
       <span className="min-w-0">
-        <span className="block text-[11px] text-neutral-500">
+        <span className="block text-[12.5px] text-neutral-500">
           {next ? "Next" : "Previous"} ({page.section})
         </span>
-        <span className="block truncate text-[14px] font-medium text-neutral-200 transition-colors group-hover:text-white">
+        <span className="block truncate text-[16px] font-medium text-neutral-200 transition-colors group-hover:text-white">
           {page.title}
         </span>
       </span>
@@ -80,7 +80,7 @@ export function PageNav({
             <a
               key={file.name}
               href={file.href}
-              className="inline-flex items-center gap-1 font-mono text-[12px] text-indigo-300 transition-colors hover:text-indigo-200"
+              className="inline-flex items-center gap-1 font-mono text-[13px] text-indigo-300 transition-colors hover:text-indigo-200"
             >
               {file.name}
               <ArrowUpRightIcon className="h-3 w-3" />

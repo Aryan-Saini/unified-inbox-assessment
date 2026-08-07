@@ -56,21 +56,6 @@ function activeSection(sections: DocSection[], pathname: string): DocSection {
 
 /* ---------------------------------------------------------------------- rows */
 
-/** The app's `StatusPill` tints: emerald reads, indigo writes. */
-function MethodTag({ method }: { method: "GET" | "POST" }) {
-  return (
-    <span
-      className={`shrink-0 rounded-md border px-1 py-px font-mono text-[9.5px] leading-[1.5] font-medium ${
-        method === "GET"
-          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-          : "border-indigo-500/30 bg-indigo-500/10 text-indigo-300"
-      }`}
-    >
-      {method}
-    </span>
-  );
-}
-
 function SectionRow({
   section,
   active,
@@ -91,7 +76,7 @@ function SectionRow({
       // A filled row for the section you are in, which is how the app marks
       // the thing you are looking at everywhere else — the search history and
       // the outbox rail both do it.
-      className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] font-medium transition-colors ${
+      className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[15px] font-medium transition-colors ${
         active
           ? "bg-indigo-500/10 text-indigo-200"
           : "text-neutral-400 hover:bg-white/5 hover:text-white"
@@ -119,18 +104,15 @@ function PageRow({
       href={href}
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
-      className={`flex items-center gap-2 rounded-lg py-1.5 pr-2.5 pl-4 text-[13px] transition-colors ${
+      // Colour alone marks the current page. A bullet or a rule beside it is
+      // one more mark doing a job the colour already did, and the filled
+      // treatment is spoken for by the section switcher above — two rows
+      // claiming to be the current thing is worse than none.
+      className={`block truncate rounded-lg px-2.5 py-1.5 text-[15px] transition-colors ${
         active ? "text-indigo-300" : "text-neutral-400 hover:bg-white/5 hover:text-white"
       }`}
     >
-      {/* A dot rather than a fill: the filled treatment is already spoken for
-          by the section switcher above, and using it twice in one column would
-          leave two rows claiming to be the current thing. */}
-      <span
-        aria-hidden
-        className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-indigo-400" : "bg-transparent"}`}
-      />
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {label}
     </Link>
   );
 }
@@ -240,47 +222,33 @@ function NavPanel({
             aria-label={`${current.label} pages`}
             className="scrollbar-thin min-h-0 flex-1 overflow-y-auto border-t border-line px-3 pt-4 pb-10"
           >
-            {current.groups.map((group, i) => (
-              <div key={group.label ?? i} className="mt-5 first:mt-0">
-                {group.label === undefined ? null : (
-                  <p className="px-2.5 pb-1.5 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
-                    {group.label}
-                  </p>
-                )}
-                <div className="space-y-px">
-                  {group.pages.map((page) => (
-                    <div key={page.href}>
+            {/* No inline contents under the current page. The rail on the
+                right is already "on this page", and duplicating it here put a
+                second list of the same anchors in the reader's eyeline. */}
+            {current.groups.map((group, i) => {
+              const Icon = group.icon === undefined ? null : ICONS[group.icon];
+              return (
+                <div key={group.label ?? i} className="mt-6 first:mt-0">
+                  {group.label === undefined ? null : (
+                    <p className="flex items-center gap-2 px-2.5 pb-1.5 text-[15px] font-semibold text-white">
+                      {Icon === null ? null : <Icon className="h-4 w-4 shrink-0 text-neutral-400" />}
+                      {group.label}
+                    </p>
+                  )}
+                  <div className="space-y-px">
+                    {group.pages.map((page) => (
                       <PageRow
+                        key={page.href}
                         href={page.href}
                         label={page.navLabel ?? page.title}
                         active={page.href === pathname}
                         onNavigate={onNavigate}
                       />
-                      {/* The current page's own contents, inline, the way Expo
-                          expands the branch you are standing on. Only the
-                          current one: expanded everywhere it is a wall. */}
-                      {page.href === pathname && page.toc.length > 0 ? (
-                        <div className="mt-0.5 mb-1.5 ml-[13px] space-y-px border-l border-line pl-2">
-                          {page.toc.map((entry) => (
-                            <a
-                              key={entry.id}
-                              href={`#${entry.id}`}
-                              onClick={onNavigate}
-                              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[12.5px] text-neutral-500 transition-colors hover:bg-white/5 hover:text-neutral-200"
-                            >
-                              {entry.method === undefined ? null : (
-                                <MethodTag method={entry.method} />
-                              )}
-                              <span className="min-w-0 flex-1 truncate">{entry.label}</span>
-                            </a>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </nav>
         </>
       ) : (
@@ -300,8 +268,8 @@ function NavPanel({
                 onClick={onNavigate}
                 className="block rounded-lg px-2.5 py-2 transition-colors hover:bg-white/5"
               >
-                <span className="block text-[13px] text-neutral-200">{page.title}</span>
-                <span className="block text-[11px] text-neutral-600">{section}</span>
+                <span className="block text-[15px] text-neutral-200">{page.title}</span>
+                <span className="block text-[12px] text-neutral-600">{section}</span>
               </Link>
             ))
           )}

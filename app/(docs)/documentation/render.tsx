@@ -73,10 +73,10 @@ function EndpointCard({ endpoint }: { endpoint: Endpoint }) {
       </header>
 
       <div className="min-w-0 px-4 py-3">
-        <p className="text-[14px] font-medium text-neutral-200">{endpoint.summary}</p>
+        <p className="text-[16px] font-medium text-neutral-200">{endpoint.summary}</p>
 
         {endpoint.alias === undefined ? null : (
-          <p className="mt-1.5 text-[12.5px] leading-relaxed text-neutral-500">
+          <p className="mt-1.5 text-[13.5px] leading-[1.6] text-neutral-500">
             <Inline
               text={`Also mounted at the bare path \`${endpoint.method} ${endpoint.alias}\`, which hits the same handler. The alias cannot drift from the versioned route because there is only one of it.`}
             />
@@ -184,16 +184,16 @@ function Overview({ origin }: { origin: string }) {
           <li key={file.name} className="flex flex-wrap items-baseline gap-x-2">
             <a
               href={file.href}
-              className="inline-flex items-center gap-1 font-mono text-[12.5px] text-indigo-300 transition-colors hover:text-indigo-200"
+              className="inline-flex items-center gap-1 font-mono text-[13.5px] text-indigo-300 transition-colors hover:text-indigo-200"
             >
               {file.name}
               <ArrowUpRightIcon className="h-3 w-3" />
             </a>
-            <span className="text-[13px] text-neutral-500">{file.what}</span>
+            <span className="text-[15px] text-neutral-500">{file.what}</span>
           </li>
         ))}
       </ul>
-      <p className="mt-6 text-[12.5px] leading-relaxed text-neutral-600">
+      <p className="mt-6 text-[13.5px] leading-[1.6] text-neutral-600">
         The API itself runs on the Convex deployment at{" "}
         <code className="rounded border border-line bg-ink-850 px-1 py-0.5 font-mono text-[0.9em] text-indigo-200">
           {BASE_URL}

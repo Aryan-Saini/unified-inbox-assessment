@@ -37,7 +37,7 @@ export function DocPageView({
         <main className="min-w-0 max-w-[50rem] flex-1 pb-20">
           <div className="pt-9">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <h1 className="min-w-0 text-[30px] leading-tight font-semibold tracking-tight text-white">
+              <h1 className="min-w-0 text-[31px] leading-[40px] font-bold tracking-[-0.011em] text-white">
                 {page.title}
               </h1>
               {/* The page's own actions sit level with its title, which puts
@@ -49,7 +49,7 @@ export function DocPageView({
               </div>
             </div>
             {page.blurb === "" ? null : (
-              <p className="mt-2 max-w-[46rem] text-[15px] leading-relaxed text-neutral-400">
+              <p className="mt-2 max-w-[46rem] text-[16px] leading-[1.625] text-neutral-400">
                 <Inline text={page.blurb} />
               </p>
             )}

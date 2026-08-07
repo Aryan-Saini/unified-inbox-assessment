@@ -180,7 +180,7 @@ function duration(startedAt: number, finishedAt: number) {
 function AttemptRow({ attempt }: { attempt: Attempt }) {
   return (
     <li className="rounded-lg border border-line bg-ink-900 px-3 py-2">
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12px]">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px]">
         <span className="font-mono text-neutral-500">#{attempt.attemptNumber}</span>
         <span className="text-neutral-400">{TRIGGER_LABEL[attempt.trigger]}</span>
         <StatusPill
@@ -195,11 +195,11 @@ function AttemptRow({ attempt }: { attempt: Attempt }) {
           {attempt.outcome ?? "in flight"}
         </StatusPill>
         {attempt.httpStatus !== undefined ? (
-          <span className="font-mono text-[11px] text-neutral-600">
+          <span className="font-mono text-[12px] text-neutral-600">
             HTTP {attempt.httpStatus}
           </span>
         ) : null}
-        <span className="ml-auto flex shrink-0 items-center gap-1 font-mono text-[11px] text-neutral-600">
+        <span className="ml-auto flex shrink-0 items-center gap-1 font-mono text-[12px] text-neutral-600">
           <ClockIcon className="h-3 w-3" />
           {clock(attempt.startedAt)}
           {attempt.finishedAt !== undefined
@@ -211,7 +211,7 @@ function AttemptRow({ attempt }: { attempt: Attempt }) {
       {/* The full redacted error, never truncated: this timeline is where an
           operator comes to read what actually happened. */}
       {attempt.errorMessage !== undefined ? (
-        <p className="mt-1.5 font-mono text-[11px] leading-relaxed break-words text-neutral-400">
+        <p className="mt-1.5 font-mono text-[12px] leading-relaxed break-words text-neutral-400">
           {attempt.errorKind !== undefined ? (
             <span className="text-neutral-500">{attempt.errorKind}: </span>
           ) : null}
@@ -220,7 +220,7 @@ function AttemptRow({ attempt }: { attempt: Attempt }) {
       ) : null}
 
       {attempt.providerMessageId !== undefined ? (
-        <p className="mt-1.5 font-mono text-[11px] break-all text-neutral-500">
+        <p className="mt-1.5 font-mono text-[12px] break-all text-neutral-500">
           provider id {attempt.providerMessageId}
         </p>
       ) : null}
@@ -249,7 +249,7 @@ function RepliedTo({ origin }: { origin: NonNullable<OutboxEntry["repliedTo"]> }
 
   return (
     <div className="px-4 pt-3.5">
-      <span className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
+      <span className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold tracking-wider text-neutral-500 uppercase">
         In reply to
       </span>
       <div className="flex items-start gap-3">
@@ -273,11 +273,11 @@ function RepliedTo({ origin }: { origin: NonNullable<OutboxEntry["repliedTo"]> }
       {/* Title only where a title is a real thing: an email subject. A Slack
           message's "title" is its own first line, so printing both repeats it. */}
       {origin.source === "gmail" && origin.title !== "" ? (
-        <p className="mt-2 line-clamp-1 text-[13.5px] font-medium text-neutral-200">
+        <p className="mt-2 line-clamp-1 text-[15px] font-medium text-neutral-200">
           {origin.title}
         </p>
       ) : null}
-      <p className="mt-1 line-clamp-3 text-[13px] leading-relaxed text-neutral-400">
+      <p className="mt-1 line-clamp-3 text-[14.5px] leading-relaxed text-neutral-400">
         {origin.snippet}
       </p>
     </div>
@@ -387,7 +387,7 @@ function SendCard({
       >
         <header className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
           <ReplyIcon className="h-4 w-4 shrink-0 text-indigo-300" />
-          <span className="text-[12.5px] text-neutral-400">
+          <span className="text-[13.5px] text-neutral-400">
             Sent as{" "}
             <span className="font-medium text-neutral-200">{account}</span> to{" "}
             <span className="font-medium text-neutral-200">
@@ -398,7 +398,7 @@ function SendCard({
 
           <span className="ml-auto flex shrink-0 items-center gap-2">
             <SendStatusBadge status={send.status} />
-            <span className="flex items-center gap-1 text-[11px] text-neutral-500">
+            <span className="flex items-center gap-1 text-[12px] text-neutral-500">
               <ClockIcon className="h-3 w-3" />
               {formatAge(send.createdAt, now)}
             </span>
@@ -411,7 +411,7 @@ function SendCard({
             theirs: it may be 988 characters, and one written to the cap is nine
             lines of heading before the message it belongs to. */}
         {!isSlack && send.subject !== undefined ? (
-          <h3 className="mt-2.5 line-clamp-2 text-[15px] leading-snug font-medium text-neutral-100">
+          <h3 className="mt-2.5 line-clamp-2 text-[16px] leading-snug font-medium text-neutral-100">
             {send.subject}
           </h3>
         ) : null}
@@ -420,7 +420,7 @@ function SendCard({
             into several screens of text with the actions stranded past the
             bottom of them. */}
         <p
-          className={`mt-2 text-[13.5px] leading-relaxed whitespace-pre-wrap text-neutral-200 ${
+          className={`mt-2 text-[15px] leading-relaxed whitespace-pre-wrap text-neutral-200 ${
             expanded ? "scrollbar-thin max-h-64 overflow-y-auto" : "line-clamp-4"
           }`}
         >
@@ -428,10 +428,10 @@ function SendCard({
         </p>
 
         <footer className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-          <span className="font-mono text-[11px] text-neutral-600">
+          <span className="font-mono text-[12px] text-neutral-600">
             {send.idempotencyKey}
           </span>
-          <span className="text-[11px] text-neutral-600">
+          <span className="text-[12px] text-neutral-600">
             {send.attemptCount} of {send.maxAttempts} auto attempts
           </span>
 
@@ -440,7 +440,7 @@ function SendCard({
               <Button
                 variant="outline"
                 onClick={() => onReconnect(send.connectionId)}
-                className="!px-2.5 !py-1.5 !text-[12px]"
+                className="!px-2.5 !py-1.5 !text-[13px]"
               >
                 <PlugIcon className="h-3.5 w-3.5" />
                 Reconnect
@@ -451,7 +451,7 @@ function SendCard({
                 variant="primary"
                 disabled={busy}
                 onClick={() => void retry()}
-                className="!px-2.5 !py-1.5 !text-[12px]"
+                className="!px-2.5 !py-1.5 !text-[13px]"
               >
                 <RerunIcon className="h-3.5 w-3.5" />
                 Retry with the same key
@@ -461,7 +461,7 @@ function SendCard({
               <Button
                 variant="primary"
                 onClick={() => onComposeAgain(send)}
-                className="!px-2.5 !py-1.5 !text-[12px]"
+                className="!px-2.5 !py-1.5 !text-[13px]"
               >
                 <PlusIcon className="h-3.5 w-3.5" />
                 Compose again with a new key
@@ -472,7 +472,7 @@ function SendCard({
               type="button"
               onClick={onToggle}
               aria-expanded={expanded}
-              className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[12px] text-neutral-400 transition-colors hover:bg-white/5 hover:text-white"
+              className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[13px] text-neutral-400 transition-colors hover:bg-white/5 hover:text-white"
             >
               {expanded ? "Hide detail" : "Detail"}
               <ChevronDownIcon
@@ -483,11 +483,11 @@ function SendCard({
         </footer>
 
         {error !== null ? (
-          <p className="mt-2.5 flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/[0.07] px-3 py-2 text-[12px] leading-relaxed text-rose-100/90">
+          <p className="mt-2.5 flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/[0.07] px-3 py-2 text-[13px] leading-relaxed text-rose-100/90">
             <AlertIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-400" />
             <span className="min-w-0">
               {error.message}
-              <code className="mt-1 block font-mono text-[11px] text-rose-300/70">
+              <code className="mt-1 block font-mono text-[12px] text-rose-300/70">
                 {error.code}
               </code>
             </span>
@@ -495,7 +495,7 @@ function SendCard({
         ) : null}
 
         {note !== null ? (
-          <p className="mt-2.5 flex items-start gap-2 rounded-lg border border-indigo-500/30 bg-indigo-500/[0.07] px-3 py-2 text-[12px] leading-relaxed text-indigo-100/90">
+          <p className="mt-2.5 flex items-start gap-2 rounded-lg border border-indigo-500/30 bg-indigo-500/[0.07] px-3 py-2 text-[13px] leading-relaxed text-indigo-100/90">
             <ShieldIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-300" />
             {note}
           </p>
@@ -513,8 +513,8 @@ function SendCard({
               <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
             )}
             <div className="min-w-0">
-              <p className="text-[13px] font-medium text-white">{copy.title}</p>
-              <p className="mt-1 text-[12px] leading-relaxed text-neutral-400">
+              <p className="text-[14.5px] font-medium text-white">{copy.title}</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-neutral-400">
                 {copy.body}
               </p>
             </div>
@@ -533,7 +533,7 @@ function SendCard({
             ].map(([label, value]) => (
               <div
                 key={label}
-                className="flex items-start gap-3 px-3.5 py-2.5 text-[12.5px]"
+                className="flex items-start gap-3 px-3.5 py-2.5 text-[13.5px]"
               >
                 <dt className="w-32 shrink-0 text-neutral-500">{label}</dt>
                 <dd className="min-w-0 flex-1 font-mono break-words text-neutral-100">
@@ -551,7 +551,7 @@ function SendCard({
               real actions. */}
           {send.status === "succeeded" ? (
             <div className="rounded-lg border border-line bg-ink-900 px-3.5 py-3">
-              <p className="text-[12.5px] leading-relaxed text-neutral-400">
+              <p className="text-[13.5px] leading-relaxed text-neutral-400">
                 This key is claimed, so calling <code className="font-mono text-neutral-300">/send</code>{" "}
                 again returns this same delivery instead of producing a second
                 one. Press it as often as you like — the count stays at one.
@@ -560,7 +560,7 @@ function SendCard({
                 variant="outline"
                 disabled={busy}
                 onClick={() => void sendAgainWithSameKey()}
-                className="mt-2.5 !px-2.5 !py-1.5 !text-[12px]"
+                className="mt-2.5 !px-2.5 !py-1.5 !text-[13px]"
               >
                 <ShieldIcon className="h-3.5 w-3.5" />
                 Call /send again with this key
@@ -569,16 +569,16 @@ function SendCard({
           ) : null}
 
           <div>
-            <span className="mb-1.5 block text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
+            <span className="mb-1.5 block text-[12px] font-semibold tracking-wider text-neutral-500 uppercase">
               Attempt timeline
             </span>
             {detail === undefined ? (
-              <p className="flex items-center justify-center gap-2 py-4 text-[12px] text-neutral-500">
+              <p className="flex items-center justify-center gap-2 py-4 text-[13px] text-neutral-500">
                 <span className="h-3 w-3 animate-spin rounded-full border-2 border-neutral-700 border-t-neutral-400" />
                 loading attempts…
               </p>
             ) : attempts.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-line-strong px-3.5 py-4 text-center text-[12px] text-neutral-500">
+              <p className="rounded-lg border border-dashed border-line-strong px-3.5 py-4 text-center text-[13px] text-neutral-500">
                 No attempts recorded yet.
               </p>
             ) : (
@@ -622,19 +622,19 @@ export function OutboxPage({
   return (
     <div className="mx-auto w-full max-w-3xl px-4 pb-16 sm:px-6">
       <header className="pt-2 pb-5">
-        <h1 className="flex items-center gap-2.5 text-[22px] font-semibold tracking-tight text-white">
+        <h1 className="flex items-center gap-2.5 text-[25px] font-semibold tracking-tight text-white">
           <SendIcon className="h-5 w-5 text-indigo-300" />
           Outgoing
         </h1>
       </header>
 
       {entries === undefined ? (
-        <div className="flex items-center justify-center gap-2 py-10 text-[12px] text-neutral-500">
+        <div className="flex items-center justify-center gap-2 py-10 text-[13px] text-neutral-500">
           <span className="h-3 w-3 animate-spin rounded-full border-2 border-neutral-700 border-t-neutral-400" />
           loading sends…
         </div>
       ) : entries.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-line-strong px-3.5 py-10 text-center text-[13px] text-neutral-500">
+        <p className="rounded-2xl border border-dashed border-line-strong px-3.5 py-10 text-center text-[14.5px] text-neutral-500">
           Nothing sent yet. Reply to a search result to record your first
           delivery, or load the demo data in Settings to see every status.
         </p>

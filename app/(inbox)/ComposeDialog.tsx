@@ -288,10 +288,10 @@ export function ComposeDialog({
       <div className="flex items-start gap-2.5 rounded-lg border border-rose-500/30 bg-rose-500/[0.07] px-3.5 py-3">
         <AlertIcon className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
         <div className="min-w-0">
-          <p className="text-[12.5px] leading-relaxed text-rose-100/90">
+          <p className="text-[13.5px] leading-relaxed text-rose-100/90">
             {error.message}
           </p>
-          <code className="mt-1 block font-mono text-[11px] text-rose-300/70">
+          <code className="mt-1 block font-mono text-[12px] text-rose-300/70">
             {error.code}
           </code>
         </div>
@@ -339,7 +339,7 @@ export function ComposeDialog({
             </Button>
             {grantBroken ? (
               <>
-                <span className="text-[12.5px] text-amber-300/90">
+                <span className="text-[13.5px] text-amber-300/90">
                   {grantLabel}
                 </span>
                 <Button
@@ -404,10 +404,10 @@ export function ComposeDialog({
           <div className="rounded-lg border border-line bg-ink-850/60 px-3.5 py-3">
             {/* The author is an address as often as it is a name, so this line
                 is subject to the same 254 characters as the To field. */}
-            <p className="text-[11px] font-semibold tracking-wider wrap-anywhere text-neutral-500 uppercase">
+            <p className="text-[12px] font-semibold tracking-wider wrap-anywhere text-neutral-500 uppercase">
               {result.author ?? meta.name} wrote · {result.age} ago
             </p>
-            <p className="mt-2 max-h-28 overflow-y-auto border-l-2 border-line-strong pl-3 text-[13px] leading-relaxed whitespace-pre-wrap wrap-anywhere text-neutral-400 scrollbar-thin">
+            <p className="mt-2 max-h-28 overflow-y-auto border-l-2 border-line-strong pl-3 text-[14.5px] leading-relaxed whitespace-pre-wrap wrap-anywhere text-neutral-400 scrollbar-thin">
               {result.snippet}
             </p>
           </div>
@@ -419,7 +419,7 @@ export function ComposeDialog({
               case, and a broken one is said once, next to the button it blocks. */}
           {!isSlack ? (
             <label className="block">
-              <span className="mb-1.5 block text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
+              <span className="mb-1.5 block text-[12px] font-semibold tracking-wider text-neutral-500 uppercase">
                 To
               </span>
               {/* Wraps rather than truncates: this is the recipient on the step
@@ -430,7 +430,7 @@ export function ComposeDialog({
                   gives it a break point, and `min-w-0` lets the field shrink to
                   it instead of being pushed wide. */}
               <div className={`flex items-start gap-2 ${FIELD} px-3 py-2.5`}>
-                <span className="min-w-0 font-mono text-[13px] wrap-anywhere text-neutral-200">
+                <span className="min-w-0 font-mono text-[14.5px] wrap-anywhere text-neutral-200">
                   {to}
                 </span>
               </div>
@@ -439,19 +439,19 @@ export function ComposeDialog({
 
           {!isSlack ? (
             <label className="block">
-              <span className="mb-1.5 block text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
+              <span className="mb-1.5 block text-[12px] font-semibold tracking-wider text-neutral-500 uppercase">
                 Subject
               </span>
               <input
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                className={`w-full ${FIELD} px-3 py-2.5 text-[13px] text-neutral-100 outline-none`}
+                className={`w-full ${FIELD} px-3 py-2.5 text-[14.5px] text-neutral-100 outline-none`}
               />
             </label>
           ) : null}
 
           <label className="block">
-            <span className="mb-1.5 block text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
+            <span className="mb-1.5 block text-[12px] font-semibold tracking-wider text-neutral-500 uppercase">
               Your reply
             </span>
             <textarea
@@ -459,7 +459,7 @@ export function ComposeDialog({
               onChange={(e) => setBody(e.target.value)}
               placeholder="Write your reply…"
               rows={8}
-              className={`scrollbar-thin w-full resize-none ${FIELD} px-3 py-2.5 text-[13px] leading-relaxed text-neutral-100 outline-none placeholder:text-neutral-600`}
+              className={`scrollbar-thin w-full resize-none ${FIELD} px-3 py-2.5 text-[14.5px] leading-relaxed text-neutral-100 outline-none placeholder:text-neutral-600`}
             />
           </label>
         </div>
@@ -478,7 +478,7 @@ export function ComposeDialog({
             ].map(([label, value]) => (
               <div
                 key={label}
-                className="flex items-start gap-3 px-3.5 py-2.5 text-[12.5px]"
+                className="flex items-start gap-3 px-3.5 py-2.5 text-[13.5px]"
               >
                 <dt className="w-32 shrink-0 text-neutral-500">{label}</dt>
                 <dd className="min-w-0 flex-1 font-mono wrap-anywhere text-neutral-100">
@@ -489,10 +489,10 @@ export function ComposeDialog({
           </dl>
 
           <div>
-            <span className="mb-1.5 block text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
+            <span className="mb-1.5 block text-[12px] font-semibold tracking-wider text-neutral-500 uppercase">
               Exact body to be sent
             </span>
-            <pre className="scrollbar-thin max-h-56 overflow-y-auto rounded-lg border border-line bg-ink-950 px-3.5 py-3 font-mono text-[12px] leading-relaxed whitespace-pre-wrap wrap-anywhere text-neutral-200">
+            <pre className="scrollbar-thin max-h-56 overflow-y-auto rounded-lg border border-line bg-ink-950 px-3.5 py-3 font-mono text-[13px] leading-relaxed whitespace-pre-wrap wrap-anywhere text-neutral-200">
               {shownBody}
             </pre>
           </div>

@@ -83,7 +83,7 @@ export const SearchField = forwardRef<
             aria-label="Search across every connected source"
             autoComplete="off"
             spellCheck={false}
-            className="scrollbar-thin min-w-0 flex-1 resize-none bg-transparent text-[17px] leading-7 text-white outline-none placeholder:text-neutral-600"
+            className="scrollbar-thin min-w-0 flex-1 resize-none bg-transparent text-[20px] leading-7 text-white outline-none placeholder:text-neutral-600"
           />
 
         </div>

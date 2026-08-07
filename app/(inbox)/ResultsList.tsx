@@ -79,7 +79,7 @@ function SourceChip({
 
   return (
     <div
-      className={`relative flex items-center overflow-hidden rounded-xl text-[12px] transition-colors duration-300 ${shell} ${
+      className={`relative flex items-center overflow-hidden rounded-xl text-[13px] transition-colors duration-300 ${shell} ${
         run.status === "running" ? "sweep" : ""
       }`}
     >
@@ -149,7 +149,7 @@ function SourceChip({
         <button
           type="button"
           onClick={onReconnect}
-          className="mr-1.5 flex items-center gap-1 rounded-md bg-amber-400/15 px-2 py-0.5 text-[11px] font-semibold text-amber-200 transition-colors hover:bg-amber-400/25"
+          className="mr-1.5 flex items-center gap-1 rounded-md bg-amber-400/15 px-2 py-0.5 text-[12px] font-semibold text-amber-200 transition-colors hover:bg-amber-400/25"
         >
           <PlugIcon className="h-3 w-3" />
           Reconnect
@@ -160,7 +160,7 @@ function SourceChip({
         <button
           type="button"
           onClick={onRetry}
-          className="mr-1.5 flex items-center gap-1 rounded-md bg-rose-400/15 px-2 py-0.5 text-[11px] font-semibold text-rose-200 transition-colors hover:bg-rose-400/25"
+          className="mr-1.5 flex items-center gap-1 rounded-md bg-rose-400/15 px-2 py-0.5 text-[12px] font-semibold text-rose-200 transition-colors hover:bg-rose-400/25"
         >
           <RerunIcon className="h-3 w-3" />
           Retry
@@ -250,7 +250,7 @@ function SkeletonRow({ index }: { index: number }) {
           measured height, so it cannot drift out of step when that button's
           padding or type size changes. */}
       <div className="mt-2.5 flex items-center" aria-hidden>
-        <span className="invisible flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-[12px] font-medium">
+        <span className="invisible flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-[13px] font-medium">
           <ReplyIcon className="h-3.5 w-3.5" />
           Reply
         </span>
@@ -385,7 +385,7 @@ function ResultCard({
             }
           />
 
-          <span className="flex shrink-0 items-center gap-2 text-[11px] text-neutral-500">
+          <span className="flex shrink-0 items-center gap-2 text-[12px] text-neutral-500">
             {/* Your own message, marked where the eye already goes for the
                 row's metadata. The "to" in the name line says the same thing
                 grammatically, but it is one word deep in a sentence — scanning
@@ -424,7 +424,7 @@ function ResultCard({
             // `display: -webkit-box`, and whichever of the two Tailwind emits
             // last wins — which was `block`, so a long chat message rendered at
             // full height and pushed the row's actions off the card.
-            className="mt-2 line-clamp-3 text-[14px] leading-relaxed text-neutral-100 decoration-neutral-600 underline-offset-2 hover:underline"
+            className="mt-2 line-clamp-3 text-[15px] leading-relaxed text-neutral-100 decoration-neutral-600 underline-offset-2 hover:underline"
           >
             <Highlight text={result.snippet} tokens={tokens} />
           </a>
@@ -433,7 +433,7 @@ function ResultCard({
             {/* Clamped, because a subject line is capped at 988 characters and
                 one written to the cap otherwise renders as ten lines of
                 headline and pushes the snippet off the card. */}
-            <h3 className="mt-2.5 line-clamp-3 text-[16px] leading-snug font-medium text-indigo-300">
+            <h3 className="mt-2.5 line-clamp-3 text-[17px] leading-snug font-medium text-indigo-300">
               <a
                 href={result.url}
                 target="_blank"
@@ -445,7 +445,7 @@ function ResultCard({
               </a>
             </h3>
 
-            <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-neutral-400">
+            <p className="mt-1 line-clamp-2 text-[14.5px] leading-relaxed text-neutral-400">
               <Highlight text={result.snippet} tokens={tokens} />
             </p>
           </>
@@ -460,7 +460,7 @@ function ResultCard({
               href={result.url}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-1.5 text-[12px] text-neutral-500 hover:text-neutral-300"
+              className="flex items-center gap-1.5 text-[13px] text-neutral-500 hover:text-neutral-300"
             >
               <ReplyIcon className="h-3.5 w-3.5 shrink-0 text-indigo-300" />
               <span className="font-medium text-indigo-300">
@@ -486,7 +486,7 @@ function ResultCard({
             {result.replyTo ? (
               <button
                 onClick={onReply}
-                className="flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-[12px] font-medium text-neutral-200 transition-colors hover:border-indigo-500/50 hover:bg-indigo-500/10 hover:text-white"
+                className="flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-[13px] font-medium text-neutral-200 transition-colors hover:border-indigo-500/50 hover:bg-indigo-500/10 hover:text-white"
               >
                 <ReplyIcon className="h-3.5 w-3.5" />
                 Reply
@@ -496,7 +496,7 @@ function ResultCard({
               href={result.url}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-[12px] font-medium text-neutral-300 transition-colors hover:border-neutral-500 hover:text-white"
+              className="flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-500 hover:text-white"
             >
               <ExternalIcon className="h-3.5 w-3.5" />
               Open
@@ -605,7 +605,7 @@ export function ResultsList({
             type="button"
             onClick={() => setFilter("all")}
             aria-pressed={filter === "all"}
-            className={`rounded-xl px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
+            className={`rounded-xl px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
               filter === "all"
                 ? "bg-white/[0.09] text-white"
                 : "text-neutral-500 hover:bg-white/[0.04] hover:text-neutral-300"
@@ -641,7 +641,7 @@ export function ResultsList({
                 ? "Available once every source has returned"
                 : "Cycle sort: arrival → newest → relevance"
             }
-            className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[12px] font-medium text-neutral-300 transition-colors hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+            className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[13px] font-medium text-neutral-300 transition-colors hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
           >
             <SortIcon className="h-3.5 w-3.5 shrink-0" />
             {/* Fixed width: the three labels are different lengths, and letting
@@ -697,10 +697,10 @@ export function ResultsList({
         {!working && empty ? (
           <div className="px-6 py-14 text-center">
             <SearchIcon className="mx-auto h-6 w-6 text-neutral-700" />
-            <p className="mt-3 text-[14px] font-medium text-neutral-300">
+            <p className="mt-3 text-[15px] font-medium text-neutral-300">
               No results for “{query}”
             </p>
-            <p className="mx-auto mt-1.5 max-w-sm text-[13px] leading-relaxed text-neutral-500">
+            <p className="mx-auto mt-1.5 max-w-sm text-[14.5px] leading-relaxed text-neutral-500">
               Every source returned, and none of them matched. Try fewer words,
               or check the source strip above for a connection that needs
               attention.
@@ -710,7 +710,7 @@ export function ResultsList({
 
         {/* A tail spinner makes "more is coming" explicit once rows are on screen. */}
         {working && !empty ? (
-          <div className="flex items-center justify-center gap-2 py-4 text-[12px] text-neutral-500">
+          <div className="flex items-center justify-center gap-2 py-4 text-[13px] text-neutral-500">
             <span className="h-3 w-3 animate-spin rounded-full border-2 border-neutral-700 border-t-neutral-400" />
             more sources still returning…
           </div>
