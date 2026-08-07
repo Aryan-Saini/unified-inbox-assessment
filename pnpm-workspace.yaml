@@ -1,8 +1,5 @@
 allowBuilds:
   # vitest's bundler. Needs its postinstall to fetch the platform binary.
   esbuild: true
-  sharp: set this to true or false
-  unrs-resolver: set this to true or false
-ignoredBuiltDependencies:
-  - sharp
-  - unrs-resolver
+  sharp: true
+  unrs-resolver: true
