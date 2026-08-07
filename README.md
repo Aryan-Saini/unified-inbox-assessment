@@ -211,7 +211,7 @@ read or change another user's data.
 
 ## Local setup
 
-Needs Node 20+ and pnpm.
+Needs Node 22.13+ and pnpm 11.13.0.
 
 ```bash
 pnpm install
