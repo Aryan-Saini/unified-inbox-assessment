@@ -47,9 +47,10 @@ Every route lives under ${API_BASE}. Authenticate with \`Authorization: Bearer u
 
 THE ONE RULE THAT MATTERS: there is no endpoint that takes a recipient and a body
 and just sends it. Sending is always four requests. Create a draft, read it back,
-confirm the hash you read, then send while repeating the recipient exactly. Every
-step is there to make an accidental send impossible, including an accidental send
-by you. Do not try to route around it. There is no route around it.`;
+confirm the hash, then send while repeating the recipient exactly. The two gates
+that actually hold are the confirm and the acknowledged destination, and neither
+of them can be skipped. They are there to make an accidental send impossible,
+including an accidental send by you.`;
 
 /* ------------------------------------------------------------------- sections */
 
@@ -70,7 +71,7 @@ export function guide(origin: string): Guide[] {
       blocks: [
         {
           kind: "p",
-          text: "Make a key in the app under **Settings → API keys**. You see it once and we only store the SHA-256 of it, so there is no way to read it back later. Lose it and you revoke it and make another one.",
+          text: "Make a key in the app under **Settings → API keys**. You see the whole thing once. What we keep is its SHA-256 plus the first 12 characters, which is enough to tell two keys apart in a list and useless as a credential, so there is no way to read the key back later. Lose it and you revoke it and make another one.",
         },
         {
           kind: "code",
@@ -117,8 +118,8 @@ curl -sS -H "Authorization: Bearer $KEY" "$API/searches/$SEARCH_ID/results?order
         {
           kind: "list",
           items: [
-            "**We only store the digest.** The plaintext exists for exactly one response and then it is gone. There is no *show key* endpoint, because a database dump should not be a set of working credentials.",
-            "**Key management is Clerk-only.** No REST route mints, lists or revokes keys. So a leaked key can spend its own rate limit and that is it. It cannot mint a fresh key, which means it cannot outlive being revoked.",
+            "**We never store the whole key.** Only its SHA-256 and a 12-character display prefix. The rest exists for exactly one response and then it is gone, and there is no *show key* endpoint, because a database dump should not be a set of working credentials.",
+            "**Key management is Clerk-only.** No REST route mints, lists or revokes keys, so a leaked key cannot mint a fresh one and cannot outlive being revoked. Worth knowing though: the rate limits are per user, not per key, so a leaked key spends the same buckets your other keys draw on.",
             "**Revoked and unknown answer the same.** Both get a bare 401. Telling them apart would confirm to whoever stole it that the key was real before you turned it off.",
             "**A key dies with its owner.** Deleting the account revokes every key, and a key whose user row is gone resolves to nobody instead of authenticating against orphaned grants.",
           ],
@@ -138,14 +139,14 @@ curl -sS -H "Authorization: Bearer $KEY" "$API/searches/$SEARCH_ID/results?order
       blocks: [
         {
           kind: "p",
-          text: "This is the part worth reading twice, and the part an automated client is most likely to get wrong. **Four requests, in order.** Each one is a gate and none of them can be skipped or worked out ahead of time.",
+          text: "This is the part worth reading twice, and the part an automated client is most likely to get wrong. **Four requests, in order.** The confirm and the acknowledged destination are the two that actually gate the send, and neither can be skipped or worked out ahead of time.",
         },
         {
           kind: "list",
           ordered: true,
           items: [
             "`POST /drafts` and the message exists, unsent. Pass your own `idempotency_key` so a retried request reads as the same message instead of a second one.",
-            "`GET /drafts/{id}` to read it back. This is the only place `review_hash` comes from, so holding that hash *proves you fetched the payload*. That is the whole mechanism.",
+            "`GET /drafts/{id}` to read it back. You get `review_hash` and the exact `to` here. The create response carries the hash too, so this step matters most after an edit, when the revision has moved and the hash you are holding is stale.",
             "`POST /drafts/{id}/confirm` with the hash. The server re-derives the digest from the current row and compares, so a draft that got edited in between fails instead of going out on a stale review.",
             "`POST /drafts/{id}/send`, repeating the recipient exactly in `acknowledged_destination`. A mismatch is a 409 and nothing is delivered.",
           ],
@@ -186,7 +187,7 @@ print("match" if mine == d["review_hash"] else "MISMATCH, do not confirm")
       blocks: [
         {
           kind: "p",
-          text: "Two calls to `/send` on the same draft give you **byte-identical bodies**. Nothing in the response says which call produced it. The fact that the second one claimed nothing goes in the `X-Idempotent-Replay` header instead, so proving a double tap only sent once is a `diff` on two files rather than a careful read of two JSON blobs.",
+          text: "Once a send has settled, two calls to `/send` on the same draft give you **byte-identical bodies**. Nothing in the response says which call produced it. The fact that the second one claimed nothing goes in the `X-Idempotent-Replay` header instead, so proving a double tap only sent once is a `diff` on two files rather than a careful read of two JSON blobs.",
         },
         {
           kind: "code",
@@ -294,12 +295,12 @@ curl -sS -o AGENTS.md ${origin}/documentation/AGENTS.md`,
             "**404, never 403.** Asking for another user's row looks exactly like asking for a row that does not exist. A 403 would confirm the row is there, which is a slow way to enumerate.",
             "**`OPTIONS` works** on every route and gives you a 204 with the CORS headers.",
             "**`HEAD` is treated as `GET`.**",
-            "**Lists are capped** at 50 rows, results at 200, attempt timelines at 32. There is no pagination cursor. This is an assessment surface, not a warehouse.",
+            "**Lists are capped.** Searches, sends and per-search source runs at 50, connections at 100, results at 200, attempt timelines at 32. There is no pagination cursor. This is an assessment surface, not a warehouse.",
           ],
         },
         {
           kind: "p",
-          text: "Every route lives under `/api/v1`. `POST /drafts` and `POST /drafts/{id}/send` are **also** mounted at the bare paths the spec writes literally. Both mount points hit one routing table and one handler, so the alias cannot drift from the versioned route because there is only one implementation of it.",
+          text: "Every route lives under `/api/v1`. The draft POSTs are **also** reachable at the bare paths the spec writes literally, so `POST /drafts`, `POST /drafts/{id}/confirm` and `POST /drafts/{id}/send` all work without the prefix. Both mount points hit one routing table and one handler, so the alias cannot drift from the versioned route because there is only one implementation of it.",
         },
       ],
     },

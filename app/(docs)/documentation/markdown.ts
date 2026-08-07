@@ -86,7 +86,7 @@ function endpoint(e: Endpoint): string {
 
   if (e.alias !== undefined) {
     parts.push(
-      `Also mounted at the bare path \`${e.method} ${e.alias}\`, which reaches the same handler.`,
+      `Also reachable at the bare path \`${e.method} ${e.alias}\`, which hits the same handler.`,
       "",
     );
   }
@@ -144,7 +144,7 @@ function sendProtocol(): string {
     "There is **no endpoint that takes a recipient and a body and just sends it**.",
     "",
     "1. `POST /api/v1/drafts` to create the draft. Pass your own `idempotency_key`.",
-    "2. `GET /api/v1/drafts/{id}` to read it back. This is the **only** place `review_hash` comes from, so holding it proves you fetched the payload.",
+    "2. `GET /api/v1/drafts/{id}` to read it back. You get `review_hash` and the exact `to`. The create response carries the hash too, so this step matters most after an edit, when the hash you hold has gone stale.",
     "3. `POST /api/v1/drafts/{id}/confirm` with `{\"reviewed_hash\": \"<review_hash>\"}`. The server re-derives the digest and compares, so a draft edited in between fails instead of going through on a stale review.",
     "4. `POST /api/v1/drafts/{id}/send` with `{\"acknowledged_destination\": \"<the draft's `to`, exactly>\"}`.",
     "",
@@ -152,8 +152,9 @@ function sendProtocol(): string {
     "build it out of your own state. The check is worth nothing if the value",
     "comes from the same place the recipient came from.",
     "",
-    "Two `/send` calls on one draft return **byte-identical bodies**. The dedupe goes",
-    "in the `X-Idempotent-Replay` header, not the body. `/send` waits up to five",
+    "Once a send has settled, two `/send` calls on one draft return **byte-identical**",
+    "**bodies**. The dedupe goes in the `X-Idempotent-Replay` header, not the body.",
+    "`/send` waits up to five",
     "seconds for a terminal outcome, then answers **202** with `Retry-After` and a",
     "`send_url` to poll.",
     "",

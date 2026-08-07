@@ -15,7 +15,6 @@
 
 import {
   API_BASE,
-  BASE_URL,
   ENDPOINTS,
   ERROR_CODES,
   SCHEMAS,
@@ -75,9 +74,13 @@ function objectSchema(name: string): Schema {
     ...(schema.note === undefined ? {} : { description: schema.note }),
     properties,
     ...(required.length === 0 ? {} : { required }),
-    // The projections are exhaustive by construction — Convex validates every
-    // response against them — so saying so is accurate rather than merely strict.
-    additionalProperties: false,
+    // Deliberately NOT `additionalProperties: false`. Five operations compose
+    // these with `allOf` to hang an envelope field off the object (`send_url`,
+    // `attempts`, `sources`, `retried`), and under JSON Schema each `allOf`
+    // branch is evaluated independently — so a closed ref branch rejects the
+    // exact fields the sibling branch adds, and every real response of those
+    // five would fail validation. Closing the object here would be describing a
+    // shape the API never returns.
   };
 }
 
@@ -195,9 +198,13 @@ const SUCCESS: Record<string, Schema> = {
         type: "object",
         properties: {
           retried: { type: "boolean" },
-          reason: { type: "string", description: "Why it was or was not retried." },
+          reason: {
+            type: "string",
+            description:
+              "Only present when `retried` is false. One of `already_delivered` or `attempt_in_progress`.",
+          },
         },
-        required: ["retried", "reason"],
+        required: ["retried"],
       },
     ],
   },
@@ -229,7 +236,25 @@ function operation(endpoint: Endpoint): Schema {
   const example = parseExample(endpoint);
   const success = SUCCESS[endpoint.id];
 
-  const responses: Record<string, Schema> = {};
+  const responses: Record<string, Schema> = {
+    // Every authenticated operation can answer these, and repeating them in
+    // `spec.ts` on all thirteen routes would be noise a reader has to skip.
+    // A generator, though, wants them on the operation.
+    "401": {
+      description: "No key, a malformed one, or one that has been revoked.",
+      content: { "application/json": { schema: ref("Error") } },
+      headers: {
+        "WWW-Authenticate": {
+          description: "Sent when the `Authorization` header is missing or is not a bearer scheme.",
+          schema: { type: "string" },
+        },
+      },
+    },
+    "500": {
+      description: "An unclassified failure. The real error is in the deployment log.",
+      content: { "application/json": { schema: ref("Error") } },
+    },
+  };
   for (const [index, response] of endpoint.responses.entries()) {
     const isSuccess = response.status < 300;
     responses[String(response.status)] = {
@@ -243,6 +268,16 @@ function operation(endpoint: Endpoint): Schema {
           ...(isSuccess && index === 0 && example !== undefined ? { example } : {}),
         },
       },
+      ...(response.status === 429
+        ? {
+            headers: {
+              "Retry-After": {
+                description: "Seconds until the bucket refills. Computed, not a constant.",
+                schema: { type: "integer" },
+              },
+            },
+          }
+        : {}),
       ...(endpoint.responseHeaders === undefined || !isSuccess
         ? {}
         : {
@@ -353,13 +388,12 @@ export function openApiDocument(origin: string): Schema {
         `Markdown for agents: ${origin}/documentation/llms-full.txt`,
       ].join("\n"),
     },
+    // One server only. `POST /drafts` and `POST /drafts/{id}/send` are also
+    // mounted at the bare origin, but a second entry here would tell a generator
+    // that *every* path is served there, which is false: the alias covers two
+    // POSTs. The two operations that have it say so in their own description.
     servers: [
       { url: API_BASE, description: "Versioned surface. Every route lives here." },
-      {
-        url: BASE_URL,
-        description:
-          "Bare mount point. `POST /drafts` and `POST /drafts/{id}/send` are also served here, reaching the same handler.",
-      },
     ],
     security: [{ apiKey: [] }],
     components: {

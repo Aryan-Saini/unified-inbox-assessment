@@ -365,7 +365,7 @@ export default async function DocumentationPage() {
 
             {/* Send statuses. */}
             <SectionHeading id="send-statuses">Send statuses</SectionHeading>
-            <Prose text="A send is not done until it stops moving on its own. A `failed_transient` with `next_retry_at` set is still going, and a manual retry on top of a scheduled one is wasted work." />
+            <Prose text="A send is not done until it stops moving on its own. A `failed_transient` with `next_retry_at` set is still going, and a manual retry on top of a scheduled one is wasted work. A retry schedules the next attempt rather than running it inline, so the `status` you get straight back is the pre-retry one." />
             <DocTable
               head={["Status", "Means", "What to do"]}
               rows={SEND_STATUSES.map((s) => [`\`${s.status}\``, s.meaning, s.retryable])}

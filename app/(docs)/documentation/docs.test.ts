@@ -16,6 +16,7 @@
 import { describe, expect, it } from "vitest";
 import { ROUTES } from "../../../convex/api/routes";
 import { publicResult } from "../../../convex/api/views";
+import { MAX_SEND_ATTEMPTS } from "../../../convex/sends";
 import { renderAgentsMd, renderFull, renderIndex } from "./markdown";
 import { openApiDocument } from "./openapi";
 import {
@@ -91,6 +92,25 @@ describe("examples are real", () => {
   it("parses every example body as JSON", () => {
     for (const endpoint of ENDPOINTS) {
       expect(() => JSON.parse(endpoint.example), endpoint.id).not.toThrow();
+    }
+  });
+
+  it("quotes the real retry ceiling in every send example", () => {
+    // This one shipped wrong: four examples said `"max_attempts": 5` while the
+    // constant was 4. A reader sizing their own retry budget off the docs would
+    // have waited for a fifth attempt that never comes. Constants that appear
+    // inside worked examples are exactly where docs rot invisibly, so the
+    // example is now checked against the constant rather than against a memory
+    // of it.
+    for (const endpoint of ENDPOINTS) {
+      const body = JSON.parse(endpoint.example) as Record<string, unknown> & {
+        sends?: Record<string, unknown>[];
+      };
+      const rows = [body, ...(body.sends ?? [])];
+      for (const row of rows) {
+        if (!("max_attempts" in row)) continue;
+        expect(row.max_attempts, endpoint.id).toBe(MAX_SEND_ATTEMPTS);
+      }
     }
   });
 

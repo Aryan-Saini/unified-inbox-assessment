@@ -147,7 +147,7 @@ export const SCHEMAS: Record<string, { title: string; note?: string; fields: Fie
       { name: "status", type: `"running" | "complete"`, required: true, description: "`complete` once every source has settled, succeeded or failed." },
       { name: "origin", type: `"ui" | "api" | "seed"`, required: true, description: "Searches you start over REST are recorded as `api`." },
       { name: "result_count", type: "number", required: true, description: "Results landed so far. Grows while `running`." },
-      { name: "rerun_of", type: "string", description: "Set when this search was created by `/rerun`. History is never overwritten." },
+      { name: "rerun_of", type: "string", description: "Set when this search came from a rerun, whether that was `/rerun` or the app. History is never overwritten." },
       { name: "is_seed", type: "boolean", required: true, description: "True for demo fixtures, which hold no provider grant." },
       { name: "created_at", type: "string (ISO 8601)", required: true, description: "When the fan-out was scheduled." },
       { name: "completed_at", type: "string (ISO 8601)", description: "When the last source settled." },
@@ -184,7 +184,7 @@ export const SCHEMAS: Record<string, { title: string; note?: string; fields: Fie
       { name: "status", type: `"draft" | "confirmed" | "sent" | "failed"`, required: true, description: "Where in the gate this draft is." },
       { name: "revision", type: "number", required: true, description: "Goes up on every edit. It is part of the digest, so editing kills any confirmation." },
       { name: "confirmed", type: "boolean", required: true, description: "True when the stored confirmation still matches the current payload." },
-      { name: "review_hash", type: "string", required: true, description: "SHA-256 of `canonical_payload`, and the value `/confirm` wants back. You only get it on the read, so having it means you fetched the payload. That is the point of the gate." },
+      { name: "review_hash", type: "string", required: true, description: "SHA-256 of `canonical_payload`, and the value `/confirm` wants back. It comes back on create, read and confirm." },
       { name: "canonical_payload", type: "string", required: true, description: "The exact string the digest is taken over, so you can verify the hash yourself." },
       { name: "created_at", type: "string (ISO 8601)", required: true, description: "" },
       { name: "updated_at", type: "string (ISO 8601)", required: true, description: "" },
@@ -254,10 +254,10 @@ export const SCHEMAS: Record<string, { title: string; note?: string; fields: Fie
 
   Error: {
     title: "Error",
-    note: "One shape for every failure. A client that has to guess whether today's 409 is `{error: \"…\"}` or `{message: \"…\"}` ends up string-matching, and then our error text becomes their API contract. So switch on `error.code` and show `error.message`.",
+    note: "One shape for every failure that reaches the API, so switch on `error.code` and show `error.message`. A client that has to guess whether today's 409 is `{error: \"…\"}` or `{message: \"…\"}` ends up string-matching, and then our error text becomes their API contract. The one gap: only `GET`, `POST` and `OPTIONS` are mounted, so a `PUT` or a `DELETE` is refused by Convex itself and comes back as its plain 404 rather than this envelope.",
     fields: [
       { name: "error.code", type: "string", required: true, description: "The machine-readable reason. The contract." },
-      { name: "error.message", type: "string", required: true, description: "Written for a human. It carries the code as a prefix so a flattened log line still says which rule fired." },
+      { name: "error.message", type: "string", required: true, description: "Written for a human. Errors raised by our own rules carry the code as a prefix so a flattened log line still says which rule fired. The ones the REST layer writes directly, like a 401 or a malformed body, do not." },
       { name: "error.retry_after_seconds", type: "number", description: "On 429 only. It mirrors the `Retry-After` header and comes out of the bucket's own arithmetic, so obeying it actually works." },
     ],
   },
@@ -483,6 +483,7 @@ export const SECTIONS: Section[] = [
         pathParams: [{ name: "id", type: "string", required: true, description: "The search to repeat." }],
         responses: [
           { status: 202, description: "`{search_id, status, rerun_of, search_url, results_url}`." },
+          { status: 400, description: "The request body is not a JSON object." },
           { status: 404, description: "No such search, or not yours." },
           { status: 429, description: "Fan-out limit exhausted." },
         ],
@@ -522,9 +523,9 @@ export const SECTIONS: Section[] = [
         responses: [
           { status: 201, description: "Created. A `Draft`, plus `confirm_url` and `send_url`." },
           { status: 200, description: "The key was re-used for the same payload. Same body, `X-Idempotent-Replay: true`." },
-          { status: 400, description: "A missing or invalid field." },
+          { status: 400, description: "A field is missing, or `channel` is not `gmail` or `slack`." },
           { status: 404, description: "No such connection, or not yours." },
-          { status: 409, description: "`IDEMPOTENCY_KEY_REUSED`, meaning a different payload under a key you already used. Or `CONNECTION_UNAVAILABLE`." },
+          { status: 409, description: "`IDEMPOTENCY_KEY_REUSED`, meaning a different payload under a key you already used. `CONNECTION_UNAVAILABLE` when the grant is off, revoked or the wrong provider. `INVALID_STATE` when a field is present but the value is rejected: too long, control characters in the recipient, or an idempotency key outside 8 to 128 characters of `[A-Za-z0-9._:-]`." },
           { status: 429, description: "Write limit exhausted." },
         ],
         responseHeaders: [
@@ -565,7 +566,7 @@ export const SECTIONS: Section[] = [
         path: "/drafts/{id}",
         summary: "Read a draft back, and get its review hash",
         description:
-          "`review_hash` comes back **only here**, and that is the mechanism of the confirm gate. Having the hash means you fetched the payload and could have read it. `canonical_payload` is the exact string the digest is taken over, so you can recompute the SHA-256 yourself instead of trusting ours.",
+          "Read the draft back before you confirm it. The hash also comes back on create, so the read matters most after an edit, when the revision has moved and the hash you are holding is stale. `canonical_payload` is the exact string the digest is taken over, so you can recompute the SHA-256 yourself instead of trusting ours.",
         pathParams: [{ name: "id", type: "string", required: true, description: "The draft id." }],
         responses: [
           { status: 200, description: "A `Draft`." },
@@ -595,6 +596,7 @@ export const SECTIONS: Section[] = [
         id: "confirmDraft",
         method: "POST",
         path: "/drafts/{id}/confirm",
+        alias: "/drafts/{id}/confirm",
         summary: "Authorise the payload you just read",
         description:
           "Send back the `review_hash` from the read. The server re-derives the digest off the current row and compares, so a draft edited between the read and the confirm fails with `PAYLOAD_MISMATCH` instead of going through on a stale review. Confirming does not send.",
@@ -612,7 +614,8 @@ export const SECTIONS: Section[] = [
           { status: 200, description: "The `Draft`, now with `status: \"confirmed\"` and `confirmed: true`." },
           { status: 400, description: "No `reviewed_hash`." },
           { status: 404, description: "No such draft, or not yours." },
-          { status: 409, description: "`PAYLOAD_MISMATCH`, meaning that hash is not this payload's current digest." },
+          { status: 409, description: "`PAYLOAD_MISMATCH`, meaning that hash is not this payload's current digest. `INVALID_STATE` when the draft has already been sent or failed." },
+          { status: 429, description: "Write limit exhausted." },
         ],
         returns: "Draft",
         curl: `curl -sS -H "Authorization: Bearer $KEY" -H 'content-type: application/json' \\
@@ -655,13 +658,15 @@ export const SECTIONS: Section[] = [
         responses: [
           { status: 200, description: "The delivery settled. You get a `Send`, including a failed one. See below." },
           { status: 202, description: "Still in flight after five seconds. You get `Retry-After: 2` and a `send_url` to poll." },
+          { status: 400, description: "The request body is not a JSON object." },
           { status: 404, description: "No such draft, or not yours." },
-          { status: 409, description: "`DESTINATION_NOT_ACKNOWLEDGED`, `CONFIRMATION_REQUIRED`, `PAYLOAD_CHANGED_SINCE_CONFIRM`, or `CONNECTION_UNAVAILABLE`." },
+          { status: 409, description: "`DESTINATION_NOT_ACKNOWLEDGED`, `CONFIRMATION_REQUIRED`, `PAYLOAD_CHANGED_SINCE_CONFIRM`, or `IDEMPOTENCY_KEY_REUSED` when the draft was edited after a send already claimed that key." },
           { status: 429, description: "Write limit exhausted." },
         ],
         responseHeaders: [
           { name: "X-Idempotent-Replay", description: "`true` when this call claimed nothing, because the send already existed." },
           { name: "X-Send-Id", description: "The send id. You get it even on a 202." },
+          { name: "Retry-After", description: "Seconds to wait before polling `send_url`. Sent on the 202, and on a 429 with the bucket's own number." },
         ],
         returns: "Send",
         curl: `curl -sS -D - -H "Authorization: Bearer $KEY" -H 'content-type: application/json' \\
@@ -678,7 +683,7 @@ export const SECTIONS: Section[] = [
   "body": "Attaching the corrected copy.",
   "status": "succeeded",
   "attempt_count": 1,
-  "max_attempts": 5,
+  "max_attempts": 4,
   "provider_message_id": "18f2ca17b9d0e3f4",
   "provider_thread_id": "18f2c9a0b1d3e5f7",
   "is_seed": false,
@@ -718,7 +723,7 @@ export const SECTIONS: Section[] = [
       "body": "Attaching the corrected copy.",
       "status": "succeeded",
       "attempt_count": 1,
-      "max_attempts": 5,
+      "max_attempts": 4,
       "provider_message_id": "18f2ca17b9d0e3f4",
       "is_seed": false,
       "created_at": "2026-08-06T11:06:44.117Z",
@@ -753,7 +758,7 @@ export const SECTIONS: Section[] = [
   "body": "Attaching the corrected copy.",
   "status": "failed_transient",
   "attempt_count": 2,
-  "max_attempts": 5,
+  "max_attempts": 4,
   "last_error_kind": "transient",
   "last_error_message": "Gmail answered 503 Service Unavailable.",
   "next_retry_at": "2026-08-06T11:07:04.000Z",
@@ -794,7 +799,7 @@ export const SECTIONS: Section[] = [
           "Fine for a failed send. **Refused with a 409 for an `unknown` one**, because that status means the outcome genuinely is not known, so retrying under the same key could double-send. Choosing between reconciling at the provider and cloning the draft under a new key belongs to an operator, not a retry loop.",
         pathParams: [{ name: "id", type: "string", required: true, description: "The send id." }],
         responses: [
-          { status: 200, description: "`{retried, reason, ...Send}`, with `retried: false` and a `reason` when nothing needed doing." },
+          { status: 200, description: "`{retried, ...Send}`. `reason` only shows up when `retried` is `false`, and it is one of `already_delivered` or `attempt_in_progress`. The `status` you get back is the pre-retry one, because the new attempt is scheduled rather than applied inline." },
           { status: 404, description: "No such send, or not yours." },
           { status: 409, description: "`INDETERMINATE`, meaning the send is `unknown` and must not be retried blind." },
           { status: 429, description: "Write limit exhausted." },
@@ -803,7 +808,6 @@ export const SECTIONS: Section[] = [
         curl: `curl -sS -X POST -H "Authorization: Bearer $KEY" "$API/sends/$SEND_ID/retry"`,
         example: `{
   "retried": true,
-  "reason": "Queued attempt 3 of 5.",
   "id": "ks91zx8c7v6b5n4m3a2s1d0f",
   "draft_id": "kn40as8d7f6g5h4j3k2l1m0n",
   "idempotency_key": "agent-run-001",
@@ -811,9 +815,11 @@ export const SECTIONS: Section[] = [
   "connection_id": "k57d0h9wxqz4v2m1n8p3r6t0",
   "to": "someone@example.com",
   "body": "Attaching the corrected copy.",
-  "status": "queued",
+  "status": "failed_transient",
   "attempt_count": 2,
-  "max_attempts": 5,
+  "max_attempts": 4,
+  "last_error_kind": "transient",
+  "last_error_message": "Gmail answered 503 Service Unavailable.",
   "is_seed": false,
   "created_at": "2026-08-06T11:06:44.117Z",
   "updated_at": "2026-08-06T11:07:10.884Z"
@@ -840,7 +846,7 @@ export const ERROR_CODES: ErrorCode[] = [
   {
     code: "UNAUTHENTICATED",
     status: 401,
-    meaning: "No key, a broken one, or one that got revoked.",
+    meaning: "No key, a broken one, or one that got revoked. A missing or non-bearer `Authorization` header also gets a `WWW-Authenticate` header back.",
     action: "Stop. Retrying will not help. Unknown and revoked answer the same on purpose, because telling them apart would confirm a stolen key was real before it got turned off.",
   },
   {
@@ -894,8 +900,8 @@ export const ERROR_CODES: ErrorCode[] = [
   {
     code: "INVALID_STATE",
     status: 409,
-    meaning: "The draft or send is in a status this operation does not apply to.",
-    action: "Read the row and branch on the status it actually has.",
+    meaning: "Either the row is in a status this operation does not apply to, or a field value was rejected: over a length cap, control characters in the recipient, a malformed idempotency key.",
+    action: "Read the message. It says whether the problem is the row's status or one of the values you sent.",
   },
   {
     code: "INDETERMINATE",
@@ -912,8 +918,8 @@ export const ERROR_CODES: ErrorCode[] = [
   {
     code: "METHOD_NOT_ALLOWED",
     status: 405,
-    meaning: "The path exists, the method does not.",
-    action: "Read the `Allow` header.",
+    meaning: "The path exists, the method does not. Only `GET`, `POST` and `OPTIONS` reach the API at all.",
+    action: "Read the `Allow` header on the response, which lists the methods that path does take.",
   },
   {
     code: "INTERNAL",
@@ -949,7 +955,7 @@ export const RATE_LIMITS: { name: string; limit: string; covers: string }[] = [
   {
     name: "Fan-out",
     limit: "10 / minute",
-    covers: "`POST /searches` and `POST /searches/{id}/rerun`. One search can be three provider calls, so this is the expensive one.",
+    covers: "`POST /searches` and `POST /searches/{id}/rerun`. One search is a call per enabled connection plus the web, so it is the expensive one.",
   },
   {
     name: "Writes",
