@@ -72,26 +72,24 @@ providers. `SearchAdapter` and `Result` are copied verbatim out of the spec and
 not widened. The merge layer imports those two types and nothing else, so it has
 no idea Gmail or Slack exist.
 
-An adapter never sees the connection row and never sees a refresh token. It gets
-an `AdapterContext`, which is an already-valid access token, the scopes the grant
-actually holds so it can skip an optional call instead of spending a 403
-discovering it, a result limit, and an `AbortSignal`. Token lifecycle is the
-orchestrator's problem. That is what keeps an adapter small enough to be worth
-writing.
+An adapter only gets what it needs: a valid access token, the scopes the grant
+actually holds (so it can skip an optional call instead of firing it and eating
+a 403), a result limit, and an `AbortSignal`. It never sees the connection row
+or a refresh token. Token lifecycle is the orchestrator's problem, and that's
+what keeps an adapter small enough that writing a new one is a morning's work.
 
-The UI needed more than the seven fields. Three connectors with multiple
-accounts inside each one all merge into a single list, and a row you cannot
-place, which account, which workspace, who wrote it, is the list not being
-usable. So a row carries an avatar, a workspace label, a thread id, a reply-to,
-and none of that fits in seven fields. The answer is a separate `ResultExtras`
-interface and `EnrichedResult = Result & Partial<ResultExtras>`. Every extra is
-optional, so a plain `SearchAdapter` already satisfies the enriched interface and
-the web adapter is completely unaware any of this exists. The extras are stored
-as real typed columns, and the REST projection strips all of them, so the public
-`Result` stays exactly the seven specified fields. The validator in
-`convex/api/views.ts` enforces that, and Convex checks the returned object
-against it, so an eighth field cannot leak into the API without that file
-changing and a test going red.
+The UI needed more than the seven fields. Multiple connectors, multiple accounts
+in each, all merged into one list, and a row you can't place (which account,
+which workspace, who wrote it) is the list not being usable. So a row carries an
+avatar, a workspace label, a thread id, a reply-to. None of that fits in seven
+fields. The answer is a separate `ResultExtras` interface and
+`EnrichedResult = Result & Partial<ResultExtras>`. Every extra is optional, so a
+plain `SearchAdapter` already satisfies the enriched interface, and the web
+adapter has no idea any of this exists. The extras are stored as real typed
+columns for the UI, and the REST projection strips them all, so the public
+`Result` stays exactly the seven fields from the spec. A validator in
+`convex/api/views.ts` enforces that, so an eighth field can't leak into the API
+without that file changing and a test going red.
 
 ### Search fan-out
 
@@ -104,34 +102,32 @@ searches.run (mutation)
   └─ scheduler.runAfter(25s, orchestrator.sweepSearch)            ← watchdog
 ```
 
-The concurrency is structural, not cooperative. Two Gmail accounts, a Slack
-workspace and web search are four separate Convex actions with four separate
-isolates, transactions and failure domains. There is nothing shared for a slow
-source to block on, and a source that crashes takes down its own row and nothing
-else.
+Every source runs on its own, isolated, separately. Two Gmail accounts, a Slack
+workspace and web search are four separate workers with nothing shared, so a
+slow one can't block anything, and a crashed one only takes down its own row.
 
-Each worker resolves a token, calls the adapter under a 20 second `AbortSignal`
-through three attempts with full jitter, and then commits results, terminal
-status, counts, duration and the parent search's completion check in **one
-mutation**. That single-mutation rule is why a subscriber never sees "succeeded
-with zero results" or half a batch flickering past.
+Each worker resolves a token, calls the adapter under a 20 second timeout with
+three attempts, and then commits everything (results, final status, counts,
+duration, the parent search's completion check) in **one mutation**. That
+one-mutation rule is why a subscriber never sees "succeeded with zero results"
+or half a batch flicker past.
 
 Partial results are one reactive query, `searches.watch`, returning
 `{search, sources[], results[]}`. The UI appends in arrival order and never
 re-sorts under the reader. A write-time `score` exists in parallel and REST
 exposes `?order=rank|arrival`, defaulting to rank.
 
-Nothing spins forever. `sweepSearch` forces any still-running source to `failed`,
-classified `transient`, which is the honest reading since the worker vanished and
-that says nothing about the provider. A 5 minute cron backs it up for the case
-where the scheduled sweep itself was lost to a deploy. Neither is load-bearing.
+And nothing spins forever. A watchdog (`sweepSearch`) forces a still-running
+source to `failed` after 25 seconds, classified `transient`, because the worker
+vanished and that says nothing about the provider. A 5 minute cron backs the
+watchdog up. Neither is load-bearing.
 
 ### Adding a source
 
-The merge layer does not change. `orchestrator.ts`, ranking, REST, history and the
-send gate reach providers only through `ADAPTERS[source]` and never name one, so a
-new adapter inherits concurrent fan-out, partial results, retry with backoff,
-error classification, the reconnect path and history for free.
+The merge layer doesn't change. Nothing in the orchestrator, ranking, REST,
+history or the send gate names a provider (they all go through
+`ADAPTERS[source]`), so a new adapter inherits the concurrent fan-out, partial
+results, retries, error classification, reconnect and history for free.
 
 What you write is one adapter file plus one line in `convex/core/registry.ts`.
 Then you widen a union in six places:
@@ -145,20 +141,23 @@ Then you widen a union in six places:
 | `app/(inbox)/mock-data.ts` | A display name. |
 | `app/(inbox)/brand-icons.tsx` | A logo. |
 
-Every one of those is an exhaustive `Record<Source, …>` or a union, so `tsc` fails
-until each is filled in and the compiler hands you the list instead of leaving you
-to grep for it. The last two are not plumbing at all, a display name and an icon
-are new information nothing can derive for you.
+Every one of those is an exhaustive `Record<Source, …>` or a union, so `tsc`
+fails until each is filled in. The compiler hands you the list, you don't grep
+for it. And the last two aren't really plumbing anyway, a display name and an
+icon are new information nothing could derive for you.
 
-`ALL_SOURCES` is derived from `Object.keys(ADAPTERS)` rather than written out
-again. That used to be three hand-maintained `["gmail","slack","web"]` literals,
-which was the one place a missing edit failed *silently*, so you got a registered
-adapter that never ran with a green build. `convex/core/registry.test.ts` pins the
-registry, the schema and `requiresGrant` to each other.
+`ALL_SOURCES` is derived from `Object.keys(ADAPTERS)` instead of being written
+out again, so a source is declared in exactly one place and registering an
+adapter automatically includes it everywhere. It used to be three hand-maintained
+`["gmail","slack","web"]` literals, and forgetting one meant a registered adapter
+that silently never ran, with a green build. That was the only silent failure in
+the whole system, so it's the one that got removed.
+`convex/core/registry.test.ts` pins the registry, the schema and `requiresGrant`
+to each other.
 
 The honest caveat: a source needing OAuth also touches the `provider` union,
-`oauth.ts` and the callback route in `http.ts`. That is a second grant type, not
-adapter plumbing.
+`oauth.ts` and the callback route. That's a second grant type, not adapter
+plumbing.
 
 ### The send gate
 
@@ -171,31 +170,30 @@ adapter plumbing.
                           → scheduler.runAfter(0, sends.deliver) in the same transaction
 ```
 
-There is no function anywhere that takes a recipient and a body and sends them.
-Not in Convex, not in REST. Composing writes a row, sending names a draft. The
-shape of `convex/drafts.ts` *is* the friction, rather than a check bolted onto a
-one-shot path.
+There is no function anywhere that takes a recipient and a body and just sends
+them. Not in Convex, not in REST. Composing writes a draft, sending points at a
+draft. The shape of `convex/drafts.ts` *is* the friction, not a check bolted
+onto a one-shot path.
 
-One honest note on step 2. Nothing forces the separate read-back, because
-creating the draft already returns the payload and its digest, so create,
-confirm, send is a valid path. That is fine. What the gate actually enforces is
-stronger: the exact message was shown before it could be confirmed, a
-confirmation dies the moment the draft changes, and the recipient has to be
-repeated verbatim at send time. The canonical payload includes a schema-version
-marker and the draft's revision counter, and any edit bumps the revision and
-clears the confirmation. That closes the edit A to B to A hole, so a digest
-captured before the edit cannot authorise the new payload even if the text was
-put back byte for byte.
+One honest note on step 2: nothing forces the separate read-back, because create
+already returns the payload and its digest, so create, confirm, send is a valid
+path. That's fine, because what the gate actually enforces is stronger. The
+exact message was shown before it could be confirmed, the confirmation dies the
+moment the draft changes, and the recipient has to be typed out again at send
+time. The digest covers the draft's revision counter, so any edit kills a
+previous confirmation, even editing A to B and back to A, byte for byte, because
+the revision moved.
 
-The digest is derived three times, at review, at confirm, and again inside the
-claim. The third one is what actually gates delivery and everything before it is
+The digest is derived three times: at review, at confirm, and again inside the
+claim. The third one is what actually gates delivery. Everything before it is
 UI.
 
 #### Why double-sending is impossible
 
-`sends.claim` is one mutation on purpose. Convex mutations are serializable ACID
-transactions under optimistic concurrency control, so this sequence is atomic with
-respect to the key:
+`sends.claim` is one mutation on purpose. Every Convex mutation is one
+all-or-nothing ACID transaction, and conflicts get caught and retried
+automatically through OCC (optimistic concurrency control), so the check and the
+claim happen together or not at all:
 
 ```ts
 const existing = await ctx.db
@@ -208,27 +206,26 @@ const sendId = await ctx.db.insert("sends", { … });      // insert into that s
 await ctx.scheduler.runAfter(0, internal.sends.deliver, { sendId });
 ```
 
-Two concurrent double-taps both read "no row" and both try to insert. One loses
-the OCC check on the range it read, Convex retries it automatically, and on the
-retry it sees the winner's row and returns it. Exactly one claimant, no locks, and
-no unique-constraint support required from the database.
+Two double-taps arrive at once: both read "no row", both try to insert, one
+loses the OCC conflict check, Convex retries it automatically, and on the retry
+it finds the winner's row and just returns it. Exactly one claimant, no locks,
+and no unique-constraint support needed from the database.
 
 Three ways to get this wrong, all avoided on purpose:
 
-1. **A `.filter()` or a table scan instead of an indexed range read.** Still
-   correct, but the read set is the whole table, so every send conflicts with
-   every other send and throughput collapses.
-2. **Reading by `draftId` instead of by key.** No conflict at all when two drafts
-   share a key, which is the exact case the guarantee is for.
-3. **Splitting the read and the insert** across a query and a mutation, or doing
-   the check inside an action. That puts back precisely the race it closes.
+1. **Scanning the table instead of using the index.** Still correct, but now
+   every send conflicts with every other send and throughput dies.
+2. **Looking it up by `draftId` instead of by key.** Then two drafts sharing a
+   key don't conflict at all, which is the exact case the guarantee exists for.
+3. **Splitting the check and the insert into separate steps.** That brings back
+   the very race this closes.
 
-Two more properties fall out of the same mutation. The payload is copied onto the
-claim rather than referenced, so the guard survives the draft being edited
-afterwards. And delivery is scheduled *inside* the transaction, so there is no
-window where a job is pending for a claim that does not exist. The same key with a
-different payload is refused with `409 IDEMPOTENCY_KEY_REUSED` rather than
-silently delivering either version.
+A few more things happen in that same transaction. The payload gets copied onto
+the claim, not referenced, so editing the draft afterwards can't change what's
+being sent. Delivery gets scheduled inside the transaction, so a job can never
+exist without its claim. And the same key with a different payload is refused
+with `409 IDEMPOTENCY_KEY_REUSED` rather than silently delivering either
+version.
 
 > Neither Gmail nor Slack offers server-side idempotency on send, so there is no
 > provider-side safety net underneath this and the claim row is the whole
@@ -239,12 +236,11 @@ silently delivering either version.
 
 #### Failure taxonomy
 
-Every attempt is bracketed by two mutations, `beginAttempt` before the provider
-call and `finishAttempt` or `failAttempt` after, so the timeline survives a worker
-dying mid-flight and `in_flight` acts as a lease that makes mashing retry a no-op.
-`beginAttempt` refuses four ways, and each refusal is a provider call that did not
-happen: already `succeeded`, someone is `in_flight`, the outcome is `unknown`, or
-the auto-retry budget is `exhausted`.
+Every attempt is recorded before and after the provider call, so the timeline
+survives a worker dying mid-flight, and `in_flight` works as a lease, so mashing
+retry does nothing. `beginAttempt` refuses four ways, and each refusal is a
+provider call that didn't happen: already `succeeded`, someone's mid-attempt,
+the outcome is `unknown`, or the auto-retry budget is spent.
 
 Failures are classified where the provider response is parsed, stored as-is, and
 the retry logic acts on the same verdict an operator later reads.
@@ -285,38 +281,36 @@ provider ─▶ https://<deployment>.convex.site/oauth/{google,slack}/callback  
                 └─ 302 to the flow's resolved origin + sanitized returnTo
 ```
 
-**`begin` is an authenticated Convex mutation, not an HTTP route.** The browser
-already holds a Convex session, so the flow starts with identity proven and no
-token ever rides in a URL where it would land in logs, referrers and history. What
-rides in the URL is an opaque single-use `state` that means nothing on its own.
+**The flow starts from the backend.** `begin` is an authenticated Convex
+mutation, not an HTTP route, so identity is proven before anything happens and
+nothing sensitive ever rides in a URL. The only thing in the URL is an opaque
+single-use `state` that means nothing on its own.
 
-**The callback is a Convex `httpAction`.** A Convex deployment has a stable public
-URL, so real OAuth works while the frontend is still only on `localhost`, with no
-tunnel and no public deploy. The redirect URI is derived from `CONVEX_SITE_URL`
-rather than configured, because Google and Slack both want a byte-exact match and
-a hand-set env var is exactly the thing that drifts between deployments and fails
-with `redirect_uri_mismatch` at the worst moment.
+**The callback lands on the Convex deployment**, which has a stable public URL.
+That's why real Google and Slack OAuth work while the frontend is still just on
+`localhost`, no tunnel needed. And the redirect URI is derived from
+`CONVEX_SITE_URL` instead of configured by hand, because both providers demand a
+byte-exact match, and a hand-set env var is exactly the thing that drifts
+between deployments and then breaks with `redirect_uri_mismatch`.
 
-**`state` is consumed in one transaction**, and the provider is passed as an
-argument that has to match the stored row. Reading the provider *off* the row
-would let a state minted for Slack be redeemed at the Google callback. `returnTo`
-is reduced to a plain same-origin path, so `//evil.test` and backslashes get
-dropped rather than repaired, and that is what stops it being an open redirect.
+**The `state` is single use, expires, and is bound to one provider.** The
+provider gets passed in as an argument and has to match the stored row, because
+reading it *off* the row would let a state minted for Slack be redeemed at the
+Google callback. And `returnTo` gets reduced to a plain same-origin path, so
+`//evil.test` and backslashes get dropped, not repaired.
 
-**Which origin the callback returns to.** A deployment cannot know the frontend's
-origin, since `next dev` picks whatever port it wants and one deployment
-legitimately serves both a local browser and a deployed one. So the browser
-proposes its own origin and the backend checks it instead of trusting it, because
-this is a redirect and an unchecked origin here is a plain open redirect. Loopback
-is allowed on any port, a deployed frontend is registered once via `APP_BASE_URL`
-or `APP_ORIGIN_ALLOWLIST`, and anything else falls back to `APP_BASE_URL`.
+**Where the callback sends the browser back is checked, not trusted**, because
+an unchecked redirect is an open redirect. A deployment can't know the
+frontend's origin (`next dev` picks whatever port it wants), so the browser
+proposes its own origin and the backend checks it. Loopback is allowed on any
+port, a deployed frontend gets registered once via `APP_BASE_URL` or
+`APP_ORIGIN_ALLOWLIST`, and anything else falls back to `APP_BASE_URL`.
 Private-network origins (a phone on the same Wi-Fi, via `pnpm dev:lan`) are only
-allowed when `ALLOW_PRIVATE_NETWORK_ORIGINS="true"`, which the LAN script sets on
-the dev deployment only. The resolved origin is stored on the `oauthStates` row,
-so it is fixed when the flow starts and nothing arriving at the callback later can
-influence it. `resolveAppOrigin` is unit-tested in `convex/oauth.test.ts`,
-including lookalike hosts like `localhost.evil.test` that a substring check would
-wave through.
+allowed when `ALLOW_PRIVATE_NETWORK_ORIGINS="true"`, and only on dev. The
+resolved origin is stored on the `oauthStates` row when the flow starts, so
+nothing arriving at the callback later can influence it. `resolveAppOrigin` is
+unit-tested in `convex/oauth.test.ts`, including lookalike hosts like
+`localhost.evil.test` that a substring check would wave through.
 
 **Identity-preserving reconnect.** The upsert key is
 `(userId, provider, externalAccountId)`, so re-granting an existing account
@@ -328,48 +322,49 @@ identity is the email address, which is a documented tradeoff against the strict
 immutable `sub` and argued in `convex/http.ts`. Slack's is `T…:U…`, because the
 same person in two workspaces is two connections.
 
-**Tokens at rest** are AES-256-GCM via Web Crypto, in a versioned AEAD envelope
-whose additional authenticated data is `v1|provider|connectionId|tokenType`. GCM
-rather than CBC because it is authenticated, so a tampered ciphertext fails to
-decrypt instead of yielding garbage we would then hand to Google as a bearer
-token. Binding the AAD to the connection id and token type means a ciphertext
-cannot be swapped between rows or between the access and refresh slots. A
-`connections` table dump on its own grants nobody anything without
-`TOKEN_ENCRYPTION_KEY`, which only exists in the deployment environment.
+**Tokens are encrypted at rest** with AES-256-GCM through Web Crypto, in a
+versioned envelope whose authenticated data is
+`v1|provider|connectionId|tokenType`. That buys two things. Tampered data fails
+to decrypt instead of yielding garbage we would then hand to Google as a bearer
+token. And a ciphertext is bound to its own connection and token slot, so it
+can't be moved to a different row or swapped between the access and refresh
+slots. A dump of the `connections` table gets you nothing without
+`TOKEN_ENCRYPTION_KEY`, which only lives in the deployment environment.
 
-**Refresh on use, with a single-flight lease.** There is no refresh cron. A token
-is refreshed at the moment something needs it, inside `resolveToken`, which is the
-only door to a credential in the whole codebase. A fan-out across two Gmail
-accounts plus a concurrent send can hit one connection three times in the same
-second, and without a lease that is three parallel refreshes, which is wasteful
-with a static refresh token and outright data loss with a rotating one, because
-the losers would store tokens the provider already invalidated. So
-`refreshLockedUntil` is claimed in a mutation and the winner refreshes, losers do
-a bounded re-read and then surface `transient`, and a 120 second skew window means
-a token about to expire is refreshed before use rather than after a 401.
-`invalid_grant` and `token_revoked` flip the connection to `revoked`, store the
-verbatim provider reason, and surface `needs_reconnect` in the UI.
+**Refresh on use, with a lock.** There is no refresh cron. A token gets
+refreshed at the moment something needs it, inside `resolveToken`, which is the
+only place in the codebase that can touch a credential. The catch is that a
+search and a send can hit the same connection at the same moment, and parallel
+refreshes are wasteful with a static refresh token and actual data loss with a
+rotating one, because the losers would store tokens the provider already
+invalidated. So there's a lock: one caller refreshes, the others wait a beat and
+re-read. And tokens get refreshed 120 seconds before they expire, so it happens
+before a failure instead of after a 401. `invalid_grant` and `token_revoked`
+flip the connection to `revoked` with the provider's exact words and surface
+`needs_reconnect` in the UI.
 
-Slack token rotation is deliberately left off on the app. With rotation disabled a
-user token does not expire, so there is no refresh to get wrong. The refresh
-branch is written and exported so enabling rotation later is a Slack console
-change rather than new code, but nothing calls it today.
+Slack token rotation is disabled in the Slack app's settings, on purpose. With
+it off the token never expires, so Slack has nothing to refresh, and the refresh
+flow above is all for Gmail, where tokens expire hourly. The Slack refresh
+branch is written and exported so turning rotation on later is a console change,
+not new code. Nothing calls it today.
 
 Disconnecting is a soft delete, so the row stays and the status becomes `revoked`,
 which keeps `drafts.connectionId` and every historical send valid.
 
 ### Auth, briefly
 
-Clerk handles user identity and Convex validates the JWT (the session token must
-carry `aud: "convex"`). Three frontend layers, `proxy.ts`, the `AuthGate` /
-`GuestGate` splash, and `useAuthedQuery` holding queries at `"skip"`, exist purely
-to cover the async window while Clerk resolves a session and Convex trades it for
-its own token, so that window never renders a broken shell.
+Clerk issues a JWT from a template and Convex verifies it on every request (the
+session token has to carry `aud: "convex"`). Three frontend layers (`proxy.ts`,
+the `AuthGate` / `GuestGate` splash, and `useAuthedQuery` holding queries at
+`"skip"`) exist just to cover the async window while Clerk resolves a session
+and Convex trades it for its own token, so that window never renders a broken
+shell.
 
-None of that is the authorization boundary. Every Convex function resolves its
-own owner through `requireUser`, so a route that slipped through all three still
-cannot read another user's row. A Clerk webhook (Svix-verified, idempotent
-upserts) keeps `users` correct between sessions, and `user.deleted` cascades into
+But none of that is the real security. Every Convex function checks its own
+owner through `requireUser`, so even a request that got past the frontend can't
+read another user's data. A Clerk webhook (Svix-verified, idempotent upserts)
+keeps `users` correct between sessions, and `user.deleted` cascades into
 deleting connections and their tokens, so the token vault never outlives the
 account.
 
@@ -543,14 +538,12 @@ what makes real OAuth work without a tunnel.
    npx convex env set GOOGLE_OAUTH_CLIENT_SECRET GOCSPX-…
    ```
 
-`contacts.readonly` buys exactly one thing, the sender's profile photo on a result
-row, because Gmail's search API returns no avatar anywhere in a message. It is the
-narrowest scope Google offers that returns a contact photo at all, and it is
-read-only. Everything depending on it degrades instead of failing, so
-`contactPhotos` in `convex/adapters/gmail.ts` swallows its own errors and a grant
-issued without the scope keeps searching, with the row falling back to the
-sender's domain favicon and then to their initial on a colour derived from their
-address.
+`contacts.readonly` buys exactly one thing: the sender's profile photo on a
+result row. Gmail's search API gives you no avatar anywhere, so if you want a
+face on a row, this is the narrowest scope Google offers that returns a photo at
+all, and it's read-only. There's a fallback for everything that depends on it: a
+grant without the scope keeps searching fine, and the row falls back to the
+sender's domain favicon and then to their initial.
 
 Two things to expect, both normal. A Testing-mode app shows the "Google hasn't
 verified this app" interstitial, so click Advanced and continue, since
@@ -630,10 +623,11 @@ screen even renders.
 
 ## Web search
 
-**Tavily.** It has a genuinely free tier at 1,000 searches a month, needs no
-credit card, and returns title, url and content in one POST, which is all the
-third source has to produce. Brave Search is a drop-in alternative behind the same
-interface.
+Web search is **Tavily**, and the reasons are boring, which is fine. A genuinely
+free tier at 1,000 searches a month, no credit card, and one POST returns title,
+url and content, which is exactly what the third source needs. Brave Search
+would be a drop-in swap behind the same interface, and nothing above the adapter
+would change.
 
 ```bash
 npx convex env set WEB_SEARCH_PROVIDER tavily
@@ -869,9 +863,9 @@ pnpm typecheck
 pnpm lint
 ```
 
-153 tests on `convex-test` under `@edge-runtime/vm`, against a fake-provider
-`fetch` router that also records every call, so "how many times did we hit the
-provider" is an assertion rather than an inference. What they prove, in rough
+153 tests across 17 files on `convex-test`, running against a fake provider
+`fetch` router that records every call, so "how many times did we hit the
+provider" is a direct assertion, not an inference. What they prove, roughly in
 order of importance:
 
 - **Idempotency.** A double-send makes exactly one provider call, concurrent
@@ -902,13 +896,12 @@ order of importance:
 
 ### The honest caveat
 
-`convex-test` runs mutations against an in-memory implementation. It does **not**
-reproduce Convex's real optimistic-concurrency retry, so the concurrent-claim test
-demonstrates that the *logic* is a single-transaction indexed read-then-insert. It
-cannot, on its own, prove the OCC behaviour that makes that logic safe under real
-contention.
+`convex-test` is an in-memory implementation, and it does **not** reproduce
+Convex's real OCC retry. So the concurrent-claim test proves the logic is a
+single-transaction indexed read-then-insert, but on its own it can't prove the
+behaviour that makes that logic safe under real contention.
 
-So the guarantee is also verified against a deployed deployment:
+So the guarantee is also verified against the real deployed API:
 
 ```bash
 BASE_URL=… API_KEY=uik_… RECIPIENT=… npx tsx scripts/double-tap.ts
@@ -966,7 +959,7 @@ the first failure, naming it:
 
 | Stage | What runs |
 | --- | --- |
-| 0. preflight | the smoke credentials exist — checked *before* anything ships |
+| 0. preflight | the smoke credentials exist, checked *before* anything ships |
 | 1. convex | `pnpm deploy:handin`, unless stage 2 is doing it (below) |
 | 2. frontend | `pnpm deploy:vercel` |
 | 3. verify | [`scripts/verify-deploy.ts`](scripts/verify-deploy.ts) against what was just deployed |
@@ -987,9 +980,9 @@ BASE_URL=… API_KEY=uik_… RECIPIENT=… [APP_URL=… N=10] pnpm verify:deploy
 ### `CONVEX_DEPLOY_KEY`, and where it lives
 
 Given a Convex production deploy key, stage 2 becomes Convex's documented Vercel
-integration — `convex deploy --cmd '<build>'` — which pushes `convex/` and then
-runs the build with that deployment's URL in the environment. The backend and the
-frontend that calls it go out together, so stage 1 folds into stage 2 and is
+integration, `convex deploy --cmd '<build>'`, which pushes `convex/` and then
+runs the build with that deployment's URL in the environment. The backend and
+the frontend that calls it go out together, so stage 1 folds into stage 2 and is
 skipped. Without a key nothing changes: the script says so in one line and both
 stages run as before.
 
@@ -1005,19 +998,19 @@ SMOKE_RECIPIENT=you@example.com
 SMOKE_APP_URL=https://unified-inbox-assessment.vercel.app   # optional
 ```
 
-Not on Vercel, and not because it is awkward there. The build runs on this
-machine, and a *sensitive* Vercel variable is never handed back by `vercel pull`
-— it arrives as an empty string, which is the same trap the three public
-variables document. Storing it `plain` instead would put a credential that can
-deploy code in a dashboard, to serve a remote builder this project does not use.
-Vercel needs no deploy key at runtime.
+The key is not stored on Vercel, because it can't work there. The build runs on
+this machine, and a *sensitive* Vercel variable is never handed back by
+`vercel pull`, it arrives as an empty string. Storing it `plain` instead would
+put a credential that can deploy code in a dashboard, for a remote builder this
+project doesn't use. Vercel needs no deploy key at runtime.
 
 The build step under `convex deploy --cmd` is
 [`scripts/vercel-build.mjs`](scripts/vercel-build.mjs) rather than `pnpm build`,
 because the upload is `--prebuilt` and needs Vercel's output directory. It also
-refuses to build when the URL Convex just deployed to and the one pulled from the
-Vercel project disagree — that means the deploy key and the project point at
-different Convex deployments, and Vercel's value is the one that gets inlined.
+refuses to build when the URL Convex just deployed to and the one pulled from
+the Vercel project disagree, because that means the deploy key and the project
+point at different Convex deployments, and Vercel's value is the one that gets
+inlined.
 
 ---
 
