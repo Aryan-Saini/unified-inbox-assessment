@@ -86,7 +86,7 @@ const deployKey = deployEnv().CONVEX_DEPLOY_KEY;
 if (deployKey === undefined || deployKey === "") {
   console.log(
     "\nNote: no CONVEX_DEPLOY_KEY in the shell or .env.deploy, so this builds " +
-      "the frontend only — run `pnpm deploy:handin` to push convex/ as well.\n",
+      "the frontend only — run `pnpm deploy:deployed` to push convex/ as well.\n",
   );
   vercel("build", "--prod");
 } else {
@@ -102,7 +102,7 @@ if (deployKey === undefined || deployKey === "") {
       "node scripts/vercel-build.mjs",
     ],
     // Spread rather than mutate, and never print it: the key is a credential
-    // that can deploy code to the hand-in deployment.
+    // that can deploy code to the deployed environment.
     { stdio: "inherit", env: { ...process.env, CONVEX_DEPLOY_KEY: deployKey } },
   );
 }

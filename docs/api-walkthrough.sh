@@ -2,7 +2,9 @@
 #
 # The whole product, over curl, with no browser open.
 #
-#   BASE_URL=https://<slug>.convex.site API_KEY=uik_… ./docs/api-walkthrough.sh
+#   UNIFIED_INBOX_BASE_URL=https://<slug>.convex.site \
+#   UNIFIED_INBOX_API_KEY=uik_… \
+#   UNIFIED_INBOX_RECIPIENT=you@example.com ./docs/api-walkthrough.sh
 #
 # Create the key in the app under Settings → API keys (it is shown once). Load
 # Settings → Demo data first if the account has no connections: the seeded Gmail
@@ -21,11 +23,12 @@
 
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-}"
-API_KEY="${API_KEY:-}"
+BASE_URL="${UNIFIED_INBOX_BASE_URL:-}"
+API_KEY="${UNIFIED_INBOX_API_KEY:-}"
+RECIPIENT="${UNIFIED_INBOX_RECIPIENT:-}"
 
-if [[ -z "$BASE_URL" || -z "$API_KEY" ]]; then
-  echo "Set BASE_URL (https://<slug>.convex.site) and API_KEY (uik_…) first." >&2
+if [[ -z "$BASE_URL" || -z "$API_KEY" || -z "$RECIPIENT" ]]; then
+  echo "Set UNIFIED_INBOX_BASE_URL, UNIFIED_INBOX_API_KEY, and UNIFIED_INBOX_RECIPIENT first." >&2
   exit 2
 fi
 
@@ -93,7 +96,6 @@ if not usable:
     sys.exit("No enabled, active Gmail connection. Connect one, or load the demo data.")
 print(usable[0]["id"])
 ')
-RECIPIENT="${RECIPIENT:-walkthrough@example.com}"
 IDEMPOTENCY_KEY="walkthrough-$(date +%s)"
 
 step "6. Compose a draft. There is no endpoint that takes a recipient and sends"

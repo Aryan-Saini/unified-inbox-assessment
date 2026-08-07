@@ -3,7 +3,7 @@
  * The whole deploy, in one command. `pnpm deploy`.
  *
  *   0. preflight   check that the verification can run — before anything ships
- *   1. convex      push `convex/` to the hand-in deployment
+ *   1. convex      push `convex/` to the deployed environment
  *   2. frontend    build here, upload the build
  *   3. verify      use the deployed system and prove it works
  *
@@ -15,7 +15,7 @@
  * Stage 1 disappears into stage 2 when a `CONVEX_DEPLOY_KEY` is available: with
  * one, `deploy-vercel.mjs` uses Convex's documented `convex deploy --cmd`
  * integration, which pushes the backend and then builds the frontend against
- * that exact deployment. Running `deploy:handin` first as well would just deploy
+ * that exact deployment. Running `deploy:deployed` first as well would just deploy
  * `convex/` twice.
  *
  * The first stage to fail stops the run and says which one it was. There is no
@@ -36,12 +36,12 @@ const dryRun = process.argv.includes("--dry-run");
 const env = deployEnv();
 
 /** The deployment this pipeline exists to ship. Not configurable by accident. */
-const HANDIN_BASE_URL = "https://scintillating-moose-307.convex.site";
+const DEPLOYED_BASE_URL = "https://scintillating-moose-307.convex.site";
 
 /* ------------------------------------------------------------- 0. preflight */
 
 const smoke = {
-  BASE_URL: env.SMOKE_BASE_URL ?? HANDIN_BASE_URL,
+  BASE_URL: env.SMOKE_BASE_URL ?? DEPLOYED_BASE_URL,
   API_KEY: env.SMOKE_API_KEY,
   RECIPIENT: env.SMOKE_RECIPIENT,
   APP_URL: env.SMOKE_APP_URL,
@@ -65,10 +65,10 @@ if (missing.length > 0) {
       `                    you can open, because the last check is you looking.\n` +
       `  SMOKE_APP_URL     optional, the deployed Vercel URL. With it, the docs\n` +
       `                    surface is checked too.\n` +
-      `  SMOKE_BASE_URL    optional, defaults to ${HANDIN_BASE_URL}.\n` +
+      `  SMOKE_BASE_URL    optional, defaults to ${DEPLOYED_BASE_URL}.\n` +
       `  SMOKE_N           optional, parallel sends in the double-tap (default 10).\n\n` +
       `To deploy without verifying, run the stages by hand:\n` +
-      `  pnpm deploy:handin && pnpm deploy:vercel\n`,
+      `  pnpm deploy:deployed && pnpm deploy:vercel\n`,
   );
   process.exit(1);
 }
@@ -93,7 +93,7 @@ const convexInBuild = (env.CONVEX_DEPLOY_KEY ?? "") !== "";
 
 console.log(
   `\nPlan\n` +
-    `  1. convex    ${convexInBuild ? "folded into the build (CONVEX_DEPLOY_KEY is set)" : "pnpm deploy:handin"}\n` +
+    `  1. convex    ${convexInBuild ? "folded into the build (CONVEX_DEPLOY_KEY is set)" : "pnpm deploy:deployed"}\n` +
     `  2. frontend  pnpm deploy:vercel${convexInBuild ? "  → convex deploy --cmd 'node scripts/vercel-build.mjs'" : ""}\n` +
     `  3. verify    ${smoke.BASE_URL}${smoke.APP_URL === undefined ? "" : ` and ${smoke.APP_URL}`}\n`,
 );
@@ -125,7 +125,7 @@ function stage(number, name, command, args, extraEnv = {}) {
 if (convexInBuild) {
   console.log("\nstage 1: skipped — convex/ is pushed by the build in stage 2.");
 } else {
-  stage(1, "convex → hand-in", "pnpm", ["deploy:handin"]);
+  stage(1, "convex → deployed", "pnpm", ["deploy:deployed"]);
 }
 
 stage(2, "frontend build + upload", "pnpm", ["deploy:vercel"]);
