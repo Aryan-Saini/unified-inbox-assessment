@@ -49,6 +49,28 @@ and keep working real OAuth credentials, because a reviewer exercises it directl
 Nothing else depends on it, so it is not "protected" — just don't leave it stale
 or half-migrated.
 
+## The frontend deploy is manual
+
+`vercel.json` sets `git.deploymentEnabled: false`, so **pushing to GitHub deploys
+nothing**. The frontend ships by building locally and uploading that build:
+
+```bash
+pnpm deploy:vercel   # vercel build --prod, then vercel deploy --prebuilt --prod
+```
+
+It is pinned to the `personal` Vercel account, because that is the only account
+this project belongs to and picking the wrong one fails silently — it succeeds
+and puts the app on a URL nobody is looking at.
+
+Two reasons it works this way. A push should be free — `staging` gets pushed
+often and mid-change, and none of those pushes are a deliverable. And the thing a
+reviewer opens should be a build somebody watched succeed, not one that a CI
+runner did on their behalf while nobody was looking.
+
+`main` is the production branch, so that is what gets built and deployed. The
+Convex side is separate and unaffected: `pnpm deploy:handin` still pushes
+`convex/` to the hand-in deployment, and it has to be done as well.
+
 ## Environment variables
 
 Two separate places, and mixing them up is the usual cause of a confusing failure:

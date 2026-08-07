@@ -8,6 +8,8 @@
     "dev:convex": "convex dev",
     "dev:handin": "NEXT_PUBLIC_CONVEX_URL=https://scintillating-moose-307.convex.cloud NEXT_PUBLIC_CONVEX_SITE_URL=https://scintillating-moose-307.convex.site next dev",
     "deploy:handin": "convex deploy",
+    "vercel": "vercel --global-config \"$HOME/.vercel-accounts/personal\"",
+    "deploy:vercel": "vercel build --prod --global-config \"$HOME/.vercel-accounts/personal\" && vercel deploy --prebuilt --prod --global-config \"$HOME/.vercel-accounts/personal\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
