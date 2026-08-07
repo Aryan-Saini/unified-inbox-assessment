@@ -22,6 +22,7 @@ them lives.
 | `/dashboard` | The unified inbox: search, compose, connections. Signed-in only    |
 | `/outbox`    | Send history: each reply under the message it answered. Signed-in only |
 | `/auth`      | Sign in / sign up, one email-code flow. Signed-out only           |
+| `/documentation` | The REST API reference, plus markdown and OpenAPI copies for agents. **Public** |
 | `/`          | Redirects to whichever of these you belong on                     |
 
 `/dashboard` and `/outbox` render one shell (`InboxApp`) with the pane switched,
@@ -905,6 +906,36 @@ settle, so a `curl` in a terminal usually shows the real outcome instead of a jo
 id; past that budget it answers **202** with a `Retry-After` and a `send_url`,
 because holding the connection open longer would be pretending the send is
 synchronous when it is not.
+
+### Documentation, for humans and for agents
+
+`/documentation` on the Next.js app is the full REST reference — every route,
+field, status code and example. It needs no session: the instructions for getting
+a credential must not sit behind the credential, and `proxy.ts` bypasses Clerk for
+the whole path so a `curl` gets content rather than a handshake redirect.
+
+The same content is served in three other shapes, from the same source
+(`app/(docs)/documentation/spec.ts` and `guide.ts`), so none of them can drift
+from the page or from each other:
+
+| URL | What it is |
+| --- | --- |
+| `/documentation/llms.txt` (also `/llms.txt`) | The [llms.txt](https://llmstxt.org) index: every route and the send protocol in full |
+| `/documentation/llms-full.txt` | The entire reference as markdown. One fetch, no navigation |
+| `/documentation/openapi.json` | OpenAPI 3.1, for client generation |
+| `/documentation/AGENTS.md` | Drop-in instructions to commit into a repository |
+
+```bash
+# Hand a coding agent the whole API in one command.
+curl -sS https://<app-origin>/documentation/llms-full.txt
+```
+
+`app/(docs)/documentation/docs.test.ts` holds the documentation to the code: it
+compares the documented endpoint list against the real routing table in
+`convex/api/routes.ts`, checks the documented `Result` against the response
+validator the backend enforces, and re-derives the worked example's
+`review_hash` from its `canonical_payload`. A route added without being
+documented fails a test.
 
 ### Walkthrough
 

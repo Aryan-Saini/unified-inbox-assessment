@@ -9,7 +9,7 @@ import { AccountName, ScopeSummary } from "./ConnectorSwitchboard";
 import { accountTitle, formatAge } from "./format";
 import type { Connection, ConnectionStatus } from "./types";
 import { Button, ConfirmDialog, Modal, StatusPill } from "./ui";
-import { KeyIcon, PlugIcon, SlidersIcon, TrashIcon } from "./icons";
+import { BookIcon, ExternalIcon, KeyIcon, PlugIcon, SlidersIcon, TrashIcon } from "./icons";
 
 /** Section heading, matching the "ACCOUNTS" label in the connectors panel. */
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -264,7 +264,34 @@ export function SettingsDialog({
 
             {tab === "api" ? (
               <section className="space-y-3">
-                <SectionTitle>API keys</SectionTitle>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <SectionTitle>API keys</SectionTitle>
+                  {/* Beside the heading rather than at the foot of the panel: a
+                      key is useless without knowing what to send it to, and the
+                      moment that question arrives is the moment the panel is
+                      opened — not after scrolling past the list. New tab, so a
+                      key revealed below is not thrown away by navigating. */}
+                  <a
+                    href="/documentation"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-[12px] font-medium text-neutral-300 transition-colors hover:border-neutral-600 hover:text-white"
+                  >
+                    <BookIcon className="h-3.5 w-3.5" />
+                    Documentation
+                    <ExternalIcon className="h-3 w-3 text-neutral-600" />
+                  </a>
+                </div>
+
+                <p className="text-[13px] leading-relaxed text-neutral-400">
+                  A key drives search and send over REST with no browser open.
+                  Send it as{" "}
+                  <span className="font-mono text-neutral-300">
+                    Authorization: Bearer …
+                  </span>
+                  ; the docs cover every route, and ship a markdown and OpenAPI
+                  copy for coding agents.
+                </p>
 
                 {revealedKey ? (
                   <div className="fade-in rounded-xl border border-indigo-500/30 bg-indigo-500/[0.07] p-3.5">

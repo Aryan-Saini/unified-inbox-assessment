@@ -12,6 +12,9 @@ export default defineConfig({
     // `convex-test` ships ESM that has to be transformed alongside our code.
     server: { deps: { inline: ["convex-test"] } },
     setupFiles: ["./vitest.setup.ts"],
-    include: ["convex/**/*.test.ts"],
+    // The documentation tests live beside the documentation they describe, and
+    // hold it against the real routing table — so they belong in the same run
+    // as the backend tests rather than in a suite nobody remembers to invoke.
+    include: ["convex/**/*.test.ts", "app/**/*.test.ts"],
   },
 });
