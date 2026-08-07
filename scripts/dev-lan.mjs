@@ -26,7 +26,7 @@
 // The phone will warn about the certificate on first visit: mkcert's root CA is
 // trusted on this Mac, not there. Accepting it is enough — a browser treats an
 // origin whose certificate you accepted as secure, which is the whole point.
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
 // Next does not re-export this, so it is a deep import into a pinned version.
 // It breaks loudly at startup rather than quietly, which is the tolerable kind.
@@ -86,7 +86,47 @@ if (!certificate) {
   process.exit(1);
 }
 
+allowPrivateNetworkOrigins();
+
 console.log(`\nPhone: https://${host}:${port} — accept the certificate warning once.\n`);
+
+/**
+ * Let the OAuth callback return to this LAN origin, on the dev deployment only.
+ *
+ * Without it, connecting Gmail or Slack from the phone ends at `APP_BASE_URL` —
+ * `http://localhost:3000`, which on a phone is the phone. `resolveAppOrigin`
+ * refuses a private-network origin unless this flag is set, so setting it here
+ * ties "the LAN is allowed" to "I am deliberately serving the LAN", and it never
+ * reaches the hand-in deployment.
+ *
+ * Idempotent, and deliberately non-fatal: `dev:lan` is also how you work offline
+ * or on a laptop with no Convex credentials, and neither should stop the server
+ * from starting.
+ */
+function allowPrivateNetworkOrigins() {
+  const convex = new URL("../node_modules/.bin/convex", import.meta.url).pathname;
+  const read = spawnSync(convex, ["env", "get", "ALLOW_PRIVATE_NETWORK_ORIGINS"], {
+    encoding: "utf8",
+  });
+
+  if (read.stdout?.trim() === "true") return;
+
+  const write = spawnSync(
+    convex,
+    ["env", "set", "ALLOW_PRIVATE_NETWORK_ORIGINS", "true"],
+    { encoding: "utf8" },
+  );
+
+  if (write.status === 0) {
+    console.log("Set ALLOW_PRIVATE_NETWORK_ORIGINS=true on the dev deployment.");
+  } else {
+    console.warn(
+      "Could not set ALLOW_PRIVATE_NETWORK_ORIGINS on the dev deployment — " +
+        "connecting Gmail or Slack from the phone will return to localhost.\n" +
+        `  ${(write.stderr ?? "").trim() || "npx convex env set failed"}`,
+    );
+  }
+}
 
 // The `next` binary by path rather than by name through a shell: `shell: true`
 // concatenates rather than escapes, and one of these arguments is a filesystem

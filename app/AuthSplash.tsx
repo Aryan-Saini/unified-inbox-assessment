@@ -21,7 +21,6 @@ const LINES = [
   "Teaching Gmail and Slack to sit together",
   "Counting unread badges, losing count",
   "Politely asking the web to hurry up",
-  "Deciding which of these is actually urgent",
   "Still here, still rounding",
 ] as const;
 

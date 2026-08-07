@@ -71,6 +71,83 @@ describe("resolveAppOrigin — loopback", () => {
   });
 });
 
+describe("resolveAppOrigin — private network", () => {
+  beforeEach(() => {
+    process.env.APP_BASE_URL = "http://localhost:3000";
+    delete process.env.APP_ORIGIN_ALLOWLIST;
+  });
+
+  it("is off unless the flag is exactly \"true\"", () => {
+    // The regression that motivated all of this: a phone on the LAN was sent to
+    // APP_BASE_URL, i.e. its own localhost.
+    delete process.env.ALLOW_PRIVATE_NETWORK_ORIGINS;
+    expect(resolveAppOrigin("https://10.0.0.124:3000")).toBeUndefined();
+
+    for (const value of ["", "false", "1", "yes", "TRUE"]) {
+      process.env.ALLOW_PRIVATE_NETWORK_ORIGINS = value;
+      expect(resolveAppOrigin("https://10.0.0.124:3000")).toBeUndefined();
+    }
+  });
+
+  describe("with the flag on", () => {
+    beforeEach(() => {
+      process.env.ALLOW_PRIVATE_NETWORK_ORIGINS = "true";
+    });
+
+    it("allows every private IPv4 range, on any port", () => {
+      expect(resolveAppOrigin("https://10.0.0.124:3000")).toBe("https://10.0.0.124:3000");
+      expect(resolveAppOrigin("http://192.168.1.5:5173")).toBe("http://192.168.1.5:5173");
+      expect(resolveAppOrigin("http://172.16.0.1:3000")).toBe("http://172.16.0.1:3000");
+      expect(resolveAppOrigin("http://172.31.255.254:3000")).toBe(
+        "http://172.31.255.254:3000",
+      );
+      expect(resolveAppOrigin("http://169.254.10.1:3000")).toBe("http://169.254.10.1:3000");
+    });
+
+    it("allows link-local and unique-local IPv6, and mDNS names", () => {
+      expect(resolveAppOrigin("http://[fe80::1]:3000")).toBe("http://[fe80::1]:3000");
+      expect(resolveAppOrigin("http://[fd12:3456::1]:3000")).toBe(
+        "http://[fd12:3456::1]:3000",
+      );
+      expect(resolveAppOrigin("https://aryans-mac.local:3000")).toBe(
+        "https://aryans-mac.local:3000",
+      );
+    });
+
+    it("still refuses public addresses", () => {
+      // The neighbours of each private range, which an off-by-one lets through.
+      expect(resolveAppOrigin("https://11.0.0.1:3000")).toBeUndefined();
+      expect(resolveAppOrigin("https://9.255.255.255:3000")).toBeUndefined();
+      expect(resolveAppOrigin("https://172.15.0.1:3000")).toBeUndefined();
+      expect(resolveAppOrigin("https://172.32.0.1:3000")).toBeUndefined();
+      expect(resolveAppOrigin("https://192.169.1.1:3000")).toBeUndefined();
+      expect(resolveAppOrigin("https://8.8.8.8")).toBeUndefined();
+      expect(resolveAppOrigin("https://evil.test")).toBeUndefined();
+      expect(resolveAppOrigin("https://[2606:4700::1111]")).toBeUndefined();
+    });
+
+    it("does not treat a lookalike host as private", () => {
+      // A name that merely starts like an address is a name, and DNS will happily
+      // point it at anything. This is the substring bug again, one range over.
+      expect(resolveAppOrigin("https://10.0.0.124.evil.test")).toBeUndefined();
+      expect(resolveAppOrigin("https://192.168.1.1.evil.test")).toBeUndefined();
+      expect(resolveAppOrigin("https://evil.test/10.0.0.1")).toBeUndefined();
+      expect(resolveAppOrigin("https://10.0.0.1.local.evil.test")).toBeUndefined();
+      // Octets that are not octets.
+      expect(resolveAppOrigin("https://10.0.0.999")).toBeUndefined();
+      expect(resolveAppOrigin("https://010.0.0.1x")).toBeUndefined();
+    });
+
+    it("judges the address URL parsed, not the string that was typed", () => {
+      // `URL` expands IPv4 shorthand before we ever see it, so `10.0.0` really is
+      // 10.0.0.0 and belongs in the range. Asserting the parsed form keeps this
+      // honest rather than looking like an accident.
+      expect(resolveAppOrigin("https://10.0.0")).toBe("https://10.0.0.0");
+      expect(resolveAppOrigin("https://192.168.257")).toBe("https://192.168.1.1");
+    });
+  });
+});
+
 describe("resolveAppOrigin — registered origins", () => {
   beforeEach(() => {
     process.env.APP_BASE_URL = "https://inbox.example";
