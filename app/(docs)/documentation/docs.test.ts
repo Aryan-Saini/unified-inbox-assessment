@@ -18,7 +18,14 @@ import { ROUTES } from "../../../convex/api/routes";
 import { publicResult } from "../../../convex/api/views";
 import { renderAgentsMd, renderFull, renderIndex } from "./markdown";
 import { openApiDocument } from "./openapi";
-import { ENDPOINTS, ERROR_CODES, SCHEMAS, SECTIONS } from "./spec";
+import {
+  BASE_URL_PLACEHOLDER,
+  ENDPOINTS,
+  ERROR_CODES,
+  SCHEMAS,
+  SECTIONS,
+  resolveBaseUrl,
+} from "./spec";
 
 const ORIGIN = "https://docs.test";
 
@@ -42,6 +49,28 @@ describe("the documented surface matches the real one", () => {
   it("gives every endpoint a unique id, since ids are page anchors", () => {
     const ids = ENDPOINTS.map((e) => e.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe("the base URL survives a deployment that only sets the cloud URL", () => {
+  // The failure this guards is silent and lands on the one reader the page is
+  // for: nothing sets `NEXT_PUBLIC_CONVEX_SITE_URL` on a deployed frontend, and
+  // without the fallback every example would read `<deployment>.convex.site`.
+  it("derives the site origin from the cloud origin", () => {
+    expect(resolveBaseUrl(undefined, "https://scintillating-moose-307.convex.cloud")).toBe(
+      "https://scintillating-moose-307.convex.site",
+    );
+  });
+
+  it("prefers an explicit site URL, without a trailing slash", () => {
+    expect(
+      resolveBaseUrl("https://explicit.convex.site/", "https://other.convex.cloud"),
+    ).toBe("https://explicit.convex.site");
+  });
+
+  it("falls back to the placeholder when neither is set", () => {
+    expect(resolveBaseUrl(undefined, undefined)).toBe(BASE_URL_PLACEHOLDER);
+    expect(resolveBaseUrl("", "http://127.0.0.1:3210")).toBe(BASE_URL_PLACEHOLDER);
   });
 });
 

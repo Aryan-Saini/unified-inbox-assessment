@@ -14,18 +14,46 @@
 
 /* --------------------------------------------------------------- deployment */
 
+/** Shown when neither env var is set — a checkout with no deployment behind it. */
+export const BASE_URL_PLACEHOLDER = "https://<deployment>.convex.site";
+
 /**
- * Where the API actually lives.
+ * Resolve the origin the REST API is served from.
  *
- * The REST surface is served by the Convex deployment, not by Next.js — so the
- * base URL is the `.convex.site` origin, which is a different host from the one
- * serving this page. Inlined at build time from the same env var the app itself
- * connects with, so the examples on the page are copy-pasteable rather than
- * templated. The placeholder is the honest fallback for a checkout that has not
- * been pointed at a deployment yet.
+ * The REST surface belongs to the Convex deployment, not to Next.js, so the base
+ * URL is the `.convex.site` origin — a different host from the one serving this
+ * page.
+ *
+ * `NEXT_PUBLIC_CONVEX_SITE_URL` is preferred but **must not be required**:
+ * `npx convex dev` writes it locally and `dev:handin` sets it, but nothing sets
+ * it on a deployed frontend, and a reviewer opening the deployed docs would then
+ * find every example addressed to `<deployment>`. `NEXT_PUBLIC_CONVEX_URL` is
+ * guaranteed present — `ConvexClientProvider` throws without it — and Convex
+ * derives one host from the other by exactly this substitution, so deriving it
+ * here is reading the same rule rather than guessing.
+ *
+ * Exported as a function so the substitution is testable without a build.
  */
-export const BASE_URL =
-  process.env.NEXT_PUBLIC_CONVEX_SITE_URL ?? "https://<deployment>.convex.site";
+export function resolveBaseUrl(
+  siteUrl: string | undefined,
+  cloudUrl: string | undefined,
+): string {
+  if (siteUrl !== undefined && siteUrl !== "") return siteUrl.replace(/\/+$/, "");
+  if (cloudUrl !== undefined && cloudUrl.endsWith(".convex.cloud")) {
+    return `${cloudUrl.slice(0, -".convex.cloud".length)}.convex.site`;
+  }
+  return BASE_URL_PLACEHOLDER;
+}
+
+/**
+ * Read at module scope, from the two `NEXT_PUBLIC_*` names verbatim: Next.js
+ * inlines these at build time by matching the literal `process.env.NAME`, so
+ * they cannot be looked up dynamically.
+ */
+export const BASE_URL = resolveBaseUrl(
+  process.env.NEXT_PUBLIC_CONVEX_SITE_URL,
+  process.env.NEXT_PUBLIC_CONVEX_URL,
+);
 
 export const API_PREFIX = "/api/v1";
 export const API_BASE = `${BASE_URL}${API_PREFIX}`;
