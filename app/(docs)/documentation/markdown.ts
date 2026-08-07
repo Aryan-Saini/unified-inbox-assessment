@@ -139,9 +139,14 @@ function schemaSection(name: string): string {
 /** The protocol, spelled out. Appears in all three renderings, verbatim. */
 function sendProtocol(): string {
   return [
-    "## Sending: four requests, in this order",
+    "## Sending: four requests, three of them enforced",
     "",
     "There is **no endpoint that takes a recipient and a body and just sends it**.",
+    "",
+    "The API enforces steps 1, 3 and 4. Step 2 is not enforced, because step 1",
+    "already returns a usable `review_hash`, so a client can technically go",
+    "create, confirm, send. Do the read anyway: it is the only way to hold a hash",
+    "you know matches the draft right now.",
     "",
     "1. `POST /api/v1/drafts` to create the draft. Pass your own `idempotency_key`.",
     "2. `GET /api/v1/drafts/{id}` to read it back. You get `review_hash` and the exact `to`. The create response carries the hash too, so this step matters most after an edit, when the hash you hold has gone stale.",

@@ -381,8 +381,9 @@ export function openApiDocument(origin: string): Schema {
         "Search Gmail, Slack and the web from one place, and send replies only after an explicit confirmation step.",
       description: [
         "There is no endpoint that takes a recipient and a body and delivers them.",
-        "Sending is four requests: create a draft, read it back, confirm the hash you",
-        "read, then send while repeating the recipient verbatim.",
+        "Sending is four requests: create a draft, read it back, confirm the hash, then",
+        "send while repeating the recipient exactly. Three of the four are enforced. The",
+        "read is not, because create already returns the hash.",
         "",
         `Human documentation: ${origin}/documentation`,
         `Markdown for agents: ${origin}/documentation/llms-full.txt`,

@@ -2,8 +2,8 @@
  * The prose half of the documentation.
  *
  * `spec.ts` is the reference: every route, field and status code. This is
- * everything a reader needs *around* it. How to get a key, why sending takes
- * four round trips, and what an autonomous client is expected to do when a send
+ * everything a reader needs *around* it. How to get a key, what the send gate
+ * actually enforces, and what an autonomous client is expected to do when a send
  * comes back `unknown`.
  *
  * It is a small block tree rather than a markdown string because it has two
@@ -46,11 +46,14 @@ Base URL: ${BASE_URL}
 Every route lives under ${API_BASE}. Authenticate with \`Authorization: Bearer uik_…\`.
 
 THE ONE RULE THAT MATTERS: there is no endpoint that takes a recipient and a body
-and just sends it. Sending is always four requests. Create a draft, read it back,
-confirm the hash, then send while repeating the recipient exactly. The two gates
-that actually hold are the confirm and the acknowledged destination, and neither
-of them can be skipped. They are there to make an accidental send impossible,
-including an accidental send by you.`;
+and just sends it. The normal flow is four requests. Create a draft, read it back,
+confirm the hash, then send while repeating the recipient exactly.
+
+Three of those four are enforced. The API will not send without a confirm whose
+hash matches the draft as it stands right now, and it will not send unless you
+name the recipient yourself. The read is not enforced, because create already
+hands you a usable hash. Do it anyway: it is the only way to hold a hash you know
+is current, and after any edit the one you are holding is stale.`;
 
 /* ------------------------------------------------------------------- sections */
 
@@ -139,14 +142,14 @@ curl -sS -H "Authorization: Bearer $KEY" "$API/searches/$SEARCH_ID/results?order
       blocks: [
         {
           kind: "p",
-          text: "This is the part worth reading twice, and the part an automated client is most likely to get wrong. **Four requests, in order.** The confirm and the acknowledged destination are the two that actually gate the send, and neither can be skipped or worked out ahead of time.",
+          text: "This is the part worth reading twice, and the part an automated client is most likely to get wrong. **Four requests, and the API enforces three of them.** Create, confirm and send are checked. The read is not, because create already returns a usable hash, so a client can technically go create, confirm, send. Do the read anyway, for the reason in step 2.",
         },
         {
           kind: "list",
           ordered: true,
           items: [
             "`POST /drafts` and the message exists, unsent. Pass your own `idempotency_key` so a retried request reads as the same message instead of a second one.",
-            "`GET /drafts/{id}` to read it back. You get `review_hash` and the exact `to` here. The create response carries the hash too, so this step matters most after an edit, when the revision has moved and the hash you are holding is stale.",
+            "`GET /drafts/{id}` to read it back. You get `review_hash` and the exact `to` here. This is the step the API does not force, since create returns the hash as well, but it is the only way to be sure the hash matches the draft as it stands. Edit anything and the revision moves and the hash you were holding is dead.",
             "`POST /drafts/{id}/confirm` with the hash. The server re-derives the digest from the current row and compares, so a draft that got edited in between fails instead of going out on a stale review.",
             "`POST /drafts/{id}/send`, repeating the recipient exactly in `acknowledged_destination`. A mismatch is a 409 and nothing is delivered.",
           ],
