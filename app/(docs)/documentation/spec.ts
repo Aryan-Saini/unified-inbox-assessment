@@ -127,14 +127,14 @@ export interface Section {
 export const SCHEMAS: Record<string, { title: string; note?: string; fields: Field[] }> = {
   Result: {
     title: "Result",
-    note: "Exactly seven fields, whatever the source and whatever the underlying row carries. Ranking, threading and read-state are stripped by the projection.",
+    note: "Exactly seven fields, whatever the source is and whatever the underlying row happens to carry. The projection strips ranking, threading and read state.",
     fields: [
       { name: "source", type: `"gmail" | "slack" | "web"`, required: true, description: "Which adapter produced it." },
-      { name: "id", type: "string", required: true, description: "This API's id for the result. Pass it back as `reply_to_result_id` to keep a reply in the same thread." },
+      { name: "id", type: "string", required: true, description: "This API's id for the result. Pass it back as `reply_to_result_id` and your reply stays in the same thread." },
       { name: "title", type: "string", required: true, description: "Subject line, message heading, or page title." },
       { name: "snippet", type: "string", required: true, description: "A short extract. Never the full body." },
       { name: "author", type: "string", description: "Sender, where the source has one." },
-      { name: "timestamp", type: "string (ISO 8601)", description: "Absent for sources with no reliable date — most web results." },
+      { name: "timestamp", type: "string (ISO 8601)", description: "Missing for sources with no reliable date, which is most web results." },
       { name: "url", type: "string", required: true, description: "Where a human can open it at the provider." },
     ],
   },
@@ -156,7 +156,7 @@ export const SCHEMAS: Record<string, { title: string; note?: string; fields: Fie
 
   SourceRun: {
     title: "SourceRun",
-    note: "One adapter's run within a search. This is how a polling client learns that two of five accounts have already answered, and why the third has not.",
+    note: "One adapter's run inside a search. This is how a polling client finds out that two of five accounts already answered, and why the third one has not.",
     fields: [
       { name: "source", type: `"gmail" | "slack" | "web"`, required: true, description: "The adapter." },
       { name: "connection_id", type: "string", description: "Which grant answered, for account-scoped sources." },
@@ -172,20 +172,20 @@ export const SCHEMAS: Record<string, { title: string; note?: string; fields: Fie
 
   Draft: {
     title: "Draft",
-    note: "A message that exists but has not been authorised. Creating one is the only way a message comes to exist — there is no endpoint that takes a recipient and a body and delivers them.",
+    note: "A message that exists but is not authorised yet. Making one of these is the only way a message comes to exist, because there is no endpoint that takes a recipient and a body and just sends it.",
     fields: [
       { name: "id", type: "string", required: true, description: "The draft id." },
       { name: "channel", type: `"gmail" | "slack"`, required: true, description: "How it would be delivered." },
       { name: "connection_id", type: "string", required: true, description: "The grant it would be sent through." },
-      { name: "to", type: "string", required: true, description: "The recipient. This exact string is what `/send` requires echoed back." },
-      { name: "subject", type: "string", description: "Gmail only; Slack ignores it." },
+      { name: "to", type: "string", required: true, description: "The recipient. This exact string is what `/send` makes you echo back." },
+      { name: "subject", type: "string", description: "Gmail only. Slack ignores it." },
       { name: "body", type: "string", required: true, description: "The message." },
       { name: "idempotency_key", type: "string", required: true, description: "Yours if you supplied one, otherwise minted here." },
       { name: "status", type: `"draft" | "confirmed" | "sent" | "failed"`, required: true, description: "Where in the gate this draft is." },
-      { name: "revision", type: "number", required: true, description: "Bumped on every edit. Part of the digest, so editing invalidates a confirmation." },
+      { name: "revision", type: "number", required: true, description: "Goes up on every edit. It is part of the digest, so editing kills any confirmation." },
       { name: "confirmed", type: "boolean", required: true, description: "True when the stored confirmation still matches the current payload." },
-      { name: "review_hash", type: "string", required: true, description: "SHA-256 of `canonical_payload`. The value `/confirm` requires. Present only on the read — obtaining it means the payload was fetched, which is the point of the gate." },
-      { name: "canonical_payload", type: "string", required: true, description: "The exact string the digest is taken over, so a client can verify the hash itself." },
+      { name: "review_hash", type: "string", required: true, description: "SHA-256 of `canonical_payload`, and the value `/confirm` wants back. You only get it on the read, so having it means you fetched the payload. That is the point of the gate." },
+      { name: "canonical_payload", type: "string", required: true, description: "The exact string the digest is taken over, so you can verify the hash yourself." },
       { name: "created_at", type: "string (ISO 8601)", required: true, description: "" },
       { name: "updated_at", type: "string (ISO 8601)", required: true, description: "" },
     ],
@@ -193,24 +193,24 @@ export const SCHEMAS: Record<string, { title: string; note?: string; fields: Fie
 
   Send: {
     title: "Send",
-    note: "A delivery attempt record. Two requests sharing an idempotency key get byte-identical bodies from this projection — nothing in here says which call produced it. The dedupe is reported in the `X-Idempotent-Replay` header instead, so proving a double-tap sent once is a `diff` of two files.",
+    note: "A delivery attempt record. Two requests sharing an idempotency key get byte-identical bodies out of this projection, because nothing in here says which call produced it. The dedupe goes in the `X-Idempotent-Replay` header instead, so proving a double tap only sent once is a `diff` of two files.",
     fields: [
       { name: "id", type: "string", required: true, description: "The send id." },
       { name: "draft_id", type: "string", required: true, description: "The draft it was claimed from." },
       { name: "idempotency_key", type: "string", required: true, description: "The key this delivery is deduplicated under." },
       { name: "channel", type: `"gmail" | "slack"`, required: true, description: "" },
       { name: "connection_id", type: "string", required: true, description: "" },
-      { name: "to", type: "string", required: true, description: "Frozen at claim time, not read from the draft afterwards." },
+      { name: "to", type: "string", required: true, description: "Frozen when the send was claimed, not read off the draft afterwards." },
       { name: "subject", type: "string", description: "" },
       { name: "body", type: "string", required: true, description: "" },
-      { name: "status", type: `"queued" | "in_flight" | "succeeded" | "failed_transient" | "failed_permanent" | "needs_reconnect" | "unknown"`, required: true, description: "See the send-status table below. `unknown` is a refusal to guess, not a failure." },
+      { name: "status", type: `"queued" | "in_flight" | "succeeded" | "failed_transient" | "failed_permanent" | "needs_reconnect" | "unknown"`, required: true, description: "See the send status table below. `unknown` is a refusal to guess, not a failure." },
       { name: "attempt_count", type: "number", required: true, description: "" },
-      { name: "max_attempts", type: "number", required: true, description: "After this, automatic retries stop and it is yours to decide about." },
+      { name: "max_attempts", type: "number", required: true, description: "Once we hit this the automatic retries stop and it is yours to decide about." },
       { name: "provider_message_id", type: "string", description: "The provider's id for the delivered message." },
       { name: "provider_thread_id", type: "string", description: "" },
       { name: "last_error_kind", type: `"transient" | "permanent" | "needs_reconnect" | "unknown"`, description: "" },
       { name: "last_error_message", type: "string", description: "" },
-      { name: "next_retry_at", type: "string (ISO 8601)", description: "Set while an automatic retry is still scheduled. A `failed_transient` with this set is still in progress." },
+      { name: "next_retry_at", type: "string (ISO 8601)", description: "Set while an automatic retry is still scheduled, so a `failed_transient` with this set is still going." },
       { name: "is_seed", type: "boolean", required: true, description: "" },
       { name: "created_at", type: "string (ISO 8601)", required: true, description: "" },
       { name: "updated_at", type: "string (ISO 8601)", required: true, description: "" },
@@ -220,15 +220,15 @@ export const SCHEMAS: Record<string, { title: string; note?: string; fields: Fie
 
   Attempt: {
     title: "Attempt",
-    note: "One try at a delivery. `GET /sends/{id}` returns the whole timeline, which is what makes a failure explainable rather than merely reported.",
+    note: "One try at a delivery. `GET /sends/{id}` gives you the whole timeline, which is what makes a failure something you can explain instead of just report.",
     fields: [
       { name: "attempt_number", type: "number", required: true, description: "1-based." },
-      { name: "trigger", type: `"initial" | "auto" | "manual"`, required: true, description: "Who asked for this attempt: the first send, the retry scheduler, or you." },
+      { name: "trigger", type: `"initial" | "auto" | "manual"`, required: true, description: "Who asked for this attempt. The first send, the retry scheduler, or you." },
       { name: "started_at", type: "string (ISO 8601)", required: true, description: "" },
       { name: "finished_at", type: "string (ISO 8601)", description: "" },
       { name: "outcome", type: `"succeeded" | "failed" | "unknown"`, description: "" },
       { name: "error_kind", type: `"transient" | "permanent" | "needs_reconnect" | "unknown"`, description: "" },
-      { name: "error_message", type: "string", description: "The provider's error, redacted of credentials but not truncated." },
+      { name: "error_message", type: "string", description: "The provider's error with credentials stripped out, but not cut short." },
       { name: "http_status", type: "number", description: "What the provider answered." },
       { name: "provider_message_id", type: "string", description: "" },
     ],
@@ -236,7 +236,7 @@ export const SCHEMAS: Record<string, { title: string; note?: string; fields: Fie
 
   Connection: {
     title: "Connection",
-    note: "Tokens, ciphertexts and lease state are absent by construction, not by omission.",
+    note: "Tokens, ciphertexts and lease state are missing by construction, not because someone forgot them.",
     fields: [
       { name: "id", type: "string", required: true, description: "Pass this as `connection_id` when creating a draft." },
       { name: "provider", type: `"gmail" | "slack"`, required: true, description: "" },
@@ -244,9 +244,9 @@ export const SCHEMAS: Record<string, { title: string; note?: string; fields: Fie
       { name: "label", type: "string", required: true, description: "Email address, or Slack workspace name." },
       { name: "status", type: `"active" | "expired" | "errored" | "revoked"`, required: true, description: "Only `active` can search or send." },
       { name: "status_reason", type: "string", description: "Why it is not active." },
-      { name: "enabled", type: "boolean", required: true, description: "Whether the user has this account switched on for searches." },
+      { name: "enabled", type: "boolean", required: true, description: "Whether you have this account switched on for searches." },
       { name: "scopes", type: "string[]", required: true, description: "What the grant actually covers." },
-      { name: "is_seed", type: "boolean", required: true, description: "Demo connections hold no real grant and can never reach a provider." },
+      { name: "is_seed", type: "boolean", required: true, description: "Demo connections hold no real grant, so they can never reach a provider." },
       { name: "created_at", type: "string (ISO 8601)", required: true, description: "" },
       { name: "last_used_at", type: "string (ISO 8601)", description: "" },
     ],
@@ -254,11 +254,11 @@ export const SCHEMAS: Record<string, { title: string; note?: string; fields: Fie
 
   Error: {
     title: "Error",
-    note: "One shape for every failure. A client that has to guess whether today's 409 is `{error: \"…\"}` or `{message: \"…\"}` ends up string-matching, and then our error text becomes their API contract. Switch on `error.code`; show `error.message`.",
+    note: "One shape for every failure. A client that has to guess whether today's 409 is `{error: \"…\"}` or `{message: \"…\"}` ends up string-matching, and then our error text becomes their API contract. So switch on `error.code` and show `error.message`.",
     fields: [
       { name: "error.code", type: "string", required: true, description: "The machine-readable reason. The contract." },
-      { name: "error.message", type: "string", required: true, description: "Written for a human. Prefixed with the code so a flattened log line still says which rule fired." },
-      { name: "error.retry_after_seconds", type: "number", description: "On 429 only. Mirrors the `Retry-After` header and comes from the bucket's own arithmetic, so obeying it actually succeeds." },
+      { name: "error.message", type: "string", required: true, description: "Written for a human. It carries the code as a prefix so a flattened log line still says which rule fired." },
+      { name: "error.retry_after_seconds", type: "number", description: "On 429 only. It mirrors the `Retry-After` header and comes out of the bucket's own arithmetic, so obeying it actually works." },
     ],
   },
 };
@@ -274,9 +274,9 @@ export const SECTIONS: Section[] = [
         id: "listConnections",
         method: "GET",
         path: "/connections",
-        summary: "List the accounts you hold",
+        summary: "List the accounts you have",
         description:
-          "Start here. A draft needs a `connection_id`, and this is the only place one comes from. Connections are created by the OAuth flow in the web app; there is no REST route that adds one, because a token grant needs a browser and a consent screen.",
+          "Start here. A draft needs a `connection_id` and this is the only place one comes from. Connections get made by the OAuth flow in the web app and there is no REST route that adds one, because a token grant needs a browser and a consent screen.",
         responses: [{ status: 200, description: "`{count, connections: Connection[]}`." }],
         returns: "Connection",
         curl: `curl -sS -H "Authorization: Bearer $KEY" "$API/connections"`,
@@ -320,12 +320,12 @@ export const SECTIONS: Section[] = [
         id: "createSearch",
         method: "POST",
         path: "/searches",
-        summary: "Fan out a query across every source",
+        summary: "Fan a query out across every source",
         description:
-          "Answers **202**, not 200: the fan-out is scheduled, not finished. Every source runs independently, so a slow provider cannot hold up a fast one and partial results are real results. Poll `search_url` for per-source status and `results_url` for the rows themselves.",
+          "You get **202**, not 200, because the fan-out is scheduled and not finished. Every source runs on its own so a slow provider cannot hold up a fast one, and partial results are real results. Poll `search_url` for per-source status and `results_url` for the rows.",
         body: [
           { name: "query", type: "string", required: true, description: "What to search for. Also accepted as `q`." },
-          { name: "sources", type: `("gmail" | "slack" | "web")[]`, description: "Restrict the fan-out. Defaults to all three. An array containing none of them is a 400 rather than a silent empty search." },
+          { name: "sources", type: `("gmail" | "slack" | "web")[]`, description: "Narrow the fan-out. Defaults to all three. An array with none of them in it is a 400 instead of a silently empty search." },
         ],
         responses: [
           { status: 202, description: "`{search_id, status: \"running\", search_url, results_url}`." },
@@ -348,11 +348,11 @@ export const SECTIONS: Section[] = [
         path: "/searches/{id}",
         summary: "Status of a search, source by source",
         description:
-          "The `sources` array is the useful half: each entry carries its own status, attempt count, duration and error. `status` on the search itself goes `complete` only when every source has settled — succeeded *or* failed. A source that failed does not fail the search.",
+          "The `sources` array is the useful half. Each entry carries its own status, attempt count, duration and error. `status` on the search goes `complete` only once every source has settled, whether it succeeded *or* failed. One source failing does not fail the search.",
         pathParams: [{ name: "id", type: "string", required: true, description: "The search id." }],
         responses: [
           { status: 200, description: "A `Search`, plus `sources: SourceRun[]` and `results_url`." },
-          { status: 404, description: "No such search, or not yours. Deliberately the same answer." },
+          { status: 404, description: "No such search, or not yours. Same answer on purpose." },
         ],
         returns: "Search",
         curl: `curl -sS -H "Authorization: Bearer $KEY" "$API/searches/$SEARCH_ID"`,
@@ -401,14 +401,14 @@ export const SECTIONS: Section[] = [
         path: "/searches/{id}/results",
         summary: "The normalised results",
         description:
-          "`partial` is true while at least one source is still working, which is the flag a polling client should branch on rather than re-deriving it from `status`. Every row is exactly the seven public `Result` fields regardless of which provider produced it.",
+          "`partial` is true while at least one source is still working, and that is the flag a polling client should branch on instead of working it out again from `status`. Every row is exactly the seven public `Result` fields no matter which provider produced it.",
         pathParams: [{ name: "id", type: "string", required: true, description: "The search id." }],
         query: [
           {
             name: "order",
             type: `"rank" | "arrival"`,
             description:
-              "`rank` (default) is best-first — an API consumer has no scroll position to protect. `arrival` is append-only, which is what a client polling a running search wants, because re-ranking would shuffle rows it has already shown.",
+              "`rank` is the default and it is best-first, because an API consumer has no scroll position to protect. `arrival` is append-only, which is what a client polling a running search wants, since re-ranking would shuffle rows it has already shown.",
           },
         ],
         responses: [
@@ -429,7 +429,7 @@ export const SECTIONS: Section[] = [
       "source": "gmail",
       "id": "kd83jf0s9a2b4c6d8e0f2g4h",
       "title": "Re: invoice INV-2041",
-      "snippet": "The copy attached to the last mail had the wrong total — corrected one to follow.",
+      "snippet": "The copy attached to the last mail had the wrong total, corrected one to follow.",
       "author": "billing@acme.test",
       "timestamp": "2026-08-05T16:41:09.000Z",
       "url": "https://mail.google.com/mail/u/0/#inbox/18f2c9a0b1d3e5f7"
@@ -452,7 +452,7 @@ export const SECTIONS: Section[] = [
         method: "GET",
         path: "/searches",
         summary: "Your search history",
-        description: "Most recent first, capped at 50. `origin` tells you which ones a script ran.",
+        description: "Most recent first, capped at 50. `origin` tells you which of them a script ran.",
         responses: [{ status: 200, description: "`{count, searches: Search[]}`." }],
         returns: "Search",
         curl: `curl -sS -H "Authorization: Bearer $KEY" "$API/searches"`,
@@ -479,7 +479,7 @@ export const SECTIONS: Section[] = [
         path: "/searches/{id}/rerun",
         summary: "Run the same query again",
         description:
-          "Creates a **new** search carrying `rerun_of`, over the same sources as the original. It never overwrites the old one: history that mutates under you is not history.",
+          "Makes a **new** search carrying `rerun_of`, over the same sources as the original. It never overwrites the old one, because history that changes under you is not history.",
         pathParams: [{ name: "id", type: "string", required: true, description: "The search to repeat." }],
         responses: [
           { status: 202, description: "`{search_id, status, rerun_of, search_url, results_url}`." },
@@ -507,28 +507,28 @@ export const SECTIONS: Section[] = [
         method: "POST",
         path: "/drafts",
         alias: "/drafts",
-        summary: "Compose a message, without sending it",
+        summary: "Write a message without sending it",
         description:
-          "**201** on creation, or **200** with `X-Idempotent-Replay: true` when the idempotency key was already used for this exact payload. Presenting a *different* payload under a key you have already used is a 409 — the key names one message, not one request.",
+          "**201** when it creates one, or **200** with `X-Idempotent-Replay: true` when that idempotency key was already used for this exact payload. Send a *different* payload under a key you already used and you get a 409, because the key names one message and not one request.",
         body: [
           { name: "channel", type: `"gmail" | "slack"`, required: true, description: "How it goes out." },
-          { name: "connection_id", type: "string", required: true, description: "From `GET /connections`. Also accepted as `connectionId`." },
+          { name: "connection_id", type: "string", required: true, description: "Comes from `GET /connections`. We also accept `connectionId`." },
           { name: "to", type: "string", required: true, description: "Email address, or Slack channel/user id. Also accepted as `recipient`." },
           { name: "subject", type: "string", description: "Gmail only." },
           { name: "body", type: "string", required: true, description: "The message. Also accepted as `text`." },
-          { name: "idempotency_key", type: "string", description: "Supply your own so a retried request is recognisable as the same message. One is minted if you do not. Also accepted as `idempotencyKey`." },
-          { name: "reply_to_result_id", type: "string", description: "A `Result.id`. Carries the provider thread over, so the reply lands in the conversation instead of beside it. Also accepted as `replyToResultId`." },
+          { name: "idempotency_key", type: "string", description: "Pass your own so a retried request reads as the same message. We mint one if you do not. Also accepted as `idempotencyKey`." },
+          { name: "reply_to_result_id", type: "string", description: "A `Result.id`. It carries the provider thread over so the reply lands in the conversation instead of next to it. Also accepted as `replyToResultId`." },
         ],
         responses: [
           { status: 201, description: "Created. A `Draft`, plus `confirm_url` and `send_url`." },
           { status: 200, description: "The key was re-used for the same payload. Same body, `X-Idempotent-Replay: true`." },
           { status: 400, description: "A missing or invalid field." },
           { status: 404, description: "No such connection, or not yours." },
-          { status: 409, description: "`IDEMPOTENCY_KEY_REUSED` — a different payload under a key you already used. Or `CONNECTION_UNAVAILABLE`." },
+          { status: 409, description: "`IDEMPOTENCY_KEY_REUSED`, meaning a different payload under a key you already used. Or `CONNECTION_UNAVAILABLE`." },
           { status: 429, description: "Write limit exhausted." },
         ],
         responseHeaders: [
-          { name: "X-Idempotent-Replay", description: "`true` when nothing was created." },
+          { name: "X-Idempotent-Replay", description: "`true` when nothing got created." },
         ],
         returns: "Draft",
         curl: `curl -sS -H "Authorization: Bearer $KEY" -H 'content-type: application/json' -d '{
@@ -563,9 +563,9 @@ export const SECTIONS: Section[] = [
         id: "getDraft",
         method: "GET",
         path: "/drafts/{id}",
-        summary: "Read a draft back — and get its review hash",
+        summary: "Read a draft back, and get its review hash",
         description:
-          "`review_hash` is returned **only here**, which is the mechanism of the confirm gate: obtaining the hash means the payload was fetched and could have been read. `canonical_payload` is the exact string the digest is taken over, so a client can recompute the SHA-256 itself rather than trusting ours.",
+          "`review_hash` comes back **only here**, and that is the mechanism of the confirm gate. Having the hash means you fetched the payload and could have read it. `canonical_payload` is the exact string the digest is taken over, so you can recompute the SHA-256 yourself instead of trusting ours.",
         pathParams: [{ name: "id", type: "string", required: true, description: "The draft id." }],
         responses: [
           { status: 200, description: "A `Draft`." },
@@ -597,7 +597,7 @@ export const SECTIONS: Section[] = [
         path: "/drafts/{id}/confirm",
         summary: "Authorise the payload you just read",
         description:
-          "Send back the `review_hash` from the read. The server re-derives the digest from the current row and compares — so a draft edited between the read and the confirm fails with `PAYLOAD_MISMATCH` rather than being authorised on the strength of a stale review. Confirming does not send.",
+          "Send back the `review_hash` from the read. The server re-derives the digest off the current row and compares, so a draft edited between the read and the confirm fails with `PAYLOAD_MISMATCH` instead of going through on a stale review. Confirming does not send.",
         pathParams: [{ name: "id", type: "string", required: true, description: "The draft id." }],
         body: [
           {
@@ -605,14 +605,14 @@ export const SECTIONS: Section[] = [
             type: "string",
             required: true,
             description:
-              "The `review_hash` from `GET /drafts/{id}`. Also accepted as `reviewedHash`, `confirmation_hash` or `confirmationHash`.",
+              "The `review_hash` from `GET /drafts/{id}`. We also accept `reviewedHash`, `confirmation_hash` or `confirmationHash`.",
           },
         ],
         responses: [
           { status: 200, description: "The `Draft`, now with `status: \"confirmed\"` and `confirmed: true`." },
           { status: 400, description: "No `reviewed_hash`." },
           { status: 404, description: "No such draft, or not yours." },
-          { status: 409, description: "`PAYLOAD_MISMATCH` — the hash is not this payload's current digest." },
+          { status: 409, description: "`PAYLOAD_MISMATCH`, meaning that hash is not this payload's current digest." },
         ],
         returns: "Draft",
         curl: `curl -sS -H "Authorization: Bearer $KEY" -H 'content-type: application/json' \\
@@ -640,9 +640,9 @@ export const SECTIONS: Section[] = [
         method: "POST",
         path: "/drafts/{id}/send",
         alias: "/drafts/{id}/send",
-        summary: "Deliver it, naming the destination out loud",
+        summary: "Send it, naming the destination out loud",
         description:
-          "`acknowledged_destination` must repeat the draft's `to` **verbatim**; anything else is a 409 and nothing is sent. Then the request *waits* — up to five seconds — for the delivery to settle, so a terminal usually shows the real outcome instead of a job id. Past that budget it answers **202** with `Retry-After` and a `send_url`, because holding the connection longer would be pretending the send is synchronous when it is not.\n\nCall it twice with the same draft and you get **byte-identical bodies**. That the second call claimed nothing is in the header, not the body.",
+          "`acknowledged_destination` has to repeat the draft's `to` **exactly**. Anything else is a 409 and nothing gets sent. Then the request *waits*, up to five seconds, for the delivery to settle, so your terminal usually shows the real outcome instead of a job id. Past that budget it answers **202** with `Retry-After` and a `send_url`, because holding the connection open longer would be pretending the send is synchronous when it is not.\n\nCall it twice on the same draft and you get **byte-identical bodies**. The fact that the second call claimed nothing lives in the header, not the body.",
         pathParams: [{ name: "id", type: "string", required: true, description: "The draft id." }],
         body: [
           {
@@ -653,15 +653,15 @@ export const SECTIONS: Section[] = [
           },
         ],
         responses: [
-          { status: 200, description: "The delivery settled. A `Send` — including a failed one; see below." },
-          { status: 202, description: "Still in flight after five seconds. `Retry-After: 2` and a `send_url` to poll." },
+          { status: 200, description: "The delivery settled. You get a `Send`, including a failed one. See below." },
+          { status: 202, description: "Still in flight after five seconds. You get `Retry-After: 2` and a `send_url` to poll." },
           { status: 404, description: "No such draft, or not yours." },
           { status: 409, description: "`DESTINATION_NOT_ACKNOWLEDGED`, `CONFIRMATION_REQUIRED`, `PAYLOAD_CHANGED_SINCE_CONFIRM`, or `CONNECTION_UNAVAILABLE`." },
           { status: 429, description: "Write limit exhausted." },
         ],
         responseHeaders: [
-          { name: "X-Idempotent-Replay", description: "`true` when this call claimed nothing — the send already existed." },
-          { name: "X-Send-Id", description: "The send id, available even on a 202." },
+          { name: "X-Idempotent-Replay", description: "`true` when this call claimed nothing, because the send already existed." },
+          { name: "X-Send-Id", description: "The send id. You get it even on a 202." },
         ],
         returns: "Send",
         curl: `curl -sS -D - -H "Authorization: Bearer $KEY" -H 'content-type: application/json' \\
@@ -735,7 +735,7 @@ export const SECTIONS: Section[] = [
         path: "/sends/{id}",
         summary: "One send, with every attempt",
         description:
-          "The `attempts` array is the whole timeline: what was tried, when, what the provider answered, and how the error was classified. This is where a failure stops being a status word and becomes an explanation.",
+          "The `attempts` array is the whole timeline. What was tried, when, what the provider answered, and how we classified the error. This is where a failure stops being a status word and turns into an explanation.",
         pathParams: [{ name: "id", type: "string", required: true, description: "The send id." }],
         responses: [
           { status: 200, description: "A `Send`, plus `attempts: Attempt[]`." },
@@ -791,12 +791,12 @@ export const SECTIONS: Section[] = [
         path: "/sends/{id}/retry",
         summary: "Try a failed delivery again",
         description:
-          "Allowed for a failed send. **Refused with 409 for an `unknown` one** — that status means the outcome is genuinely not known, so retrying under the same key could double-send, and the choice between reconciling at the provider and cloning the draft under a new key belongs to an operator, not to a retry loop.",
+          "Fine for a failed send. **Refused with a 409 for an `unknown` one**, because that status means the outcome genuinely is not known, so retrying under the same key could double-send. Choosing between reconciling at the provider and cloning the draft under a new key belongs to an operator, not a retry loop.",
         pathParams: [{ name: "id", type: "string", required: true, description: "The send id." }],
         responses: [
-          { status: 200, description: "`{retried, reason, ...Send}`. `retried: false` with a `reason` when nothing needed doing." },
+          { status: 200, description: "`{retried, reason, ...Send}`, with `retried: false` and a `reason` when nothing needed doing." },
           { status: 404, description: "No such send, or not yours." },
-          { status: 409, description: "`INDETERMINATE` — the send is `unknown` and must not be retried blind." },
+          { status: 409, description: "`INDETERMINATE`, meaning the send is `unknown` and must not be retried blind." },
           { status: 429, description: "Write limit exhausted." },
         ],
         returns: "Send",
@@ -832,7 +832,7 @@ export interface ErrorCode {
   code: string;
   status: number;
   meaning: string;
-  /** What a client — human or agent — should actually do about it. */
+  /** What a client, human or agent, should actually do about it. */
   action: string;
 }
 
@@ -840,14 +840,14 @@ export const ERROR_CODES: ErrorCode[] = [
   {
     code: "UNAUTHENTICATED",
     status: 401,
-    meaning: "No key, a malformed one, or one that has been revoked.",
-    action: "Stop. Retrying will not help. Unknown and revoked answer identically on purpose — telling them apart would confirm a stolen key was real before it was turned off.",
+    meaning: "No key, a broken one, or one that got revoked.",
+    action: "Stop. Retrying will not help. Unknown and revoked answer the same on purpose, because telling them apart would confirm a stolen key was real before it got turned off.",
   },
   {
     code: "NOT_FOUND",
     status: 404,
     meaning: "No such row, or it is not yours.",
-    action: "Stop. These are deliberately indistinguishable: a 403 would confirm the row exists, which is an enumeration oracle.",
+    action: "Stop. These two look the same on purpose, because a 403 would confirm the row is there and that is a slow way to enumerate.",
   },
   {
     code: "BAD_REQUEST",
@@ -858,56 +858,56 @@ export const ERROR_CODES: ErrorCode[] = [
   {
     code: "DESTINATION_NOT_ACKNOWLEDGED",
     status: 409,
-    meaning: "`/send` was called without `acknowledged_destination`, or with one that does not match the draft's `to`.",
-    action: "`GET` the draft, copy `to` verbatim, send again. Do not construct the value from your own state.",
+    meaning: "`/send` got called without `acknowledged_destination`, or with one that does not match the draft's `to`.",
+    action: "`GET` the draft, copy `to` exactly, send again. Do not build the value out of your own state.",
   },
   {
     code: "CONFIRMATION_REQUIRED",
     status: 409,
-    meaning: "`/send` on a draft that was never confirmed.",
+    meaning: "`/send` on a draft nobody ever confirmed.",
     action: "`GET` the draft, then `POST /confirm` with its `review_hash`.",
   },
   {
     code: "PAYLOAD_MISMATCH",
     status: 409,
-    meaning: "`/confirm` was given a hash that is not the payload's current digest.",
-    action: "Re-read the draft and confirm with the fresh `review_hash`. The payload changed since you read it.",
+    meaning: "`/confirm` got a hash that is not the payload's current digest.",
+    action: "Re-read the draft and confirm with the fresh `review_hash`. The payload changed after you read it.",
   },
   {
     code: "PAYLOAD_CHANGED_SINCE_CONFIRM",
     status: 409,
-    meaning: "The draft was confirmed, then edited. The confirmation no longer describes the message.",
+    meaning: "The draft got confirmed and then edited, so the confirmation no longer describes the message.",
     action: "Re-read and re-confirm. The gate is doing its job.",
   },
   {
     code: "IDEMPOTENCY_KEY_REUSED",
     status: 409,
-    meaning: "Two different payloads presented under one idempotency key.",
+    meaning: "Two different payloads under one idempotency key.",
     action: "Use a new key for a genuinely new message. A key names one message, not one request.",
   },
   {
     code: "CONNECTION_UNAVAILABLE",
     status: 409,
-    meaning: "The connection is disabled, revoked, or the wrong provider for the channel.",
+    meaning: "The connection is off, revoked, or the wrong provider for that channel.",
     action: "`GET /connections` and pick one with `status: \"active\"`. Reconnecting needs a browser.",
   },
   {
     code: "INVALID_STATE",
     status: 409,
     meaning: "The draft or send is in a status this operation does not apply to.",
-    action: "Read the row and branch on its actual status.",
+    action: "Read the row and branch on the status it actually has.",
   },
   {
     code: "INDETERMINATE",
     status: 409,
-    meaning: "The delivery outcome is genuinely unknown. Retrying could double-send.",
+    meaning: "The delivery outcome genuinely is not known, so retrying could double-send.",
     action: "**Do not retry automatically.** Reconcile at the provider, or clone the draft under a new idempotency key. This is a refusal to guess, not a failure.",
   },
   {
     code: "RATE_LIMITED",
     status: 429,
     meaning: "A per-user token bucket is empty.",
-    action: "Sleep for `Retry-After` seconds, then retry. The value comes from the bucket's own arithmetic, so obeying it actually succeeds.",
+    action: "Sleep for `Retry-After` seconds and retry. That value comes out of the bucket's own arithmetic, so obeying it actually works.",
   },
   {
     code: "METHOD_NOT_ALLOWED",
@@ -918,7 +918,7 @@ export const ERROR_CODES: ErrorCode[] = [
   {
     code: "INTERNAL",
     status: 500,
-    meaning: "An unclassified failure. The real error is in the deployment log.",
+    meaning: "Something we did not classify. The real error is in the deployment log.",
     action: "Retry once with backoff, then stop and report it.",
   },
 ];
@@ -926,19 +926,19 @@ export const ERROR_CODES: ErrorCode[] = [
 /* ---------------------------------------------------------- send status table */
 
 export const SEND_STATUSES: { status: string; meaning: string; retryable: string }[] = [
-  { status: "queued", meaning: "Claimed, not yet attempted.", retryable: "Wait." },
+  { status: "queued", meaning: "Claimed, not tried yet.", retryable: "Wait." },
   { status: "in_flight", meaning: "An attempt is running right now.", retryable: "Wait." },
-  { status: "succeeded", meaning: "The provider accepted it. `provider_message_id` is set.", retryable: "Done." },
+  { status: "succeeded", meaning: "The provider took it. `provider_message_id` is set.", retryable: "Done." },
   {
     status: "failed_transient",
-    meaning: "A retryable failure. If `next_retry_at` is set, an automatic retry is already scheduled.",
-    retryable: "Wait if `next_retry_at` is set; otherwise `POST /sends/{id}/retry`.",
+    meaning: "A failure worth retrying. If `next_retry_at` is set then an automatic retry is already scheduled.",
+    retryable: "Wait if `next_retry_at` is set, otherwise `POST /sends/{id}/retry`.",
   },
-  { status: "failed_permanent", meaning: "The provider refused in a way that will not change — a bad address, a message rejected.", retryable: "Fix the payload and send a new draft under a new key." },
-  { status: "needs_reconnect", meaning: "The grant is no longer valid.", retryable: "Reconnect the account in the web app, then retry." },
+  { status: "failed_permanent", meaning: "The provider refused in a way that is not going to change. A bad address, a rejected message.", retryable: "Fix the payload and send a new draft under a new key." },
+  { status: "needs_reconnect", meaning: "The grant is not valid any more.", retryable: "Reconnect the account in the web app, then retry." },
   {
     status: "unknown",
-    meaning: "The attempt did not return a verdict. It may or may not have been delivered.",
+    meaning: "The attempt came back with no verdict, so it may or may not have gone out.",
     retryable: "**Never retry blind.** `POST /retry` answers 409 `INDETERMINATE`. Reconcile at the provider.",
   },
 ];
@@ -949,11 +949,11 @@ export const RATE_LIMITS: { name: string; limit: string; covers: string }[] = [
   {
     name: "Fan-out",
     limit: "10 / minute",
-    covers: "`POST /searches`, `POST /searches/{id}/rerun`. One search can be three provider calls, so this is the expensive one.",
+    covers: "`POST /searches` and `POST /searches/{id}/rerun`. One search can be three provider calls, so this is the expensive one.",
   },
   {
     name: "Writes",
     limit: "30 / minute",
-    covers: "`POST /drafts`, `/confirm`, `/send`, `/sends/{id}/retry`.",
+    covers: "`POST /drafts`, `/confirm`, `/send`, and `/sends/{id}/retry`.",
   },
 ];

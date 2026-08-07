@@ -38,13 +38,11 @@ export function CopyButton({ value, label = "Copy" }: { value: string; label?: s
         });
       }}
       aria-label={copied ? "Copied" : label}
-      // Painted against the code palette rather than the page's: this sits on
-      // the block's header bar, which stays dark in both themes.
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-[11px] font-medium transition-colors"
-      style={{
-        color: copied ? "#3dd68c" : "var(--d-code-muted)",
-        background: copied ? "rgba(61, 214, 140, 0.12)" : "transparent",
-      }}
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-[11px] font-medium transition-colors ${
+        copied
+          ? "bg-emerald-500/10 text-emerald-300"
+          : "text-neutral-500 hover:bg-white/5 hover:text-neutral-200"
+      }`}
     >
       {copied ? (
         <>

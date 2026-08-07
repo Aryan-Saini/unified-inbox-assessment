@@ -96,16 +96,15 @@ function useActiveSection(ids: string[]): string | null {
 
 /* ---------------------------------------------------------------------- rows */
 
+/** The app's `StatusPill` shape and tints: emerald reads, indigo writes. */
 function MethodTag({ method }: { method: "GET" | "POST" }) {
   return (
     <span
-      className="shrink-0 rounded px-1 py-px font-mono text-[9.5px] leading-[1.5] font-semibold"
-      style={{
-        background:
-          method === "GET" ? "var(--d-method-get-bg)" : "var(--d-method-post-bg)",
-        color:
-          method === "GET" ? "var(--d-method-get-text)" : "var(--d-method-post-text)",
-      }}
+      className={`shrink-0 rounded-md border px-1 py-px font-mono text-[9.5px] leading-[1.5] font-medium ${
+        method === "GET"
+          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+          : "border-indigo-500/30 bg-indigo-500/10 text-indigo-300"
+      }`}
     >
       {method}
     </span>
@@ -126,24 +125,17 @@ function ItemRow({
       href={`#${item.id}`}
       onClick={onNavigate}
       aria-current={active ? "location" : undefined}
-      className="group relative flex items-center gap-2 rounded-md py-1.5 pr-2 pl-5 text-[13px] transition-colors"
-      style={{ color: active ? "var(--d-accent-text)" : "var(--d-text-2)" }}
+      // The app marks the thing you are reading with a filled row — the search
+      // history and the outbox rail both do it — so the docs do too rather than
+      // introducing a third idiom for "you are here".
+      className={`group flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors ${
+        active
+          ? "bg-white/[0.07] text-white"
+          : "text-neutral-400 hover:bg-white/5 hover:text-white"
+      }`}
     >
-      {/* The active marker is a dot in the gutter rather than a filled row: the
-          group headings above are already solid, and a second filled shape at
-          child level made the tree read as two competing selections. */}
-      <span
-        aria-hidden
-        className="absolute left-1 h-1.5 w-1.5 rounded-full transition-opacity"
-        style={{
-          background: "var(--d-accent-text)",
-          opacity: active ? 1 : 0,
-        }}
-      />
       {item.method === undefined ? null : <MethodTag method={item.method} />}
-      <span className="min-w-0 flex-1 truncate group-hover:[color:var(--d-text)]">
-        {item.label}
-      </span>
+      <span className="min-w-0 flex-1 truncate">{item.label}</span>
     </a>
   );
 }
@@ -205,10 +197,7 @@ function NavPanel({
     <div className="flex h-full flex-col">
       <div className="shrink-0 px-3 pt-4 pb-2">
         <label className="relative block">
-          <SearchGlyph
-            className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2"
-            // Placed against the input's own colour so it dims with it.
-          />
+          <SearchGlyph className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-neutral-600" />
           <input
             ref={input}
             value={filter}
@@ -216,7 +205,7 @@ function NavPanel({
             type="search"
             placeholder="Filter sections"
             aria-label="Filter sections"
-            className="d-border d-surface d-text h-9 w-full rounded-full border pr-14 pl-9 text-[13px] outline-none placeholder:[color:var(--d-text-3)] focus:[border-color:var(--d-accent-ring)]"
+            className="h-9 w-full rounded-lg border border-line-strong bg-white/[0.03] pr-14 pl-8.5 text-[13px] text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-neutral-600"
           />
           {/* Hidden once there is a value: the hint has done its job, and it
               would otherwise sit on top of what was typed. */}
@@ -225,7 +214,7 @@ function NavPanel({
               {["⌘", "K"].map((key) => (
                 <kbd
                   key={key}
-                  className="d-element d-text-3 rounded border-none px-1.5 py-0.5 font-sans text-[10px] leading-[1.4]"
+                  className="rounded border border-line-strong px-1.5 py-0.5 font-sans text-[10px] leading-[1.4] text-neutral-500"
                 >
                   {key}
                 </kbd>
@@ -237,10 +226,10 @@ function NavPanel({
 
       <nav
         aria-label="Documentation sections"
-        className="d-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-8"
+        className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-3 pb-8"
       >
         {shown.length === 0 ? (
-          <p className="d-text-3 px-2 py-6 text-center text-[12.5px]">
+          <p className="px-2 py-6 text-center text-[12px] text-neutral-600">
             Nothing matches “{filter}”.
           </p>
         ) : null}
@@ -249,8 +238,8 @@ function NavPanel({
           const Icon = GROUP_ICONS[group.icon];
           return (
             <div key={group.label} className="mt-4 first:mt-1">
-              <p className="d-text flex items-center gap-2 px-2 py-1.5 text-[13px] font-semibold">
-                <Icon className="h-4 w-4 shrink-0 opacity-70" />
+              <p className="flex items-center gap-2 px-2.5 py-1.5 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
+                <Icon className="h-3.5 w-3.5 shrink-0" />
                 {group.label}
               </p>
               <div className="mt-0.5 space-y-px">
@@ -275,7 +264,7 @@ function NavPanel({
 
 export function DocsSidebar({ groups }: { groups: NavGroup[] }) {
   return (
-    <aside className="d-border sticky top-[60px] hidden h-[calc(100dvh-60px)] w-[280px] shrink-0 border-r lg:block">
+    <aside className="sticky top-14 hidden h-[calc(100dvh-3.5rem)] w-[280px] shrink-0 border-r border-line bg-ink-900 lg:block">
       <NavPanel groups={groups} />
     </aside>
   );
@@ -312,7 +301,7 @@ export function MobileNav({ groups }: { groups: NavGroup[] }) {
         onClick={() => setOpen(true)}
         aria-label="Open documentation sections"
         aria-expanded={open}
-        className="d-border d-text-2 d-hover flex h-9 items-center gap-1.5 rounded-full border px-2.5 text-[13px] font-medium transition-colors lg:hidden"
+        className="flex h-9 items-center gap-1.5 rounded-lg border border-line-strong px-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-600 hover:text-white lg:hidden"
       >
         <MenuGlyph className="h-4 w-4" />
         <span className="hidden min-[420px]:inline">Sections</span>
@@ -323,15 +312,15 @@ export function MobileNav({ groups }: { groups: NavGroup[] }) {
           <button
             aria-label="Close"
             onClick={() => setOpen(false)}
-            className="absolute inset-0 cursor-default bg-black/50"
+            className="fade-in absolute inset-0 cursor-default bg-black/70 backdrop-blur-sm"
           />
-          <div className="d-surface d-border absolute inset-y-0 left-0 flex w-[86vw] max-w-[320px] flex-col border-r">
-            <div className="d-border flex h-[60px] shrink-0 items-center justify-between border-b px-4">
-              <span className="d-text text-[13px] font-semibold">Sections</span>
+          <div className="slide-in-left absolute inset-y-0 left-0 flex w-[86vw] max-w-[320px] flex-col border-r border-line bg-ink-900">
+            <div className="flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
+              <span className="text-[13px] font-semibold text-white">Sections</span>
               <button
                 onClick={() => setOpen(false)}
                 aria-label="Close"
-                className="d-text-2 d-hover rounded-lg p-1.5 transition-colors"
+                className="rounded-lg p-1.5 text-neutral-400 transition-colors hover:bg-white/5 hover:text-white"
               >
                 <XGlyph className="h-4.5 w-4.5" />
               </button>

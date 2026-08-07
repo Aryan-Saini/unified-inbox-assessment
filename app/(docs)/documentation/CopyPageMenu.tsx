@@ -72,16 +72,16 @@ export function CopyPageMenu({ origin }: { origin: string }) {
         ? "Copied"
         : state === "failed"
           ? "Copy failed"
-          : "Copy page";
+          : "Copy as Markdown";
 
   return (
     <div ref={root} className="relative">
-      <div className="d-border flex items-center overflow-hidden rounded-full border">
+      <div className="flex items-center overflow-hidden rounded-lg border border-line-strong">
         <button
           type="button"
           onClick={() => void copyMarkdown()}
           disabled={state === "copying"}
-          className="d-text-2 d-hover flex h-8 items-center gap-1.5 pr-2 pl-2.5 text-[12.5px] font-medium transition-colors disabled:opacity-60"
+          className="flex h-8 items-center gap-1.5 pr-2 pl-2.5 text-[12px] font-medium text-neutral-300 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-60"
         >
           {state === "copied" ? (
             <CheckGlyph className="h-3.5 w-3.5" />
@@ -95,8 +95,8 @@ export function CopyPageMenu({ origin }: { origin: string }) {
           onClick={() => setOpen((v) => !v)}
           aria-haspopup="menu"
           aria-expanded={open}
-          aria-label="More page formats"
-          className="d-text-2 d-hover d-border flex h-8 items-center border-l px-1.5 transition-colors"
+          aria-label="Other formats"
+          className="flex h-8 items-center border-l border-line-strong px-1.5 text-neutral-400 transition-colors hover:bg-white/5 hover:text-white"
         >
           <ChevronIcon className="h-3.5 w-3.5" />
         </button>
@@ -105,7 +105,7 @@ export function CopyPageMenu({ origin }: { origin: string }) {
       {open ? (
         <div
           role="menu"
-          className="d-surface d-border absolute right-0 z-50 mt-1.5 w-72 overflow-hidden rounded-xl border py-1 shadow-lg"
+          className="pop-in absolute right-0 z-50 mt-1.5 w-72 overflow-hidden rounded-xl border border-line bg-ink-900 py-1 shadow-[0_24px_80px_rgba(0,0,0,0.7)]"
         >
           <Entry
             href={`${origin}/documentation/llms-full.txt`}
@@ -154,12 +154,12 @@ function Entry({
       href={href}
       target="_blank"
       rel="noreferrer noopener"
-      className="d-hover flex items-start gap-2.5 px-3 py-2 transition-colors"
+      className="flex items-start gap-2.5 px-3 py-2 transition-colors hover:bg-white/5"
     >
-      <span className="d-text-3 mt-0.5 shrink-0">{icon}</span>
+      <span className="mt-0.5 shrink-0 text-neutral-500">{icon}</span>
       <span className="min-w-0">
-        <span className="d-text block text-[13px] font-medium">{title}</span>
-        <span className="d-text-3 block text-[11.5px]">{hint}</span>
+        <span className="block text-[13px] font-medium text-neutral-200">{title}</span>
+        <span className="block text-[11.5px] text-neutral-500">{hint}</span>
       </span>
     </a>
   );

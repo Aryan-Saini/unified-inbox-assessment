@@ -9,7 +9,6 @@ import { ArrowUpRightIcon, BookGlyph } from "./docs-icons";
 import { guide } from "./guide";
 import { Inline } from "./inline";
 import { docsOrigin } from "./origin";
-import { ThemeToggle } from "./ThemeToggle";
 import {
   API_BASE,
   API_PREFIX,
@@ -43,7 +42,7 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
   const origin = await docsOrigin();
   return {
-    title: "API documentation — Unified Inbox",
+    title: "API documentation | Unified Inbox",
     description:
       "REST reference for the Unified Inbox API: search Gmail, Slack and the web, and send replies only after an explicit confirmation step.",
     alternates: {
@@ -72,13 +71,11 @@ const REFERENCE_ICONS: Record<string, NavGroup["icon"]> = {
 function MethodPill({ method }: { method: "GET" | "POST" }) {
   return (
     <span
-      className="shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[11px] font-semibold"
-      style={{
-        background:
-          method === "GET" ? "var(--d-method-get-bg)" : "var(--d-method-post-bg)",
-        color:
-          method === "GET" ? "var(--d-method-get-text)" : "var(--d-method-post-text)",
-      }}
+      className={`shrink-0 rounded-md border px-2 py-0.5 font-mono text-[11px] font-medium ${
+        method === "GET"
+          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+          : "border-indigo-500/30 bg-indigo-500/10 text-indigo-300"
+      }`}
     >
       {method}
     </span>
@@ -89,12 +86,12 @@ function SectionHeading({ id, children }: { id: string; children: React.ReactNod
   return (
     // `scroll-mt` clears the sticky header: without it every in-page link lands
     // with its own heading hidden behind the bar it was clicked from.
-    <h2 id={id} className="d-text scroll-mt-[76px] pt-11 text-[22px] font-bold tracking-tight">
+    <h2 id={id} className="scroll-mt-20 pt-11 text-[19px] font-semibold tracking-tight text-white">
       <a href={`#${id}`} className="group inline-flex items-baseline gap-2">
         {children}
         <span
           aria-hidden
-          className="d-text-3 text-[16px] opacity-0 transition-opacity group-hover:opacity-100"
+          className="text-[15px] text-neutral-700 opacity-0 transition-opacity group-hover:opacity-100"
         >
           #
         </span>
@@ -105,7 +102,7 @@ function SectionHeading({ id, children }: { id: string; children: React.ReactNod
 
 function SubHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h4 className="d-text-2 mt-5 mb-1 text-[11.5px] font-semibold tracking-wide uppercase">
+    <h4 className="mt-5 mb-1 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
       {children}
     </h4>
   );
@@ -117,22 +114,22 @@ function EndpointCard({ endpoint }: { endpoint: Endpoint }) {
   return (
     <article
       id={endpoint.id}
-      className="d-border d-surface mt-6 scroll-mt-[76px] overflow-hidden rounded-2xl border"
+      className="mt-6 scroll-mt-20 overflow-hidden rounded-xl border border-line bg-ink-900/50"
     >
-      <header className="d-subtle d-border flex flex-wrap items-center gap-2.5 border-b px-4 py-3">
+      <header className="flex flex-wrap items-center gap-2.5 border-b border-line bg-ink-850/60 px-4 py-3">
         <MethodPill method={endpoint.method} />
-        <code className="d-text min-w-0 flex-1 font-mono text-[13px] wrap-anywhere">
+        <code className="min-w-0 flex-1 font-mono text-[13px] wrap-anywhere text-neutral-100">
           {fullPath}
         </code>
       </header>
 
       <div className="min-w-0 px-4 py-3">
-        <p className="d-text text-[14px] font-medium">{endpoint.summary}</p>
+        <p className="text-[13.5px] font-medium text-neutral-200">{endpoint.summary}</p>
 
         {endpoint.alias === undefined ? null : (
-          <p className="d-prose d-text-3 mt-1.5 text-[12.5px]">
+          <p className="mt-1.5 text-[12px] leading-relaxed text-neutral-500">
             <Inline
-              text={`Also mounted at the bare path \`${endpoint.method} ${endpoint.alias}\`, which reaches the same handler — the alias cannot drift from the versioned route because there is only one of it.`}
+              text={`Also mounted at the bare path \`${endpoint.method} ${endpoint.alias}\`, which hits the same handler. The alias cannot drift from the versioned route because there is only one of it.`}
             />
           </p>
         )}
@@ -250,17 +247,16 @@ export default async function DocumentationPage() {
   return (
     <div className="min-h-dvh">
       {/* Header — 60px, sticky, the full width of the window. */}
-      <header className="d-surface d-border sticky top-0 z-40 h-[60px] border-b">
+      <header className="sticky top-0 z-40 h-14 border-b border-line bg-ink-950/85 backdrop-blur">
         <div className="mx-auto flex h-full items-center gap-3 px-4 sm:px-5">
           <Link href="/dashboard" className="flex min-w-0 items-center gap-2">
-            <Logo className="d-text h-6 w-6 shrink-0" />
-            <span className="d-text truncate text-[15px] font-semibold tracking-tight">
+            <Logo className="h-6 w-6 shrink-0 text-white" />
+            <span className="truncate text-[13px] font-semibold tracking-tight text-white">
               Unified Inbox
             </span>
           </Link>
           <span
-            className="hidden items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[13px] font-medium sm:flex"
-            style={{ background: "var(--d-accent-bg)", color: "var(--d-accent-text)" }}
+            className="hidden items-center gap-1.5 rounded-md border border-indigo-500/30 bg-indigo-500/10 px-1.5 py-0.5 text-[11px] font-medium text-indigo-300 sm:flex"
           >
             <BookGlyph className="h-3.5 w-3.5" />
             Docs
@@ -270,12 +266,11 @@ export default async function DocumentationPage() {
             <MobileNav groups={navGroups} />
             <Link
               href="/dashboard"
-              className="d-border d-text-2 d-hover flex h-9 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium transition-colors"
+              className="flex h-9 items-center gap-1.5 rounded-lg border border-line-strong px-3 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-600 hover:text-white"
             >
               <KeyIcon className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Get a key</span>
             </Link>
-            <ThemeToggle />
           </div>
         </div>
       </header>
@@ -292,37 +287,37 @@ export default async function DocumentationPage() {
                 markdown instead" within reach before any prose is read. */}
             <div className="pt-9">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <h1 className="d-text min-w-0 text-[31px] leading-tight font-bold tracking-[-0.352px]">
+                <h1 className="min-w-0 text-[26px] leading-tight font-semibold tracking-tight text-white">
                   Unified Inbox API
                 </h1>
                 <div className="shrink-0 pt-1.5">
                   <CopyPageMenu origin={origin} />
                 </div>
               </div>
-              <p className="d-text-2 mt-1.5 text-[15px] leading-relaxed">
-                Search Gmail, Slack and the web from one place, and send replies only
-                after an explicit confirmation step.
+              <p className="mt-2 text-[14px] leading-relaxed text-neutral-400">
+                Search Gmail, Slack and the web from one place, and only send a reply
+                after you have explicitly confirmed it.
               </p>
             </div>
 
-            <hr className="d-border my-6 border-t" />
+            <hr className="my-6 border-t border-line" />
 
-            <NoteBox tone="info" title="This documentation is available as Markdown for AI">
+            <NoteBox tone="info" title="These docs are also plain Markdown, for agents">
               <Inline
-                text={`Everything below is served as plain text at a stable URL — same source, no HTML to parse. One fetch gets the entire reference: \`curl -sS ${origin}/documentation/llms-full.txt\`. Or use **Copy page** above.`}
+                text={`Everything below is also plain text at a stable URL. Same source, no HTML to parse, and one fetch gets you the entire reference: \`curl -sS ${origin}/documentation/llms-full.txt\`. Or hit **Copy as Markdown** above.`}
               />
             </NoteBox>
 
-            <div className="d-prose d-text-2 my-4 text-[14px] leading-[1.75]">
+            <div className="my-4 text-[13px] leading-relaxed text-neutral-400">
               <p>
                 One bearer token, JSON in and out, and no endpoint anywhere that takes a
-                recipient and a body and delivers them.
+                recipient and a body and just sends it.
               </p>
             </div>
 
             <div className="mt-5 flex flex-wrap items-center gap-2">
-              <span className="d-text-3 text-[12.5px]">Base URL</span>
-              <code className="d-element d-border d-text min-w-0 rounded-lg border px-2.5 py-1.5 font-mono text-[12.5px] wrap-anywhere">
+              <span className="text-[12px] text-neutral-500">Base URL</span>
+              <code className="min-w-0 rounded-lg border border-line bg-ink-850 px-2.5 py-1.5 font-mono text-[12.5px] wrap-anywhere text-neutral-200">
                 {API_BASE}
               </code>
             </div>
@@ -339,13 +334,13 @@ export default async function DocumentationPage() {
 
             {/* The endpoint reference. */}
             <SectionHeading id="reference">Endpoint reference</SectionHeading>
-            <Prose text="Every route lives under `/api/v1` on the Convex deployment. Ids are opaque strings — do not parse them." />
+            <Prose text="Every route lives under `/api/v1` on the Convex deployment. Ids are opaque strings, so do not parse them." />
 
             {SECTIONS.map((section) => (
               <section key={section.id}>
                 <h3
                   id={`ref-${section.id}`}
-                  className="d-text mt-10 scroll-mt-[76px] text-[16px] font-semibold tracking-tight"
+                  className="mt-10 scroll-mt-20 text-[15px] font-semibold tracking-tight text-neutral-200"
                 >
                   {section.title}
                 </h3>
@@ -359,8 +354,8 @@ export default async function DocumentationPage() {
             <SectionHeading id="shapes">Object shapes</SectionHeading>
             <Prose text="These mirror the response validators the backend enforces at runtime, so a field that is not listed here is a field the API cannot return." />
             {Object.entries(SCHEMAS).map(([name, schema]) => (
-              <section key={name} id={`shape-${name}`} className="scroll-mt-[76px]">
-                <h3 className="d-text mt-8 font-mono text-[14px] font-semibold">
+              <section key={name} id={`shape-${name}`} className="scroll-mt-20">
+                <h3 className="mt-8 font-mono text-[13.5px] font-semibold text-neutral-200">
                   {schema.title}
                 </h3>
                 {schema.note === undefined ? null : <Prose text={schema.note} />}
@@ -370,13 +365,13 @@ export default async function DocumentationPage() {
 
             {/* Send statuses. */}
             <SectionHeading id="send-statuses">Send statuses</SectionHeading>
-            <Prose text="A send is not done until it stops moving on its own. A `failed_transient` with `next_retry_at` set is still in progress, and a manual retry on top of a scheduled one is wasted work." />
+            <Prose text="A send is not done until it stops moving on its own. A `failed_transient` with `next_retry_at` set is still going, and a manual retry on top of a scheduled one is wasted work." />
             <DocTable
               head={["Status", "Means", "What to do"]}
               rows={SEND_STATUSES.map((s) => [`\`${s.status}\``, s.meaning, s.retryable])}
             />
             <NoteBox tone="warn" title="`unknown` is the one to handle deliberately">
-              <Inline text="It means the attempt returned no verdict — the message may or may not have gone out. `POST /sends/{id}/retry` refuses it with **409 `INDETERMINATE`** rather than guessing, because a retry under the same key could double-send. Reconcile at the provider, or clone the draft under a new idempotency key. An autonomous client should escalate rather than loop." />
+              <Inline text="It means the attempt came back with no verdict, so the message may or may not have gone out. `POST /sends/{id}/retry` refuses it with **409 `INDETERMINATE`** instead of guessing, because a retry under the same key could double-send. Reconcile at the provider, or clone the draft under a new idempotency key. An autonomous client should escalate here, not loop." />
             </NoteBox>
 
             {/* Errors. */}
@@ -386,7 +381,7 @@ export default async function DocumentationPage() {
                 render as backslashes. */}
             <Prose
               text={
-                'Every failure has one shape — `{"error": {"code", "message"}}` — because a client that has to guess whether today\'s 409 is `{error: "…"}` or `{message: "…"}` ends up string-matching, and then our error text becomes their API contract. Switch on `code`; show `message`.'
+                'Every failure has one shape, `{"error": {"code", "message"}}`, because a client that has to guess whether today\'s 409 is `{error: "…"}` or `{message: "…"}` ends up string-matching, and then our error text becomes their API contract. So switch on `code` and show `message`.'
               }
             />
             <DocTable
@@ -396,15 +391,15 @@ export default async function DocumentationPage() {
 
             {/* Rate limits. */}
             <SectionHeading id="rate-limits">Rate limits</SectionHeading>
-            <Prose text="Token buckets, per user, so a burst is allowed while the sustained rate is capped. The threat is specific: a key that leaks, or a client stuck in a retry loop, spending somebody's Gmail quota — which is a hard daily ceiling that no amount of backoff gets back." />
+            <Prose text="Token buckets, per user, so a burst is fine while the sustained rate stays capped. The threat is specific. A key that leaks, or a client stuck in a retry loop, spending somebody's Gmail quota, and that is a hard daily ceiling no amount of backoff gets back." />
             <DocTable
               head={["Bucket", "Limit", "Covers"]}
               rows={RATE_LIMITS.map((r) => [r.name, r.limit, r.covers])}
             />
-            <Prose text="A 429 carries `Retry-After`, and the value comes from the bucket's own arithmetic rather than a guessed constant — so a client that obeys it succeeds on its next try." />
+            <Prose text="A 429 carries `Retry-After`, and that value comes out of the bucket's own arithmetic instead of some guessed constant, so a client that obeys it succeeds on the next try." />
 
-            <footer className="d-border mt-16 border-t pt-6">
-              <p className="d-text-2 mb-3 text-[12.5px] font-semibold tracking-wide uppercase">
+            <footer className="mt-16 border-t border-line pt-6">
+              <p className="mb-3 text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
                 For agents
               </p>
               <ul className="space-y-1.5">
@@ -412,21 +407,22 @@ export default async function DocumentationPage() {
                   <li key={file.name} className="flex flex-wrap items-baseline gap-x-2">
                     <a
                       href={file.href}
-                      className="d-link inline-flex items-center gap-1 font-mono text-[12.5px] hover:underline hover:underline-offset-2"
+                      className="inline-flex items-center gap-1 font-mono text-[12px] text-indigo-300 transition-colors hover:text-indigo-200"
                     >
                       {file.name}
                       <ArrowUpRightIcon className="h-3 w-3" />
                     </a>
-                    <span className="d-text-3 text-[12.5px]">{file.what}</span>
+                    <span className="text-[12px] text-neutral-500">{file.what}</span>
                   </li>
                 ))}
               </ul>
-              <p className="d-text-3 mt-6 text-[12.5px]">
-                The API is served by the Convex deployment at{" "}
-                <code className="d-inline-code font-mono">{BASE_URL}</code>; these files
-                are served by this app. Both are public.
+              <p className="mt-6 text-[12px] text-neutral-600">
+                The API itself runs on the Convex deployment at{" "}
+                <code className="rounded border border-line bg-ink-850 px-1 py-0.5 font-mono text-[0.9em] text-indigo-200">
+                  {BASE_URL}
+                </code>. These files come from this app. Both are public.
                 <span className="mx-2">·</span>
-                <Link href="/dashboard" className="d-link hover:underline">
+                <Link href="/dashboard" className="text-indigo-300 transition-colors hover:text-indigo-200">
                   Back to the app
                 </Link>
               </p>
