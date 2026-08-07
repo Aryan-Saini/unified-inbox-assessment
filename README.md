@@ -23,11 +23,10 @@ Search Gmail, Slack and the web from one place.
 - [GitHub Codespaces](#github-codespaces)
 - [OAuth setup](#oauth-setup)
 - [Web search](#web-search)
-- [Seeding and fault injection](#seeding-and-fault-injection)
+- [Demo data and fault injection](#demo-data-and-fault-injection)
 - [REST API](#rest-api)
 - [Tests](#tests)
 - [Deployments](#deployments)
-- [Screenshots](#screenshots)
 - [Known limits](#known-limits)
 
 ---
@@ -567,16 +566,6 @@ SMOKE_APP_URL=https://unified-inbox-assessment.vercel.app
 ```
 
 The frontend deploy is manual. Pushing to GitHub does not deploy it.
-
-## Screenshots
-
-Screenshots are in [`docs/screenshots/`](docs/screenshots/).
-
-Keyboard shortcuts:
-
-- `⌘K`: Focus search.
-- `⌘\`: Collapse the sidebar.
-- `Esc`: Close a dialog or mobile navigation.
 
 ## Known limits
 
