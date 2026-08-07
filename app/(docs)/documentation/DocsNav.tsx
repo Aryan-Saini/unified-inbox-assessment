@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   BracesIcon,
   ChevronIcon,
@@ -307,30 +308,53 @@ export function MobileNav({ groups }: { groups: NavGroup[] }) {
         <span className="hidden min-[420px]:inline">Sections</span>
       </button>
 
-      {open ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <button
-            aria-label="Close"
-            onClick={() => setOpen(false)}
-            className="fade-in absolute inset-0 cursor-default bg-black/70 backdrop-blur-sm"
-          />
-          <div className="slide-in-left absolute inset-y-0 left-0 flex w-[86vw] max-w-[320px] flex-col border-r border-line bg-ink-900">
-            <div className="flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
-              <span className="text-[13px] font-semibold text-white">Sections</span>
-              <button
-                onClick={() => setOpen(false)}
-                aria-label="Close"
-                className="rounded-lg p-1.5 text-neutral-400 transition-colors hover:bg-white/5 hover:text-white"
-              >
-                <XGlyph className="h-4.5 w-4.5" />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1">
-              <NavPanel groups={groups} onNavigate={() => setOpen(false)} />
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {/*
+       * Through a portal, for the reason `Modal` in `app/(inbox)/ui.tsx` is:
+       * `fixed` is only the viewport when no ancestor establishes a containing
+       * block, and the trigger lives inside a `backdrop-blur` header — which
+       * does. Laid out in place, `inset-0` resolved against the 390x56 header,
+       * so the backdrop covered a strip, the panel did not cover the page, and
+       * the header's own buttons sat above it. Guarded for SSR: the first
+       * server pass is closed, so only the trigger renders there anyway.
+       */}
+      {open && typeof document !== "undefined"
+        ? createPortal(
+            /**
+             * A full-screen sheet, not a drawer with the page peeking behind it.
+             *
+             * Two reasons. The app already answers this question the same way —
+             * `InboxApp` renders its mobile nav as `fixed inset-0 bg-ink-900`,
+             * because a phone has no room for a useful peek of the content
+             * behind — so a second, different mobile-nav idiom in the same
+             * product would be a seam. And it removes the backdrop entirely:
+             * there is nothing left showing through to dim.
+             *
+             * Through a portal for the reason `Modal` in `app/(inbox)/ui.tsx`
+             * is: this is rendered inside the page header, which carries
+             * `backdrop-blur`, and `backdrop-filter` makes an element a
+             * containing block for `fixed` descendants. Left in place, `inset-0`
+             * resolved against the header's 56px box instead of the viewport,
+             * so the sheet covered a strip at the top and the page showed
+             * through everything below it.
+             */
+            <div className="slide-in-left fixed inset-0 z-50 flex flex-col bg-ink-900 lg:hidden">
+              <div className="flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
+                <span className="text-[13px] font-semibold text-white">Sections</span>
+                <button
+                  onClick={() => setOpen(false)}
+                  aria-label="Close navigation"
+                  className="rounded-lg p-2 text-neutral-400 transition-colors hover:bg-white/5 hover:text-white"
+                >
+                  <XGlyph className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1">
+                <NavPanel groups={groups} onNavigate={() => setOpen(false)} />
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }
