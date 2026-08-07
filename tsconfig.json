@@ -10,6 +10,10 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
+    // `scripts/verify-deploy.ts` imports `./double-tap.ts` by its real filename,
+    // which is what Node's type stripping resolves. Safe with `noEmit`: nothing
+    // here is compiled to a file whose extension would then be wrong.
+    "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
