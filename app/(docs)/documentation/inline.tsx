@@ -32,22 +32,19 @@ export function Inline({ text }: { text: string }): ReactNode {
 
     if (code !== undefined) {
       nodes.push(
-        <code
-          key={key}
-          className="rounded border border-line bg-ink-850 px-1 py-0.5 font-mono text-[0.9em] wrap-anywhere text-indigo-200"
-        >
+        <code key={key} className="d-inline-code font-mono">
           {code}
         </code>,
       );
     } else if (bold !== undefined) {
       nodes.push(
-        <strong key={key} className="font-semibold text-neutral-100">
+        <strong key={key} className="d-text font-semibold">
           {bold}
         </strong>,
       );
     } else if (italic !== undefined) {
       nodes.push(
-        <em key={key} className="text-neutral-300 italic">
+        <em key={key} className="italic">
           {italic}
         </em>,
       );
@@ -58,7 +55,7 @@ export function Inline({ text }: { text: string }): ReactNode {
           key={key}
           href={href}
           {...(external ? { target: "_blank", rel: "noreferrer noopener" } : {})}
-          className="text-indigo-300 underline decoration-indigo-400/40 underline-offset-2 transition-colors hover:text-indigo-200 hover:decoration-indigo-300"
+          className="d-link no-underline hover:underline hover:underline-offset-2"
         >
           {linkText}
         </a>,

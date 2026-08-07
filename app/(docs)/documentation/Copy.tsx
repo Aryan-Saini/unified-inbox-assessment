@@ -2,14 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CheckIcon } from "../../(inbox)/icons";
+import { CopyIcon } from "./docs-icons";
 
 /**
  * Copy-to-clipboard for a code block.
  *
- * The only interactive thing on this page, which is the point: everything a
- * reader — or a crawler, or an agent fetching the HTML — needs is in the
- * server-rendered markup, and this adds a convenience on top rather than being
- * the thing that makes the content appear.
+ * Lives permanently on the block's header bar rather than appearing on hover.
+ * It used to fade in, which meant that on a phone — where the block scrolls
+ * sideways and selecting a long `curl` by hand is the worst possible route —
+ * the one affordance that replaces that was behind a gesture the device cannot
+ * make.
  *
  * The confirmation is a state change on the button itself rather than a toast:
  * the feedback belongs next to the thing that was copied, and a page with
@@ -36,11 +38,13 @@ export function CopyButton({ value, label = "Copy" }: { value: string; label?: s
         });
       }}
       aria-label={copied ? "Copied" : label}
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
-        copied
-          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
-          : "border-line-strong bg-ink-900/80 text-neutral-400 hover:border-neutral-600 hover:text-neutral-100"
-      }`}
+      // Painted against the code palette rather than the page's: this sits on
+      // the block's header bar, which stays dark in both themes.
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-[11px] font-medium transition-colors"
+      style={{
+        color: copied ? "#3dd68c" : "var(--d-code-muted)",
+        background: copied ? "rgba(61, 214, 140, 0.12)" : "transparent",
+      }}
     >
       {copied ? (
         <>
@@ -48,7 +52,10 @@ export function CopyButton({ value, label = "Copy" }: { value: string; label?: s
           Copied
         </>
       ) : (
-        label
+        <>
+          <CopyIcon className="h-3 w-3" />
+          {label}
+        </>
       )}
     </button>
   );
