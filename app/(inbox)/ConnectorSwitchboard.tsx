@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { BRAND_LOGO } from "./brand-icons";
 import { SOURCE_META } from "./mock-data";
 import type { Connection, ConnectionStatus, Source } from "./types";
@@ -43,6 +44,35 @@ const STATUS: Record<
  * it is the same on every Gmail scope, so it is noise in a vertical list.
  */
 export function ScopeSummary({ scopes }: { scopes: string[] }) {
+  const anchor = useRef<HTMLSpanElement | null>(null);
+  const bubble = useRef<HTMLSpanElement | null>(null);
+  const tooltipId = useId();
+  const [open, setOpen] = useState(false);
+  const [at, setAt] = useState<{ left: number; top: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const anchorEl = anchor.current;
+    const bubbleEl = bubble.current;
+    if (!open || anchorEl === null || bubbleEl === null) return;
+
+    const gap = 8;
+    const edge = 8;
+    const anchorRect = anchorEl.getBoundingClientRect();
+    const { offsetWidth: width, offsetHeight: height } = bubbleEl;
+    const above = anchorRect.top - gap - height;
+
+    setAt({
+      left: Math.max(
+        edge,
+        Math.min(anchorRect.left, window.innerWidth - width - edge),
+      ),
+      top:
+        above >= edge
+          ? above
+          : Math.min(anchorRect.bottom + gap, window.innerHeight - height - edge),
+    });
+  }, [open]);
+
   if (scopes.length === 0) return null;
 
   const names = scopes.map((scope) =>
@@ -50,12 +80,39 @@ export function ScopeSummary({ scopes }: { scopes: string[] }) {
   );
 
   return (
-    <span
-      title={names.join("\n")}
-      className="mt-0.5 inline-block cursor-help text-[12.5px] text-neutral-500 underline decoration-dotted decoration-neutral-700 underline-offset-2"
-    >
-      {scopes.length} {scopes.length === 1 ? "scope" : "scopes"}
-    </span>
+    <>
+      <span
+        ref={anchor}
+        tabIndex={0}
+        aria-describedby={open ? tooltipId : undefined}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        className="mt-0.5 inline-block text-[12.5px] text-neutral-500 underline decoration-dotted decoration-neutral-700 underline-offset-2 outline-none focus-visible:ring-1 focus-visible:ring-neutral-500"
+      >
+        {scopes.length} {scopes.length === 1 ? "scope" : "scopes"}
+      </span>
+
+      {!open || typeof document === "undefined"
+        ? null
+        : createPortal(
+            <span
+              ref={bubble}
+              id={tooltipId}
+              role="tooltip"
+              style={
+                at === null
+                  ? { left: -9999, top: 0, visibility: "hidden" }
+                  : { left: at.left, top: at.top }
+              }
+              className="pointer-events-none fixed z-[80] max-w-[27rem] whitespace-pre-line rounded-lg border border-line-strong bg-ink-900 px-2.5 py-1.5 text-[12px] leading-relaxed text-neutral-100 shadow-[0_12px_40px_rgba(0,0,0,0.7)]"
+            >
+              {names.join("\n")}
+            </span>,
+            document.body,
+          )}
+    </>
   );
 }
 
