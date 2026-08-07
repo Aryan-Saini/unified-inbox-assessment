@@ -1022,6 +1022,9 @@ exactly one provider message id. Then it checks the recipient's actual inbox or
 channel for exactly one copy, which is the only assertion here that is not
 ultimately trusting our own bookkeeping.
 
+The same function is the last check in [`pnpm deploy`](#the-pipeline), so every
+deploy ends by sending one real message and proving it was sent once.
+
 ---
 
 ## Deployments
@@ -1062,8 +1065,74 @@ server. The script refuses to build if any of the three pulls empty.
 
 A push should be free — `staging` gets pushed often and mid-change, and none of
 those pushes are a deliverable. This also means the build a reviewer opens is one
-somebody watched succeed. The two halves are independent, so a change touching
-both `convex/` and the app needs `pnpm deploy:handin` as well.
+somebody watched succeed.
+
+### The pipeline
+
+Both halves plus a check that the result works, in one command:
+
+```bash
+pnpm deploy                # preflight → convex → frontend → verify
+pnpm deploy -- --dry-run   # print the plan, touch nothing (`--` or pnpm eats the flag)
+```
+
+[`scripts/deploy-all.mjs`](scripts/deploy-all.mjs) runs four stages and stops at
+the first failure, naming it:
+
+| Stage | What runs |
+| --- | --- |
+| 0. preflight | the smoke credentials exist — checked *before* anything ships |
+| 1. convex | `pnpm deploy:handin`, unless stage 2 is doing it (below) |
+| 2. frontend | `pnpm deploy:vercel` |
+| 3. verify | [`scripts/verify-deploy.ts`](scripts/verify-deploy.ts) against what was just deployed |
+
+Stage 0 is there because the alternative is finding out the verification cannot
+run once a deployment is already live and unchecked.
+
+Stage 3 uses the deployed system rather than inspecting it: an authenticated
+`GET /connections` answers 200, the same call with no key and with an unissued
+`uik_` key answers 401, `/documentation/llms.txt` on the app origin comes back
+non-empty, and then the double-tap fires N parallel sends at one idempotency key
+and asserts one delivery. It can be run on its own against any deployment:
+
+```bash
+BASE_URL=… API_KEY=uik_… RECIPIENT=… [APP_URL=… N=10] pnpm verify:deploy
+```
+
+### `CONVEX_DEPLOY_KEY`, and where it lives
+
+Given a Convex production deploy key, stage 2 becomes Convex's documented Vercel
+integration — `convex deploy --cmd '<build>'` — which pushes `convex/` and then
+runs the build with that deployment's URL in the environment. The backend and the
+frontend that calls it go out together, so stage 1 folds into stage 2 and is
+skipped. Without a key nothing changes: the script says so in one line and both
+stages run as before.
+
+One-time setup: Convex dashboard → the hand-in deployment → Settings → Deploy
+Keys → **Generate Production Deploy Key**, then put it in `.env.deploy` at the
+repo root, which is git-ignored.
+
+```bash
+# .env.deploy
+CONVEX_DEPLOY_KEY=prod:scintillating-moose-307|…
+SMOKE_API_KEY=uik_…          # Settings → API keys in the deployed app, shown once
+SMOKE_RECIPIENT=you@example.com
+SMOKE_APP_URL=https://unified-inbox-assessment.vercel.app   # optional
+```
+
+Not on Vercel, and not because it is awkward there. The build runs on this
+machine, and a *sensitive* Vercel variable is never handed back by `vercel pull`
+— it arrives as an empty string, which is the same trap the three public
+variables document. Storing it `plain` instead would put a credential that can
+deploy code in a dashboard, to serve a remote builder this project does not use.
+Vercel needs no deploy key at runtime.
+
+The build step under `convex deploy --cmd` is
+[`scripts/vercel-build.mjs`](scripts/vercel-build.mjs) rather than `pnpm build`,
+because the upload is `--prebuilt` and needs Vercel's output directory. It also
+refuses to build when the URL Convex just deployed to and the one pulled from the
+Vercel project disagree — that means the deploy key and the project point at
+different Convex deployments, and Vercel's value is the one that gets inlined.
 
 `dev:handin` sets the Convex URLs inline rather than through a `.env.handin` file
 on purpose. Next.js only auto-loads `.env.$(NODE_ENV)`, and `NODE_ENV` accepts

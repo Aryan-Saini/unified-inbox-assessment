@@ -10,6 +10,11 @@
  *   build   `next build`, which *inlines* every `NEXT_PUBLIC_*` value into the bundle
  *   deploy  upload the finished output, no remote build
  *
+ * With a `CONVEX_DEPLOY_KEY` available the middle step grows a first half —
+ * `convex deploy --cmd`, Convex's documented Vercel integration — so `convex/`
+ * ships immediately before the build that talks to it. See the bottom of the
+ * file. Everything below about the pull is true either way.
+ *
  * The pull is not a formality. `NEXT_PUBLIC_*` values are baked into the
  * JavaScript at build time — by the time a browser has the file they are already
  * literals in it — so whichever machine builds has to hold them. That used to be
@@ -31,6 +36,8 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+
+import { deployEnv } from "./env-deploy.mjs";
 
 /** Pinned: this project belongs to the personal account and nothing else. */
 const GLOBAL_CONFIG = ["--global-config", join(homedir(), ".vercel-accounts", "personal")];
@@ -60,5 +67,44 @@ if (empty.length > 0) {
   process.exit(1);
 }
 
-vercel("build", "--prod");
+/**
+ * With a Convex production deploy key, the build is Convex's documented Vercel
+ * integration: `convex deploy --cmd '<build>'` pushes `convex/` first, then runs
+ * the build with the deployment's URL in the environment. Backend and frontend
+ * go out together, in that order, and a backend that fails to deploy never
+ * produces a build to upload — which is the whole point, because the two halves
+ * shipping separately is how a frontend ends up calling a function that is not
+ * there yet.
+ *
+ * The key comes from the shell or `.env.deploy`, never from Vercel: the build
+ * runs here, and a sensitive Vercel variable pulls back empty (see
+ * `scripts/env-deploy.mjs`). Without one this is exactly the script it was
+ * before, and `convex/` has to be pushed separately.
+ */
+const deployKey = deployEnv().CONVEX_DEPLOY_KEY;
+
+if (deployKey === undefined || deployKey === "") {
+  console.log(
+    "\nNote: no CONVEX_DEPLOY_KEY in the shell or .env.deploy, so this builds " +
+      "the frontend only — run `pnpm deploy:handin` to push convex/ as well.\n",
+  );
+  vercel("build", "--prod");
+} else {
+  execFileSync(
+    "pnpm",
+    [
+      "exec",
+      "convex",
+      "deploy",
+      "--cmd-url-env-var-name",
+      "NEXT_PUBLIC_CONVEX_URL",
+      "--cmd",
+      "node scripts/vercel-build.mjs",
+    ],
+    // Spread rather than mutate, and never print it: the key is a credential
+    // that can deploy code to the hand-in deployment.
+    { stdio: "inherit", env: { ...process.env, CONVEX_DEPLOY_KEY: deployKey } },
+  );
+}
+
 vercel("deploy", "--prebuilt", "--prod");
