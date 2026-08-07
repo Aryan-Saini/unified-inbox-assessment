@@ -125,6 +125,12 @@ export function SourceBar({
   // it is reconnected, and hiding that until someone switches it on is how you
   // discover a revoked grant in the middle of a search instead of before one.
   const needsAttention = connections.filter((c) => c.status !== "active").length;
+  // Accounts a search would actually hit: switched on, and under a connector
+  // that is itself switched on. Status is deliberately not a filter here — a
+  // broken account still gets queried, and the hazard mark speaks for that.
+  const liveAccounts = connections.filter(
+    (c) => c.enabled && enabled.includes(c.provider),
+  ).length;
 
   // Name the connector when there is only one; count them otherwise. "All
   // connectors" is worth saying explicitly — it is the default state.
@@ -178,6 +184,20 @@ export function SourceBar({
         </span>
 
         <span>{label}</span>
+
+        {/* How many accounts a search will actually reach. The label names
+            connectors, which says nothing about how many accounts sit behind
+            them — two Gmail accounts and one both read "Gmail". Shown even at
+            zero while a connector is on: a connector switched on with every
+            account switched off is precisely the state worth flagging. */}
+        {on.length > 0 ? (
+          <span
+            aria-label={`${liveAccounts} ${liveAccounts === 1 ? "account" : "accounts"} included`}
+            className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-white/[0.08] px-1 text-[10.5px] font-semibold tabular-nums text-neutral-300"
+          >
+            {liveAccounts}
+          </span>
+        ) : null}
 
         {/* A hazard mark and nothing else. What is wrong, with which account,
             and the button that fixes it are all one click away inside — a count
