@@ -49,6 +49,12 @@ and keep working real OAuth credentials, because a reviewer exercises it directl
 Nothing else depends on it, so it is not "protected" — just don't leave it stale
 or half-migrated.
 
+## Branches
+
+Work on `staging` and reach `main` through a **pull request** — no direct pushes
+to `main`. `main` is what gets built and deployed, so it is the one branch where
+a change should have been looked at once before it lands.
+
 ## The frontend deploy is manual
 
 `vercel.json` sets `git.deploymentEnabled: false`, so **pushing to GitHub deploys

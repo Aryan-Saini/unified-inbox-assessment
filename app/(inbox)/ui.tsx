@@ -179,7 +179,7 @@ export function Truncated({
         title={label}
         width="max-w-md"
       >
-        <p className="px-5 py-4 text-[13px] leading-relaxed wrap-anywhere text-neutral-200 select-all">
+        <p className="px-5 py-4 text-[14.5px] leading-relaxed wrap-anywhere text-neutral-200 select-all">
           {text}
         </p>
       </Modal>
@@ -197,7 +197,7 @@ export function Truncated({
                     { left: -9999, top: 0, visibility: "hidden" }
                   : { left: at.left, top: at.top }
               }
-              className="pointer-events-none fixed z-[80] max-w-[27rem] rounded-lg border border-line-strong bg-ink-900 px-2.5 py-1.5 text-[12px] leading-relaxed wrap-anywhere text-neutral-100 shadow-[0_12px_40px_rgba(0,0,0,0.7)]"
+              className="pointer-events-none fixed z-[80] max-w-[27rem] rounded-lg border border-line-strong bg-ink-900 px-2.5 py-1.5 text-[13px] leading-relaxed wrap-anywhere text-neutral-100 shadow-[0_12px_40px_rgba(0,0,0,0.7)]"
             >
               {text}
             </span>,
@@ -333,13 +333,13 @@ export function Modal({
                   {/* `wrap-anywhere`, not `break-words`: only the former also
                       shrinks the element's *min-content* width, which is what
                       the flex column above measures itself against. */}
-                  <h2 className="min-w-0 text-[15px] font-semibold wrap-anywhere text-white">
+                  <h2 className="min-w-0 text-[16px] font-semibold wrap-anywhere text-white">
                     {title}
                   </h2>
                   {badge}
                 </div>
                 {subtitle ? (
-                  <p className="mt-1 text-[13px] leading-relaxed text-neutral-400">
+                  <p className="mt-1 text-[14.5px] leading-relaxed text-neutral-400">
                     {subtitle}
                   </p>
                 ) : null}
@@ -398,7 +398,7 @@ export function ConfirmDialog({
     <Modal open={open} onClose={onClose} title={title} width="max-w-md">
       {/* The body names the thing being removed, which is the same address that
           made the title overflow — so it wraps on the same terms. */}
-      <div className="px-5 py-4 text-[13px] leading-relaxed wrap-anywhere text-neutral-400">
+      <div className="px-5 py-4 text-[14.5px] leading-relaxed wrap-anywhere text-neutral-400">
         {children}
       </div>
       <footer className="flex items-center justify-end gap-2.5 border-t border-line bg-ink-850/60 px-5 py-3.5">
@@ -452,7 +452,7 @@ export function Toggle({
         />
       </button>
       <span className="min-w-0">
-        <span className="block text-[13px] font-medium text-neutral-200">
+        <span className="block text-[14.5px] font-medium text-neutral-200">
           {label}
         </span>
         {description ? (
@@ -491,7 +491,7 @@ export function Button({
     <button
       type="button"
       {...props}
-      className={`inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-[13px] font-medium transition-colors disabled:cursor-not-allowed ${styles} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-[14.5px] font-medium transition-colors disabled:cursor-not-allowed ${styles} ${className}`}
     />
   );
 }
@@ -514,7 +514,7 @@ export function StatusPill({
 
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium ${tones}`}
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-[12px] font-medium ${tones}`}
     >
       {children}
     </span>

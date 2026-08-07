@@ -151,7 +151,7 @@ export function SourceBar({
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className={`flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-[12.5px] font-medium transition-colors ${
+        className={`flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-[13.5px] font-medium transition-colors ${
           open
             ? "bg-white/[0.08] text-white"
             : "text-neutral-300 hover:bg-white/[0.05] hover:text-white"
@@ -193,7 +193,7 @@ export function SourceBar({
         {on.length > 0 ? (
           <span
             aria-label={`${liveAccounts} ${liveAccounts === 1 ? "account" : "accounts"} included`}
-            className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-white/[0.08] px-1 text-[10.5px] font-semibold tabular-nums text-neutral-300"
+            className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-white/[0.08] px-1 text-[11.5px] font-semibold tabular-nums text-neutral-300"
           >
             {liveAccounts}
           </span>
@@ -274,7 +274,7 @@ export function SourceBar({
                 className="pop-in fixed z-50 w-[min(34rem,calc(100vw-2.5rem))] overflow-hidden rounded-2xl border border-line-strong bg-ink-900 shadow-[0_20px_60px_rgba(0,0,0,0.7)]"
               >
                 <div className="flex items-center justify-between gap-3 border-b border-line px-3.5 py-2.5">
-                  <p className="text-[12px] font-semibold tracking-wide text-neutral-400 uppercase">
+                  <p className="text-[13px] font-semibold tracking-wide text-neutral-400 uppercase">
                     Connectors
                   </p>
                   {/* Everything, including web — the rail below covers only the
@@ -282,7 +282,7 @@ export function SourceBar({
                       Checked while *anything* is on, so switching it all off is
                       always one click rather than one per adapter. */}
                   <label className="flex cursor-pointer items-center gap-2">
-                    <span className="text-[12px] text-neutral-500">
+                    <span className="text-[13px] text-neutral-500">
                       {anyOn ? "All on" : "All off"}
                     </span>
                     <Switch

@@ -133,9 +133,9 @@ export const apiDraft = v.object({
   revision: v.number(),
   confirmed: v.boolean(),
   /**
-   * The digest `POST /drafts/{id}/confirm` requires. Present on the read, and
-   * only on the read — obtaining it means the payload was fetched, which is the
-   * whole point of the confirm gate.
+   * The digest `POST /drafts/{id}/confirm` requires. It always travels with the
+   * exact payload it is taken over (create and read both return them together),
+   * and any edit bumps the revision, which kills a previously confirmed digest.
    */
   review_hash: v.string(),
   /** The exact string the digest is over, so a client can verify it itself. */

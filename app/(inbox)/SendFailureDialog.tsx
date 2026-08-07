@@ -142,7 +142,7 @@ export function SendFailureDialog({
       }
     >
       {send === null ? (
-        <div className="flex items-center justify-center gap-2 px-5 py-12 text-[12px] text-neutral-500">
+        <div className="flex items-center justify-center gap-2 px-5 py-12 text-[13px] text-neutral-500">
           <span className="h-3 w-3 animate-spin rounded-full border-2 border-neutral-700 border-t-neutral-400" />
           loading the delivery…
         </div>
@@ -152,10 +152,10 @@ export function SendFailureDialog({
             <div className="flex items-start gap-2.5 rounded-lg border border-rose-500/30 bg-rose-500/[0.07] px-3.5 py-3">
               <AlertIcon className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
               <div className="min-w-0">
-                <p className="text-[12.5px] leading-relaxed text-rose-100/90">
+                <p className="text-[13.5px] leading-relaxed text-rose-100/90">
                   {error.message}
                 </p>
-                <code className="mt-1 block font-mono text-[11px] text-rose-300/70">
+                <code className="mt-1 block font-mono text-[12px] text-rose-300/70">
                   {error.code}
                 </code>
               </div>
@@ -165,8 +165,8 @@ export function SendFailureDialog({
           <div className="flex items-start gap-2.5 rounded-lg border border-rose-500/30 bg-rose-500/[0.07] px-3.5 py-3">
             <AlertIcon className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
             <div className="min-w-0">
-              <p className="text-[13px] font-medium text-white">{copy?.title}</p>
-              <p className="mt-1 text-[12px] leading-relaxed break-words text-neutral-400">
+              <p className="text-[14.5px] font-medium text-white">{copy?.title}</p>
+              <p className="mt-1 text-[13px] leading-relaxed break-words text-neutral-400">
                 {copy?.body}
               </p>
             </div>
@@ -182,7 +182,7 @@ export function SendFailureDialog({
             ].map(([label, value]) => (
               <div
                 key={label}
-                className="flex items-start gap-3 px-3.5 py-2.5 text-[12.5px]"
+                className="flex items-start gap-3 px-3.5 py-2.5 text-[13.5px]"
               >
                 <dt className="w-36 shrink-0 text-neutral-500">{label}</dt>
                 <dd className="min-w-0 flex-1 font-mono break-words text-neutral-100">
@@ -193,7 +193,7 @@ export function SendFailureDialog({
           </dl>
 
           <div>
-            <span className="mb-1.5 block text-[11px] font-semibold tracking-wider text-neutral-500 uppercase">
+            <span className="mb-1.5 block text-[12px] font-semibold tracking-wider text-neutral-500 uppercase">
               Attempt log
             </span>
             <ul className="space-y-1.5">
@@ -202,7 +202,7 @@ export function SendFailureDialog({
                   key={attempt.id}
                   className="rounded-lg border border-line bg-ink-850/60 px-3 py-2"
                 >
-                  <div className="flex flex-wrap items-center gap-2.5 text-[12px]">
+                  <div className="flex flex-wrap items-center gap-2.5 text-[13px]">
                     <span className="font-mono text-neutral-500">
                       #{attempt.attemptNumber}
                     </span>
@@ -213,13 +213,13 @@ export function SendFailureDialog({
                       {attempt.outcome ?? "in flight"}
                     </StatusPill>
                     {attempt.httpStatus !== undefined ? (
-                      <span className="font-mono text-[11px] text-neutral-600">
+                      <span className="font-mono text-[12px] text-neutral-600">
                         HTTP {attempt.httpStatus}
                       </span>
                     ) : null}
                   </div>
                   {attempt.errorMessage !== undefined ? (
-                    <p className="mt-1.5 font-mono text-[11px] leading-relaxed break-words text-neutral-400">
+                    <p className="mt-1.5 font-mono text-[12px] leading-relaxed break-words text-neutral-400">
                       {attempt.errorMessage}
                     </p>
                   ) : null}

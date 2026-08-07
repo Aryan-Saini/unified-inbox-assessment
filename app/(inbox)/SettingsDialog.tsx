@@ -14,7 +14,7 @@ import { BookIcon, ExternalIcon, KeyIcon, PlugIcon, SlidersIcon, TrashIcon } fro
 /** Section heading, matching the "ACCOUNTS" label in the connectors panel. */
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="text-[11.5px] font-semibold tracking-wide text-neutral-500 uppercase">
+    <h3 className="text-[12.5px] font-semibold tracking-wide text-neutral-500 uppercase">
       {children}
     </h3>
   );
@@ -83,7 +83,7 @@ function ConnectionRow({
         <Button
           variant="ghost"
           onClick={onDisconnect}
-          className="!px-2.5 !py-1.5 !text-[12px]"
+          className="!px-2.5 !py-1.5 !text-[13px]"
         >
           Disconnect
         </Button>
@@ -93,7 +93,7 @@ function ConnectionRow({
             variant="outline"
             onClick={onReconnect}
             disabled={reconnecting}
-            className="!px-2.5 !py-1.5 !text-[12px]"
+            className="!px-2.5 !py-1.5 !text-[13px]"
           >
             {reconnecting ? (
               <>
@@ -113,7 +113,7 @@ function ConnectionRow({
             onClick={onRemove}
             title={`Remove ${connection.label}`}
             aria-label={`Remove ${connection.label}`}
-            className="!px-2 !py-1.5 !text-[12px]"
+            className="!px-2 !py-1.5 !text-[13px]"
           >
             <TrashIcon className="h-3.5 w-3.5" />
           </Button>
@@ -204,7 +204,7 @@ export function SettingsDialog({
                 type="button"
                 onClick={() => setTab(id)}
                 aria-current={tab === id}
-                className={`flex shrink-0 items-center gap-2 rounded-xl px-2.5 py-2 text-[13px] font-medium whitespace-nowrap transition-colors ${
+                className={`flex shrink-0 items-center gap-2 rounded-xl px-2.5 py-2 text-[14.5px] font-medium whitespace-nowrap transition-colors ${
                   tab === id
                     ? "bg-white/[0.07] text-white"
                     : "text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
@@ -225,7 +225,7 @@ export function SettingsDialog({
                     connections gets the same dashed empty state the switchboard
                     uses. */}
                 {connections.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-line-strong px-3.5 py-6 text-center text-[13px] text-neutral-500">
+                  <p className="rounded-xl border border-dashed border-line-strong px-3.5 py-6 text-center text-[14.5px] text-neutral-500">
                     No accounts connected yet. Connect one below to search it.
                   </p>
                 ) : null}
@@ -251,7 +251,7 @@ export function SettingsDialog({
                         key={provider}
                         variant="outline"
                         onClick={() => onAddAccount(provider)}
-                        className="!px-2.5 !py-1.5 !text-[12px]"
+                        className="!px-2.5 !py-1.5 !text-[13px]"
                       >
                         <Logo className="h-3.5 w-3.5" />
                         Connect {provider === "gmail" ? "Gmail" : "Slack"}
@@ -275,7 +275,7 @@ export function SettingsDialog({
                     href="/documentation"
                     target="_blank"
                     rel="noreferrer noopener"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-[12px] font-medium text-neutral-300 transition-colors hover:border-neutral-600 hover:text-white"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-600 hover:text-white"
                   >
                     <BookIcon className="h-3.5 w-3.5" />
                     Documentation
@@ -283,7 +283,7 @@ export function SettingsDialog({
                   </a>
                 </div>
 
-                <p className="text-[13px] leading-relaxed text-neutral-400">
+                <p className="text-[14.5px] leading-relaxed text-neutral-400">
                   A key drives search and send over REST with no browser open.
                   Send it as{" "}
                   <span className="font-mono text-neutral-300">
@@ -295,13 +295,13 @@ export function SettingsDialog({
 
                 {revealedKey ? (
                   <div className="fade-in rounded-xl border border-indigo-500/30 bg-indigo-500/[0.07] p-3.5">
-                    <p className="text-[12px] font-medium text-indigo-200">
+                    <p className="text-[13px] font-medium text-indigo-200">
                       Copy this now. It will not be shown again.
                     </p>
-                    <code className="mt-2 block overflow-x-auto rounded-lg border border-line bg-ink-950 px-3 py-2 font-mono text-[12px] text-white">
+                    <code className="mt-2 block overflow-x-auto rounded-lg border border-line bg-ink-950 px-3 py-2 font-mono text-[13px] text-white">
                       {revealedKey}
                     </code>
-                    <p className="mt-2 text-[11px] text-indigo-200/70">
+                    <p className="mt-2 text-[12px] text-indigo-200/70">
                       Send it as{" "}
                       <span className="font-mono">Authorization: Bearer …</span> to
                       the REST API. Only its SHA-256 digest is stored, so this is
@@ -311,7 +311,7 @@ export function SettingsDialog({
                 ) : null}
 
                 {apiKeys !== undefined && apiKeys.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-line-strong px-3.5 py-6 text-center text-[13px] text-neutral-500">
+                  <p className="rounded-xl border border-dashed border-line-strong px-3.5 py-6 text-center text-[14.5px] text-neutral-500">
                     No keys yet. Create one to drive search and send over REST with
                     no UI at all.
                   </p>
@@ -325,10 +325,10 @@ export function SettingsDialog({
                     >
                       <KeyIcon className="h-4 w-4 shrink-0 text-neutral-500" />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[13px] text-neutral-200">
+                        <p className="truncate text-[14.5px] text-neutral-200">
                           {k.name}
                         </p>
-                        <p className="font-mono text-[11px] text-neutral-500">
+                        <p className="font-mono text-[12px] text-neutral-500">
                           {k.prefix}…{" "}
                           <span className="font-sans">
                             ·{" "}
@@ -377,7 +377,7 @@ export function SettingsDialog({
                 </Button>
 
                 {demoNote !== null && demoNote !== "" && tab === "api" ? (
-                  <p className="text-[12px] text-neutral-400">{demoNote}</p>
+                  <p className="text-[13px] text-neutral-400">{demoNote}</p>
                 ) : null}
               </section>
             ) : null}
@@ -386,13 +386,13 @@ export function SettingsDialog({
               <section className="space-y-3">
                 <SectionTitle>Demo data</SectionTitle>
 
-                <p className="text-[13px] leading-relaxed text-neutral-400">
+                <p className="text-[14.5px] leading-relaxed text-neutral-400">
                   Loads one set of fixtures onto your account: three connections,
                   four searches (including one still running and one with a revoked
                   grant), drafts in every status, and a delivery in each of the
                   seven send states with its full attempt timeline.
                 </p>
-                <p className="text-[12px] leading-relaxed text-neutral-500">
+                <p className="text-[13px] leading-relaxed text-neutral-500">
                   Seeded rows are badged as demo data and hold no OAuth grant, so
                   they can never cause a real provider call. Loading twice does
                   nothing the second time.
@@ -428,7 +428,7 @@ export function SettingsDialog({
                 </div>
 
                 {demoNote !== null && demoNote !== "" ? (
-                  <p className="fade-in rounded-xl border border-line bg-ink-850/60 px-3.5 py-2.5 text-[12px] text-neutral-300">
+                  <p className="fade-in rounded-xl border border-line bg-ink-850/60 px-3.5 py-2.5 text-[13px] text-neutral-300">
                     {demoNote}
                   </p>
                 ) : null}

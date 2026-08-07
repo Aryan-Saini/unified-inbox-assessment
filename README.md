@@ -24,9 +24,6 @@ to retry it.
 | `/documentation` | The REST reference, plus markdown and OpenAPI copies for agents. **Public** |
 | `/` | Redirects to whichever of these you belong on |
 
-`/dashboard` and `/outbox` render one shell (`InboxApp`) with the pane switched, so
-the sidebar, the dialogs and the toast deck exist once and cannot drift.
-
 - [Architecture](#architecture)
 - [Local setup](#local-setup)
 - [GitHub Codespaces](#github-codespaces)
@@ -60,11 +57,10 @@ has two thin consumers and neither of them holds any policy:
                  └───────────────────────────────────────────────┘
 ```
 
-`app/(inbox)/` is presentation plus two hooks, `useSearch.ts` and
-`useConnections.ts`. It holds no retry logic, no idempotency logic and no
-provider knowledge. `convex/api/` is the REST shell, so it authenticates a bearer
-key, resolves a `userId`, calls the same internal functions the UI calls, and
-projects the row to public JSON.
+`app/(inbox)/` is presentation plus two hooks. It holds no retry logic, no
+idempotency logic and no provider knowledge. `convex/api/` is the REST shell, so
+it authenticates a bearer key, resolves a `userId`, calls the same internal
+functions the UI calls, and projects the row to public JSON.
 
 The proof that the boundary is where I say it is: `docs/api-walkthrough.sh` drives
 the whole product over `curl` with no browser open.
@@ -83,13 +79,19 @@ discovering it, a result limit, and an `AbortSignal`. Token lifecycle is the
 orchestrator's problem. That is what keeps an adapter small enough to be worth
 writing.
 
-Adapters do attach extra columns, `threadId`, `replyTo`, `unread`, `avatarUrl`,
-`replyCount` and a few more, because the UI needs them, and those are stored as
-real columns. The REST projection strips all of it, so the public `Result` stays
-exactly the seven specified fields. The validator in `convex/api/views.ts` is
-what enforces that, and Convex checks the returned object against it, so an
-eighth field cannot leak into the API without that file changing and a test
-going red.
+The UI needed more than the seven fields. Three connectors with multiple
+accounts inside each one all merge into a single list, and a row you cannot
+place, which account, which workspace, who wrote it, is the list not being
+usable. So a row carries an avatar, a workspace label, a thread id, a reply-to,
+and none of that fits in seven fields. The answer is a separate `ResultExtras`
+interface and `EnrichedResult = Result & Partial<ResultExtras>`. Every extra is
+optional, so a plain `SearchAdapter` already satisfies the enriched interface and
+the web adapter is completely unaware any of this exists. The extras are stored
+as real typed columns, and the REST projection strips all of them, so the public
+`Result` stays exactly the seven specified fields. The validator in
+`convex/api/views.ts` enforces that, and Convex checks the returned object
+against it, so an eighth field cannot leak into the API without that file
+changing and a test going red.
 
 ### Search fan-out
 
@@ -108,25 +110,21 @@ isolates, transactions and failure domains. There is nothing shared for a slow
 source to block on, and a source that crashes takes down its own row and nothing
 else.
 
-Each worker sets its row to `running` and bumps `attemptCount`, resolves a token,
-calls the adapter under a 20 second `AbortSignal` through three attempts with
-full jitter, and then commits results, terminal status, counts, duration and the
-parent search's completion check in **one mutation**. That single-mutation rule is
-why a subscriber never sees "succeeded with zero results" or half a batch
-flickering past.
+Each worker resolves a token, calls the adapter under a 20 second `AbortSignal`
+through three attempts with full jitter, and then commits results, terminal
+status, counts, duration and the parent search's completion check in **one
+mutation**. That single-mutation rule is why a subscriber never sees "succeeded
+with zero results" or half a batch flickering past.
 
 Partial results are one reactive query, `searches.watch`, returning
 `{search, sources[], results[]}`. The UI appends in arrival order and never
-re-sorts under the reader. Ordering comes from an explicit `seq` column because
-`_creationTime` ties are not ordered. A write-time `score` exists in parallel and
-REST exposes `?order=rank|arrival`, defaulting to rank.
+re-sorts under the reader. A write-time `score` exists in parallel and REST
+exposes `?order=rank|arrival`, defaulting to rank.
 
-Nothing spins forever. `sweepSearch` is scheduled at dispatch time and forces any
-still-pending or still-running source to `failed`, classified `transient`, which
-is the honest reading since the worker vanished and that says nothing about the
-provider. A 5 minute cron backs it up for the case where the scheduled sweep
-itself was lost to a deploy. Neither is load-bearing. If they were, the feature's
-latency would be the cron's interval.
+Nothing spins forever. `sweepSearch` forces any still-running source to `failed`,
+classified `transient`, which is the honest reading since the worker vanished and
+that says nothing about the provider. A 5 minute cron backs it up for the case
+where the scheduled sweep itself was lost to a deploy. Neither is load-bearing.
 
 ### Adding a source
 
@@ -165,8 +163,9 @@ adapter plumbing.
 ### The send gate
 
 ```
-1. drafts.create        → a draft row + an idempotency key minted with it
-2. drafts.reviewPayload → the EXACT payload + its digest  (the only source of the digest)
+1. drafts.create        → a draft row + an idempotency key minted with it.
+                          The response already shows the exact payload + its digest
+2. drafts.reviewPayload → the same payload + digest, read back on demand
 3. drafts.confirm       → takes that digest back, the server re-derives and compares
 4. sends.send           → sends.claim: indexed unique read + insert, ONE mutation
                           → scheduler.runAfter(0, sends.deliver) in the same transaction
@@ -177,12 +176,20 @@ Not in Convex, not in REST. Composing writes a row, sending names a draft. The
 shape of `convex/drafts.ts` *is* the friction, rather than a check bolted onto a
 one-shot path.
 
+One honest note on step 2. Nothing forces the separate read-back, because
+creating the draft already returns the payload and its digest, so create,
+confirm, send is a valid path. That is fine. What the gate actually enforces is
+stronger: the exact message was shown before it could be confirmed, a
+confirmation dies the moment the draft changes, and the recipient has to be
+repeated verbatim at send time. The canonical payload includes a schema-version
+marker and the draft's revision counter, and any edit bumps the revision and
+clears the confirmation. That closes the edit A to B to A hole, so a digest
+captured before the edit cannot authorise the new payload even if the text was
+put back byte for byte.
+
 The digest is derived three times, at review, at confirm, and again inside the
 claim. The third one is what actually gates delivery and everything before it is
-UI. The canonical payload includes a schema-version marker and the draft's
-revision counter, and any edit bumps the revision and clears the confirmation.
-That closes the edit A to B to A hole, so a digest captured before the edit cannot
-authorise the new payload even if the text was put back byte for byte.
+UI.
 
 #### Why double-sending is impossible
 
@@ -265,20 +272,6 @@ Errors are stored redacted, no tokens, no auth headers, capped bodies, but
 otherwise in full, and shown in full in the outbox with the provider's own words,
 the HTTP status and every attempt's timestamps.
 
-### Scheduled backstops
-
-Everything in `convex/crons.ts` is a backstop rather than a mechanism:
-
-| Cron | Interval | Why |
-| --- | --- | --- |
-| `sweep stuck searches` | 5 min | Catches only what a per-search watchdog missed, such as a deploy mid-fan-out. |
-| `sweep stale in-flight sends` | 1 min | `in_flight` blocks all further attempts, so an abandoned one is both unretryable and unexplained. Resolves to `unknown`, never `failed_transient`. |
-| `collect expired oauth states` | 1 hour | Consumed rows are kept a full TTL past expiry, so a replay is answered "replayed" rather than "unknown" while it still can be. |
-
-Both sweepers skip seeded rows. A seeded `in_flight` send is a frozen illustration
-of that state, and sweeping it would quietly delete the example a reviewer came to
-see.
-
 ### Multi-account OAuth and tokens
 
 ```
@@ -314,43 +307,16 @@ dropped rather than repaired, and that is what stops it being an open redirect.
 origin, since `next dev` picks whatever port it wants and one deployment
 legitimately serves both a local browser and a deployed one. So the browser
 proposes its own origin and the backend checks it instead of trusting it, because
-this is a redirect and an unchecked origin here is a plain open redirect.
-
-| Proposed origin | Allowed? | Why |
-|---|---|---|
-| `http://localhost:3001`, `http://127.0.0.1:5173`, `http://[::1]:3000` | yes, any port | Loopback names the visitor's own machine and nobody else's, so there is nobody to redirect them *to*. This is what makes the dev port stop mattering. |
-| `https://10.0.0.124:3000`, `http://192.168.1.5:5173`, `https://my-mac.local:3000` | only when `ALLOW_PRIVATE_NETWORK_ORIGINS="true"` | A phone on the same Wi-Fi. See below. |
-| Anything in `APP_BASE_URL` or `APP_ORIGIN_ALLOWLIST` | yes | A deployed frontend, registered once. Compared by origin, so a trailing slash is not a different site. |
-| Anything else, or not a parseable `http(s)` URL | no | Falls back to `APP_BASE_URL`. |
-
-The resolved origin is stored on the `oauthStates` row, so it is fixed when the
-flow starts and nothing arriving at the callback later can influence it.
-`resolveAppOrigin` is unit-tested against every row of that table in
-`convex/oauth.test.ts`, including lookalike hosts like `localhost.evil.test` that
-a substring check would wave through.
-
-**Connecting an account from a phone.** `pnpm dev:lan` serves the app on this
-machine's LAN address so a phone can reach it. That origin is not loopback, so
-before this existed the callback fell back to `APP_BASE_URL`, which is
-`http://localhost:3000`, and *on a phone* that is the phone. The flow completed
-and the browser landed on nothing.
-
-Registering the address is the obvious fix and the wrong one, since DHCP
-reassigns it and a different network hands out a different one, so the
-registration is stale exactly when you next need it. Instead `resolveAppOrigin`
-accepts any private-network host on any port, so `10.0.0.0/8`, `172.16.0.0/12`,
-`192.168.0.0/16`, IPv4 and IPv6 link-local, and `*.local`.
-
-That is a real widening, so it is off unless `ALLOW_PRIVATE_NETWORK_ORIGINS` is
-`"true"`, and `pnpm dev:lan` sets that on the **dev** deployment only, which ties
-"the LAN may be returned to" to "I am deliberately serving the LAN". The hand-in
-deployment leaves it unset and keeps the strict loopback-plus-allowlist rule. The
-set it opens is "a machine on the LAN the visitor is already on" rather than
-"anywhere", which is the same argument that lets loopback through, one hop wider,
-and the redirect carries no secret anyway, just `connected` and `account`, or
-`oauth_error`. Tokens are exchanged and encrypted inside the callback, before it.
-Ranges are matched on the hostname `URL` parsed, so `10.0.0.124.evil.test` is a
-DNS name and gets refused.
+this is a redirect and an unchecked origin here is a plain open redirect. Loopback
+is allowed on any port, a deployed frontend is registered once via `APP_BASE_URL`
+or `APP_ORIGIN_ALLOWLIST`, and anything else falls back to `APP_BASE_URL`.
+Private-network origins (a phone on the same Wi-Fi, via `pnpm dev:lan`) are only
+allowed when `ALLOW_PRIVATE_NETWORK_ORIGINS="true"`, which the LAN script sets on
+the dev deployment only. The resolved origin is stored on the `oauthStates` row,
+so it is fixed when the flow starts and nothing arriving at the callback later can
+influence it. `resolveAppOrigin` is unit-tested in `convex/oauth.test.ts`,
+including lookalike hosts like `localhost.evil.test` that a substring check would
+wave through.
 
 **Identity-preserving reconnect.** The upsert key is
 `(userId, provider, externalAccountId)`, so re-granting an existing account
@@ -379,74 +345,33 @@ second, and without a lease that is three parallel refreshes, which is wasteful
 with a static refresh token and outright data loss with a rotating one, because
 the losers would store tokens the provider already invalidated. So
 `refreshLockedUntil` is claimed in a mutation and the winner refreshes, losers do
-a bounded re-read of 250ms times 3 and then surface `transient`, and a 120 second
-skew window means a token about to expire is refreshed before use rather than
-after a 401. `invalid_grant` and `token_revoked` flip the connection to `revoked`,
-store the verbatim provider reason, and surface `needs_reconnect` in the UI.
+a bounded re-read and then surface `transient`, and a 120 second skew window means
+a token about to expire is refreshed before use rather than after a 401.
+`invalid_grant` and `token_revoked` flip the connection to `revoked`, store the
+verbatim provider reason, and surface `needs_reconnect` in the UI.
 
 Slack token rotation is deliberately left off on the app. With rotation disabled a
 user token does not expire, so there is no refresh to get wrong. The refresh
 branch is written and exported so enabling rotation later is a Slack console
 change rather than new code, but nothing calls it today.
 
-### Auth, briefly
-
-Clerk gates the browser in three layers, and each one exists because the layer
-outside it cannot cover the case. `proxy.ts` (Next.js 16's middleware, renamed)
-redirects on the Clerk session cookie before a route renders. `AuthGate` and
-`GuestGate` hold the page on a splash through the async window the server cannot
-see, which is Clerk resolving its session in the browser and then Convex trading
-it for its own token, and `AuthGate` also issues the user row straight out of the
-JWT so a brand-new user whose webhook is late still gets one. `useAuthedQuery`
-holds every query at `"skip"` until Convex reports an authenticated identity.
-
-None of that is the authorization boundary. Every Convex function resolves its own
-owner through `requireUser`, so a route that slipped through all three still
-cannot read another user's row.
-
-**Only Clerk sends anyone back to `/auth`**, and that rule is load-bearing. Clerk
-is the only thing `proxy.ts` can see, so redirecting because *Convex* rejected the
-session would bounce off a proxy that still sees a valid Clerk cookie and loop
-between the two forever. Clerk can also disagree with itself, since the proxy only
-verifies the session token while clerk-js sees a session revoked in the dashboard
-or ended in another tab seconds earlier, so a client-driven bounce carries
-`?signed_out=1` (`app/authParams.ts`) and the proxy takes the client's word for
-that one request. `useHardRedirect` strips the param from anything it carries
-onward, so it never outlives the bounce.
-
-Only the two states nobody can resolve by waiting reach `AuthTrouble`: clerk-js
-never started (`unreachable`, which is what a non-secure origin looks like), and
-Convex settled on "not authenticated" after Clerk confirmed a session
-(`rejected`, so an `aud` claim or a `CLERK_JWT_ISSUER_DOMAIN` pointing at the
-other deployment). Everything else is a load, including a failing `users.store`,
-which retries on a capped backoff rather than showing a panel. Sign-out has to
-live *inside* the shell, in the sidebar footer, because `/auth` is closed to a
-signed-in visitor, and `AuthTrouble` carries its own copy since it renders instead
-of the shell.
-
-One Next.js 16 detail worth knowing before changing a redirect here: `/auth` and
-`/dashboard` sit in route groups with separate root layouts, which the App Router
-only crosses with a full page load. `router.replace` between them leaves the
-browser on the old route, so both gates go through `useHardRedirect`
-(`window.location.replace`). That also re-runs `proxy.ts` on the way in, so the
-server and the client can never disagree about where you belong.
-
-A Clerk webhook at `https://<deployment>.convex.site/clerk-webhook` keeps `users`
-correct between sessions, since `ctx.auth.getUserIdentity()` only fires while
-someone is using the app and never hears about a profile edit or a deletion. It is
-served by Convex rather than Next.js for the same reason the OAuth callbacks are,
-a stable public URL in development. It verifies every request with Svix before
-reading it, because an unverified body is an unauthenticated write to `users`. It
-shares one idempotent upsert between `user.created` and `user.updated`, since Svix
-retries on any non-2xx and can deliver out of order, picks the *primary* email
-rather than the first, answers unknown event types with 200, and returns 400 on a
-bad signature but 500 on a missing secret — 400 stops Svix retrying something that
-can never verify, 500 makes it retry a misconfiguration a human can still fix.
-`user.deleted` cascades into deleting connections and their tokens, so the token
-vault never outlives the account.
-
 Disconnecting is a soft delete, so the row stays and the status becomes `revoked`,
 which keeps `drafts.connectionId` and every historical send valid.
+
+### Auth, briefly
+
+Clerk handles user identity and Convex validates the JWT (the session token must
+carry `aud: "convex"`). Three frontend layers, `proxy.ts`, the `AuthGate` /
+`GuestGate` splash, and `useAuthedQuery` holding queries at `"skip"`, exist purely
+to cover the async window while Clerk resolves a session and Convex trades it for
+its own token, so that window never renders a broken shell.
+
+None of that is the authorization boundary. Every Convex function resolves its
+own owner through `requireUser`, so a route that slipped through all three still
+cannot read another user's row. A Clerk webhook (Svix-verified, idempotent
+upserts) keeps `users` correct between sessions, and `user.deleted` cascades into
+deleting connections and their tokens, so the token vault never outlives the
+account.
 
 ---
 
@@ -461,36 +386,18 @@ npx convex dev                 # provisions the deployment, writes CONVEX_* into
 pnpm dev                       # in a second terminal
 ```
 
-`npx convex dev` has to stay running in development, it pushes `convex/` on save.
+`pnpm exec convex dev` has to stay running in development, it pushes `convex/`
+on save.
 
 Two separate places hold config and mixing them up is the usual cause of a
 confusing failure. `.env.local` is read by **Next.js only**. Everything the
 backend needs is set on the **Convex deployment** with `npx convex env set`.
 
-### Opening it on a phone
-
-```bash
-pnpm dev:lan                   # instead of pnpm dev
-```
-
-`pnpm dev` over the LAN, on `http://192.168.x.x:3000`, cannot sign anyone in. That
-origin is not a secure context, so the browser withholds `crypto.subtle` and
-`crypto.randomUUID`, and clerk-js stops before its first Frontend API call without
-throwing. The only symptom is a splash that never resolves, and `localhost` is
-exempt, which is why it only shows up on a second device. The gates now give up
-after six seconds and say so rather than spinning.
-
-`dev:lan` resolves this machine's LAN address, generates one mkcert certificate
-covering it *and* `localhost`, and serves HTTPS on every interface, so
-`https://localhost:3000` still works for desktop while the phone gets a secure
-origin. It prints the address to open, and that first visit warns about the
-certificate, which accepting is enough for. It also sets
-`ALLOW_PRIVATE_NETWORK_ORIGINS` on the **dev** deployment so an OAuth callback can
-return to the phone. `allowedDevOrigins` in [`next.config.ts`](next.config.ts) is
-detected the same way, without which the phone's `/_next/*` requests come back 403.
-
-The t3 **Dev** script runs `dev:lan`. Plain `pnpm dev` is unchanged, for Codespaces
-and for working without a certificate.
+To open it on a phone use `pnpm dev:lan` instead of `pnpm dev`. A plain LAN
+origin is not a secure context, so clerk-js silently never starts. `dev:lan`
+generates a mkcert certificate for this machine's LAN address, serves HTTPS on
+every interface, and sets `ALLOW_PRIVATE_NETWORK_ORIGINS` on the dev deployment
+so an OAuth callback can return to the phone.
 
 ### `.env.local` (Next.js)
 
@@ -557,30 +464,36 @@ Then sign in at `/auth`. If Convex rejects the session, the `aud` claim or
 thing to check because it reports the Clerk user id resolved *by Convex* rather
 than by the browser.
 
-Two Clerk and Next.js details that differ from most tutorials: Next.js 16 names
-the middleware file `proxy.ts` (same API, new name), and `@clerk/nextjs` v7
-removed `<SignedIn>` / `<SignedOut>` / `<Protect>` in favour of a single `<Show>`,
-with `ClerkProvider` going *inside* `<body>`.
-
 ---
 
 ## GitHub Codespaces
 
 [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) gives a Node
-20 image with pnpm via corepack, runs `pnpm install` on create, and forwards port
-3000.
+20 image with pnpm via corepack, runs a frozen `pnpm install` on create, and
+forwards port 3000.
 
-Open in a Codespace, then:
+Open the repository in a Codespace. If you store
+`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, and
+`CLERK_JWT_ISSUER_DOMAIN` as repository Codespaces secrets, they are already
+available in the terminal. The devcontainer supplies the two public Convex URLs
+for `judicious-wildcat-326`, so starting the app is one command:
 
 ```bash
-cp .env.example .env.local        # paste your Clerk keys
-npx convex dev                    # links a deployment, writes CONVEX_* into .env.local
-npx convex env set TOKEN_ENCRYPTION_KEY "$(openssl rand -base64 32)"
-npx convex env set CLERK_JWT_ISSUER_DOMAIN https://<slug>.clerk.accounts.dev
-npx convex env set APP_BASE_URL "https://$CODESPACE_NAME-3000.app.github.dev"
-npx convex env set ALLOW_FAULT_INJECTION true
-pnpm dev                          # second terminal, open the forwarded port 3000
+pnpm dev
 ```
+
+Open the forwarded port 3000 when Codespaces reports it. No Convex process is
+needed merely to run the frontend against the existing backend.
+
+Only run `pnpm exec convex dev` when changing files under `convex/`. That command
+needs Convex authentication: either sign in interactively or provide a dev
+deployment key as the `CONVEX_DEPLOY_KEY` Codespaces secret. Keep it running only
+for the duration of backend development so it can push and watch those changes.
+
+Gmail and Slack OAuth callbacks also need the Codespace origin registered as
+`APP_BASE_URL` or in `APP_ORIGIN_ALLOWLIST`. Changing that backend environment
+setting likewise requires Convex authentication; it is not required just to
+start and inspect the app.
 
 After Convex and Clerk, no third-party signup is needed to see the whole product.
 Web search runs on the labelled deterministic mock so the fan-out has three real
@@ -588,11 +501,8 @@ sources with no API key, the demo data button fills history with every status,
 `docs/api-walkthrough.sh` exercises the REST surface end to end, and `pnpm test`
 needs nothing external at all.
 
-Gmail and Slack still need their own OAuth apps, and their redirect URIs point at
-`convex.site` rather than at the Codespace, so they work from a Codespace
-unchanged. A Codespace origin is not loopback though, so it has to be registered
-as `APP_BASE_URL` or added to `APP_ORIGIN_ALLOWLIST` for the callback to return
-you to it.
+Gmail and Slack still need their own OAuth apps, and their provider redirect URIs
+continue to point at `convex.site`, not at the Codespace.
 
 ---
 
@@ -849,17 +759,14 @@ reach one routing table so the alias cannot drift from the versioned route.
 
 Errors always have one shape, `{"error": {"code", "message"}}`, because a client
 that has to guess whether today's 409 is `{error: "…"}` or `{message: "…"}` ends
-up string-matching, and then our error text becomes their API contract. `OPTIONS`
-and permissive CORS are supported, since the credential is a header and never a
-cookie, so `*` grants nothing except the ability to try.
+up string-matching, and then our error text becomes their API contract.
 
 ### The confirm friction exists in the API too
 
 Criterion 4 is not a UI feature. `POST /drafts/{id}/send` requires
 `acknowledged_destination` and it has to repeat the draft's recipient verbatim, so
-a mismatch is a 409. Combined with the `reviewed_hash` on confirm that is three
-round trips minimum, and there is no endpoint anywhere that accepts a recipient
-and a body and delivers them.
+a mismatch is a 409. Combined with the `reviewed_hash` on confirm there is no
+endpoint anywhere that accepts a recipient and a body and delivers them.
 
 ### Idempotent send semantics
 
@@ -879,17 +786,8 @@ field, status code and example. It needs no session, because the instructions fo
 getting a credential must not sit behind the credential, and `proxy.ts` bypasses
 Clerk for the whole path so a `curl` gets content rather than a handshake redirect.
 
-It is a documentation *site*, not one long page: a guide, an endpoint reference and
-an appendix, each a page of its own, with a section switcher and tree on the left, a
-contents rail on the right, and previous/next at the foot of every page.
-`app/(docs)/documentation/pages.ts` is the arrangement — the routing, the
-navigation, the rails and the per-page metadata all read from it, so a sidebar link
-cannot point at a page that does not exist. The pages themselves are still composed
-out of `spec.ts` and `guide.ts`, which is why splitting them changed no content.
-
-The same content is served in four other shapes from one source
-(`app/(docs)/documentation/spec.ts` and `guide.ts`), so none of them can drift from
-the site or from each other:
+The same content is served in four other shapes from one source, so none of them
+can drift from the site or from each other:
 
 | URL | What it is |
 | --- | --- |
@@ -944,10 +842,10 @@ curl -sS -H "Authorization: Bearer $KEY" -H 'content-type: application/json' -d 
   "idempotency_key": "demo-001"
 }' "$API/drafts"
 
-# 4. Read it back. review_hash comes only from reading the payload.
+# 4. Read it back: the exact payload and its review_hash.
 curl -sS -H "Authorization: Bearer $KEY" "$API/drafts/$DRAFT_ID"
 
-# 5. Confirm with that hash.
+# 5. Confirm with that hash. An edit after this clears the confirmation.
 curl -sS -H "Authorization: Bearer $KEY" -H 'content-type: application/json' \
   -d '{"reviewed_hash":"'"$HASH"'"}' "$API/drafts/$DRAFT_ID/confirm"
 
@@ -1047,25 +945,12 @@ pnpm dev:handin      # next dev on localhost, pointed at the hand-in deployment
 instance. The webhook secret and `TOKEN_ENCRYPTION_KEY` are per-deployment.
 
 The frontend is a third thing, on Vercel, and it does **not** deploy on push:
-`vercel.json` sets `git.deploymentEnabled: false`, so the build is made locally and
-uploaded. `main` is the production branch.
-
-```bash
-pnpm deploy:vercel   # pull, vercel build --prod, vercel deploy --prebuilt --prod
-```
-
-[`scripts/deploy-vercel.mjs`](scripts/deploy-vercel.mjs) pulls the production
-environment first, because `NEXT_PUBLIC_*` values are inlined into the bundle at
-build time and the building machine is now this one. Without it the build falls
-back to `.env.local` and the deployment quietly talks to the *dev* Convex
-deployment. The three public values are stored **plain** on the project so the
-pull actually returns them — a sensitive variable comes back empty — while
-`CLERK_SECRET_KEY` and the rest stay sensitive and are read at runtime by the
-server. The script refuses to build if any of the three pulls empty.
-
-A push should be free — `staging` gets pushed often and mid-change, and none of
-those pushes are a deliverable. This also means the build a reviewer opens is one
-somebody watched succeed.
+`vercel.json` sets `git.deploymentEnabled: false`, so the build is made locally
+and uploaded with `pnpm deploy:vercel`. The script pulls the production env
+first, because `NEXT_PUBLIC_*` values are inlined into the bundle at build time,
+and it refuses to build if any of them pulls empty. `main` is the production
+branch, and the two halves are independent, so a change touching both `convex/`
+and the app needs `pnpm deploy:handin` as well.
 
 ### The pipeline
 
@@ -1134,55 +1019,18 @@ refuses to build when the URL Convex just deployed to and the one pulled from th
 Vercel project disagree — that means the deploy key and the project point at
 different Convex deployments, and Vercel's value is the one that gets inlined.
 
-`dev:handin` sets the Convex URLs inline rather than through a `.env.handin` file
-on purpose. Next.js only auto-loads `.env.$(NODE_ENV)`, and `NODE_ENV` accepts
-nothing but `production`, `development` and `test`, so a `.env.handin` would
-silently never load. Inline `process.env` sits at the top of Next's lookup order,
-so it wins over `.env.local`.
-
-### Before submitting
-
-Two things that only bite on the deployed URL, so local work never catches them.
-
-1. **Register the deployed frontend origin on the hand-in deployment.** A browser
-   on the deployed URL is not loopback, so the OAuth callback will not return to it
-   until its origin is named. Otherwise a reviewer finishing a connect flow is
-   redirected to `APP_BASE_URL`, which is currently `http://localhost:3000`, so
-   *their own* machine.
-
-   ```bash
-   npx convex env set APP_BASE_URL "https://<deployed-origin>" --prod
-   # or, to keep APP_BASE_URL as-is and add to the allowlist:
-   npx convex env set APP_ORIGIN_ALLOWLIST "https://<deployed-origin>" --prod
-   ```
-
-2. **Turn on Slack public distribution.** Until it is on, the Slack app can only be
-   installed into the workspace that created it, and any reviewer authorizing from
-   their own workspace gets `invalid_team_for_non_distributed_app` before the
-   consent screen even renders. api.slack.com/apps, then the app, then Manage
-   Distribution, tick the hard-coded-information review box, Activate Public
-   Distribution. Both deployments' callback URLs are already registered under OAuth
-   & Permissions, which is the other checklist item.
-
 ---
 
 ## Screenshots
 
-In [`docs/screenshots/`](docs/screenshots). These were captured during the UI-first
-phase against the mock harness the components were built on, which is why several
-still carry a "MOCK" badge. The components themselves are unchanged and are now
-driven by live Convex subscriptions, so the layouts are current even where those
-badges are not. Two are now in a different place: a successful send is a toast
-rather than a receipt dialog, and the delivered row, with its attempt log, delivery
-count and the "retry with the same key" button that proves the count stays at one,
-lives on the `/outbox` card.
+In [`docs/screenshots/`](docs/screenshots).
 
 | | |
 | --- | --- |
-| [The lift — idle to results](docs/screenshots/01-hero.png) | [Partial results streaming in](docs/screenshots/02-streaming-partial.png) |
+| [The lift, idle to results](docs/screenshots/01-hero.png) | [Partial results streaming in](docs/screenshots/02-streaming-partial.png) |
 | [Settled, merged, per-source status](docs/screenshots/03-results-settled.png) | [Compose → review, not send](docs/screenshots/04-compose-draft.png) |
 | [The review payload and its key](docs/screenshots/05-compose-review.png) | [Delivered, with the attempt log](docs/screenshots/06-send-delivered.png) |
-| [Retry with the same key — deliveries stay at 1](docs/screenshots/07-send-deduped.png) | [Connections](docs/screenshots/08-settings-connections.png) |
+| [Retry with the same key, deliveries stay at 1](docs/screenshots/07-send-deduped.png) | [Connections](docs/screenshots/08-settings-connections.png) |
 | [The demo-data panel](docs/screenshots/09-settings-demo.png) | [A revoked grant as its own state](docs/screenshots/10-needs-reconnect.png) |
 | [Sidebar collapsed](docs/screenshots/11-sidebar-collapsed.png) | [Archive with undo](docs/screenshots/12-archive-toast.png) |
 | [Mobile results](docs/screenshots/13-mobile-results.png) | [Mobile navigation sheet](docs/screenshots/14-mobile-drawer.png) |
@@ -1190,26 +1038,10 @@ lives on the `/outbox` card.
 Keyboard: `⌘K` focuses the search field, `⌘\` collapses the sidebar, `Esc`
 dismisses a dialog or the mobile nav sheet.
 
-### The stress harness
-
-Layout regressions are found and re-captured with a development-only route,
-`/ui-stress?scene=…`, which renders the surfaces that carry an arbitrarily long
-string, so the result row, the reply dialog and the remove-account confirm, against
-the same awkward fixtures `convex/seed.ts` loads. It has no Clerk provider and no
-live Convex client, so it renders identically on a machine with no deployment and
-no session, and two captures across a change differ only where the code did.
-
-```bash
-pnpm exec playwright install chromium          # once
-node scripts/screenshots/capture.mjs /tmp/after   # phone + desktop PNGs
-node scripts/screenshots/overflow.mjs             # names what is cut off, exits 1 if any
-```
-
-`overflow.mjs` is the useful half. A screenshot shows *that* something bled, while
-it says which element ran past which box and by how many pixels, and it knows the
-difference between a deliberate `truncate` ellipsis and a string that was simply
-cut off. Before/after pairs live in
-[`docs/screenshots/before-after/`](docs/screenshots/before-after).
+Layout regressions are caught with a development-only stress route,
+`/ui-stress?scene=…`, which renders the long-string surfaces against awkward
+fixtures with no Clerk and no Convex, plus `scripts/screenshots/overflow.mjs`,
+which names which element ran past which box and exits 1 if anything did.
 
 ---
 

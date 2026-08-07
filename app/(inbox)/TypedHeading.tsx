@@ -65,7 +65,7 @@ export function TypedHeading() {
     // mid-animation text would read out a new partial word every ~90ms.
     <h1
       aria-label="Search Gmail, Slack and The Web"
-      className="text-center text-[26px] leading-tight font-semibold tracking-tight text-white sm:text-[34px]"
+      className="text-center text-[31px] leading-tight font-semibold tracking-tight text-white sm:text-[34px]"
     >
       {reduced ? (
         "Search Gmail, Slack and The Web"
