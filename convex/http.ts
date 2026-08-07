@@ -16,6 +16,7 @@ import type { ActionCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { handleApiRequest } from "./api/routes";
 import { encryptToken } from "./core/crypto";
+import { redactError } from "./core/redact";
 import { toAdapterError } from "./core/types";
 import { redirectUriFor, sanitizeReturnTo } from "./oauth";
 import * as google from "./oauth/google";
@@ -164,10 +165,24 @@ function redirectIntoApp(
   }
 
   const target = new URL(sanitizeReturnTo(returnTo), base);
+
+  // The last line of defence, and the reason it is an assertion rather than
+  // another filter: `sanitizeReturnTo` decides what a path may look like, but
+  // *this* is the function that turns a value into a `Location`. Comparing the
+  // resolved origin against the one we chose means no future gap in the
+  // sanitizer — a URL-parser quirk, a character nobody thought of — can send a
+  // browser off-origin. It can only ever fall back to the app root.
+  const expectedOrigin = new URL(base).origin;
+  const safeTarget =
+    target.origin === expectedOrigin ? target : new URL("/", base);
+
   for (const [key, value] of Object.entries(params)) {
-    target.searchParams.set(key, value);
+    safeTarget.searchParams.set(key, value);
   }
-  return new Response(null, { status: 302, headers: { location: target.toString() } });
+  return new Response(null, {
+    status: 302,
+    headers: { location: safeTarget.toString() },
+  });
 }
 
 /** Errors are surfaced to the user as a query param, never as a raw 500 page. */
@@ -361,8 +376,15 @@ async function completeOAuth(
     );
   } catch (err) {
     const error = toAdapterError(err);
-    // Full detail to the deployment log; a trimmed message to the URL bar.
-    console.error(`OAuth callback failed for ${provider}`, error);
+    // Redacted detail to the deployment log; a trimmed message to the URL bar.
+    // The Slack bot-only-grant path can carry an `xoxb-` token in the provider
+    // body, and a raw `console.error(error)` would serialise `error.detail` into
+    // the log — so message and detail both go through `redactError` first.
+    console.error(
+      `OAuth callback failed for ${provider}`,
+      redactError(error.message),
+      redactError(error.detail),
+    );
     return oauthFailure(
       returnTo,
       `exchange_failed_${error.kind}`,

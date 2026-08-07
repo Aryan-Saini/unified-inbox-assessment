@@ -793,11 +793,13 @@ with no CLI and no shared state.
 
 It creates one full set of fixtures:
 
-- **3 connections** — an active Gmail account, a second Gmail in `expired`, and a
-  Slack workspace in `revoked`.
-- **4 searches** with their per-source runs and results, including one still
+- **5 connections, covering every status** — an active Gmail account and an
+  active Slack workspace, a second Gmail in `expired`, a third in `errored`, and
+  a Slack workspace in `revoked`.
+- **6 searches** with their per-source runs and results, including two still
   `running` (so the partial-results state is visible standing still), one where
-  Slack came back `needs_reconnect`, and one with a `failed` Gmail source.
+  Slack came back `needs_reconnect`, one with a `failed` source, and one that
+  legitimately matched nothing.
 - **Drafts in every status** — `draft`, `confirmed`, `sent`, `failed`.
 - **A send in each of the seven states** — `queued`, `in_flight`, `succeeded`,
   `failed_transient`, `failed_permanent`, `needs_reconnect`, `unknown` — each with

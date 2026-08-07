@@ -27,7 +27,6 @@
  * "prove the double-tap sent once" is `diff` on two response bodies.
  */
 
-import { ConvexError } from "convex/values";
 import { internal } from "../_generated/api";
 import { httpAction } from "../_generated/server";
 import type { ActionCtx } from "../_generated/server";
@@ -418,18 +417,12 @@ function errorToResponse(err: unknown): Response {
     return errorResponse(app.httpStatus, app.code, app.message, extra, headers);
   }
 
-  // A `ConvexError` without our envelope, or a plain `Error`. The message is
-  // still ours (argument validation, an explicit throw), so it is passed through
-  // rather than replaced with "internal error" — but the status stays 500,
-  // because we did not classify it.
-  const message =
-    err instanceof ConvexError
-      ? String(err.message)
-      : err instanceof Error
-        ? err.message
-        : "Unhandled error.";
+  // A `ConvexError` without our envelope, or a plain `Error`. We did not
+  // classify it, so we cannot vouch that its message is safe to show — it may
+  // carry internal detail or a stack. The real error is logged server-side; the
+  // client gets a generic 500. (Classified app errors above keep their messages.)
   console.error("REST request failed", err);
-  return errorResponse(500, "INTERNAL", message);
+  return errorResponse(500, "INTERNAL", "An internal error occurred.");
 }
 
 export const handleApiRequest = httpAction(async (ctx, request) => {

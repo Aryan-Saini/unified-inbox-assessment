@@ -49,6 +49,18 @@ function HistoryRow({
         onClick={onSelect}
         className="flex w-full cursor-pointer items-center gap-2 px-2.5 py-1.5 text-left"
       >
+        {/* A seeded search is badged before its query rather than beside the
+            trailing numbers: those give way on hover, and demo data must stay
+            distinguishable from real at every moment. Kept to a bare glyph-width
+            tag so a one-line row stays one line. */}
+        {record.isSeed ? (
+          <span
+            title="Demo data"
+            className="shrink-0 rounded border border-line px-1 text-[10px] leading-[1.4] text-neutral-500"
+          >
+            demo
+          </span>
+        ) : null}
         <span
           className={`min-w-0 flex-1 truncate text-[13px] ${
             active ? "text-white" : "text-neutral-300"

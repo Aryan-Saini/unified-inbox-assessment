@@ -294,4 +294,23 @@ describe("sanitizeReturnTo", () => {
     expect(sanitizeReturnTo("")).toBe("/");
     expect(sanitizeReturnTo(undefined)).toBe("/");
   });
+
+  /**
+   * Regression: the WHATWG URL parser strips tab, CR and LF *before* parsing, so
+   * `"/\t/evil.test"` is not the path it appears to be — it resolved to
+   * `https://evil.test/`, an open redirect off our own OAuth domain, while
+   * passing every other check. The assertion is written against `new URL` rather
+   * than against the return value alone, because the parser's behaviour is the
+   * thing that made this exploitable.
+   */
+  it("refuses control characters that the URL parser would strip", () => {
+    // tab, LF, CR, NUL — written as escapes so the bytes survive any editor.
+    for (const raw of ["\u0009", "\u000a", "\u000d", "\u0000"]) {
+      const attack = `/${raw}/evil.test/x`;
+      expect(sanitizeReturnTo(attack)).toBe("/");
+      expect(new URL(sanitizeReturnTo(attack), "https://app.example").origin).toBe(
+        "https://app.example",
+      );
+    }
+  });
 });

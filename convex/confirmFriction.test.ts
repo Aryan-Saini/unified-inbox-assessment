@@ -81,4 +81,57 @@ describe("recipient header integrity (review finding)", () => {
       ),
     ).rejects.toThrow(/control characters/);
   });
+
+  /**
+   * The same injection, one field over. The idempotency key reaches Gmail's
+   * `X-Unified-Inbox-Key` header and is deliberately *outside* the confirmation
+   * digest, so a CR/LF here smuggled a `Bcc:` past a confirm screen that showed
+   * only the stored recipient — the confirm gate's central promise, broken by a
+   * field nobody looks at. Length alone was the only check.
+   */
+  it("refuses an idempotency key carrying CR/LF header injection", async () => {
+    fakeProviders().install();
+    const t = convexTest(schema, modules);
+    const userId = await insertUser(t);
+    const connectionId = await insertConnection(t, userId);
+
+    await expect(
+      t.run(async (ctx) =>
+        createDraft(ctx, {
+          userId,
+          channel: "gmail",
+          connectionId,
+          to: "alice@example.test",
+          body: "hello",
+          // Long enough to clear the 8..128 length check, which was the only
+          // thing standing here before.
+          idempotencyKey: "abcdefgh\r\nBcc: harvest@evil.test",
+        }),
+      ),
+    ).rejects.toThrow(/letters, digits/);
+  });
+
+  it("still accepts the ordinary key shapes", async () => {
+    fakeProviders().install();
+    const t = convexTest(schema, modules);
+    const userId = await insertUser(t);
+    const connectionId = await insertConnection(t, userId);
+
+    for (const idempotencyKey of [
+      "idem_0123456789abcdef0123456789abcdef",
+      "order-2024.11:7_final",
+    ]) {
+      const { draft } = await t.run(async (ctx) =>
+        createDraft(ctx, {
+          userId,
+          channel: "gmail",
+          connectionId,
+          to: "alice@example.test",
+          body: "hello",
+          idempotencyKey,
+        }),
+      );
+      expect(draft.idempotencyKey).toBe(idempotencyKey);
+    }
+  });
 });

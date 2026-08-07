@@ -75,6 +75,12 @@ export function sanitizeReturnTo(returnTo: string | undefined): string {
   if (returnTo.startsWith("//")) return "/";
   if (returnTo.includes("\\")) return "/";
   if (returnTo.length > 512) return "/";
+  // The WHATWG URL parser *strips* tab, CR and LF before parsing, so a leading
+  // `/` followed by one of them is not the path it looks like: `"/\t/evil.test"`
+  // survives every check above and then resolves to `https://evil.test/` — a
+  // plain open redirect off our own OAuth domain. Control characters have no
+  // business in a path, so they are refused rather than stripped.
+  if (/[\u0000-\u001f\u007f]/.test(returnTo)) return "/";
   return returnTo;
 }
 

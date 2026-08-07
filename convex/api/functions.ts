@@ -230,16 +230,13 @@ export const createDraftForApi = internalMutation({
     const connectionId = resolveId(ctx, "connections", args.connectionId);
 
     // Replying to a result carries the thread over, which is what makes an API
-    // reply land in the same conversation a UI reply would.
-    let replyToResultId: Id<"searchResults"> | undefined;
-    let replyToExternalId: string | undefined;
-    let threadId: string | undefined;
-    if (args.replyToResultId !== undefined) {
-      replyToResultId = resolveId(ctx, "searchResults", args.replyToResultId);
-      const result = await own(ctx, "searchResults", replyToResultId, args.userId);
-      replyToExternalId = result.externalId;
-      threadId = result.threadId;
-    }
+    // reply land in the same conversation a UI reply would. Only the id is
+    // resolved here; `createDraft` proves ownership and derives the threading
+    // headers from the owned result, so both shells share one implementation.
+    const replyToResultId =
+      args.replyToResultId === undefined
+        ? undefined
+        : resolveId(ctx, "searchResults", args.replyToResultId);
 
     const { draft, reused } = await createDraft(ctx, {
       userId: args.userId,
@@ -250,8 +247,6 @@ export const createDraftForApi = internalMutation({
       body: args.body,
       idempotencyKey: args.idempotencyKey,
       replyToResultId,
-      replyToExternalId,
-      threadId,
     });
 
     const row = await own(ctx, "drafts", draft.id, args.userId);

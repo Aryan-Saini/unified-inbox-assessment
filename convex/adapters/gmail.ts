@@ -370,18 +370,25 @@ function buildRawMessage(payload: SendPayload, from: string): string {
   // The idempotency key, twice: once in a header Gmail's search indexes
   // (`rfc822msgid:`) and once in a header a human reading raw source can see.
   if (payload.idempotencyKey !== undefined) {
+    // `headerSafe` even though the draft layer already restricts the key to a
+    // header-safe charset: defense-in-depth so this sender can never emit an
+    // unsafe header regardless of how it was called.
     lines.push(
       `Message-ID: ${deterministicMessageId(payload.idempotencyKey, from)}`,
-      `X-Unified-Inbox-Key: ${payload.idempotencyKey}`,
+      `X-Unified-Inbox-Key: ${headerSafe(payload.idempotencyKey)}`,
     );
   }
 
   // Threading headers make the reply land in the original conversation rather
-  // than starting a new one. Only emitted for a real RFC Message-ID (which always
-  // contains an `@`): a Gmail *message id* here would be a malformed header, and
-  // `threadId` on the API call is what actually threads the reply anyway.
-  if (payload.inReplyTo !== undefined && payload.inReplyTo.includes("@")) {
-    lines.push(`In-Reply-To: ${payload.inReplyTo}`, `References: ${payload.inReplyTo}`);
+  // than starting a new one. Only emitted for a strict RFC Message-ID —
+  // angle-bracketed, no whitespace or control chars (a CR/LF is whitespace and so
+  // is refused here) — because this value becomes a raw header: a Gmail *message
+  // id* here would be malformed, and anything unmatched could be an injection.
+  // `threadId` on the API call is what actually threads the reply anyway, and the
+  // value is `headerSafe`d as a further belt-and-braces.
+  if (payload.inReplyTo !== undefined && /^<[^\s<>]+@[^\s<>]+>$/.test(payload.inReplyTo)) {
+    const safeInReplyTo = headerSafe(payload.inReplyTo);
+    lines.push(`In-Reply-To: ${safeInReplyTo}`, `References: ${safeInReplyTo}`);
   }
 
   return `${lines.join("\r\n")}\r\n\r\n${payload.body}`;

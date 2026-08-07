@@ -90,6 +90,22 @@ const adapterResult = v.object({
   lastReplyAt: v.optional(v.string()),
 });
 
+/**
+ * A result's `url` is rendered as an `href`/`img src` in the UI, so a
+ * `javascript:` or `data:` scheme would be a stored injection vector. This is the
+ * single server-side chokepoint every adapter's results flow through — Slack
+ * permalinks and Tavily web URLs included — so a result whose `url` does not
+ * parse to `http:`/`https:` is dropped here rather than stored.
+ */
+function isHttpUrl(url: string): boolean {
+  try {
+    const protocol = new URL(url).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 /* ------------------------------------------------------------------- helpers */
 
 /**
@@ -258,12 +274,16 @@ export const completeSourceRun = internalMutation({
 
     const now = Date.now();
 
+    // Drop any result with a non-http(s) url before it is stored (see
+    // `isHttpUrl`). The source's counts below reflect what was actually kept.
+    const results = args.results.filter((result) => isHttpUrl(result.url));
+
     // `seq` is the arrival order the UI appends by. Seeded from the parent's
     // running count — which this mutation also advances — so it stays monotonic
     // across concurrently-finishing sources without a second read.
     const base = search.resultCount;
 
-    for (const [index, result] of args.results.entries()) {
+    for (const [index, result] of results.entries()) {
       await ctx.db.insert("searchResults", {
         searchId: row.searchId,
         userId: row.userId,
@@ -304,13 +324,13 @@ export const completeSourceRun = internalMutation({
       errorKind: undefined,
       errorMessage: undefined,
       attemptCount: args.attemptCount,
-      resultCount: args.results.length,
+      resultCount: results.length,
       finishedAt: now,
       durationMs: args.durationMs,
     });
 
     await ctx.db.patch("searches", row.searchId, {
-      resultCount: base + args.results.length,
+      resultCount: base + results.length,
     });
 
     // A successful provider call is the only honest definition of "last used",

@@ -61,9 +61,13 @@ export const upsertFromClerk = internalMutation({
  * never signed in to this app is normal, not an error, and throwing would make
  * Svix retry a delete that can never succeed.
  *
- * NOTE: this deletes the `users` row only. Rows that hang off it (connections,
- * searches, drafts, sends) are left in place — cascading those is a separate
- * job, and doing it here would risk blowing the mutation's transaction limits.
+ * NOTE: this deletes the `users` row and revokes every live credential that
+ * hangs off it — API keys and OAuth grants — because a deleted Clerk user has
+ * no UI left to revoke them, and a key issued before deletion would otherwise
+ * keep authenticating forever against still-decryptable tokens. History rows
+ * (searches, drafts, sends) are left in place for auditability: they hold no
+ * live credential, and cascading them would risk the mutation's transaction
+ * limits.
  */
 export const deleteFromClerk = internalMutation({
   args: { clerkUserId: v.string() },
@@ -74,6 +78,40 @@ export const deleteFromClerk = internalMutation({
       .unique();
 
     if (existing === null) return null;
+
+    const now = Date.now();
+
+    // Revoke every API key so `authenticate` refuses it even before its
+    // owner-existence check catches the deleted user row.
+    const keys = await ctx.db
+      .query("apiKeys")
+      .withIndex("by_user", (q) => q.eq("userId", existing._id))
+      .take(100);
+    for (const key of keys) {
+      if (key.revokedAt === undefined) {
+        await ctx.db.patch("apiKeys", key._id, { revokedAt: now });
+      }
+    }
+
+    // Destroy the stored grants: clear both ciphertexts and mark the row revoked,
+    // the same field set `connections.disconnect`/`retire` use, so no OAuth token
+    // survives the account it belonged to.
+    const connections = await ctx.db
+      .query("connections")
+      .withIndex("by_user", (q) => q.eq("userId", existing._id))
+      .take(100);
+    for (const connection of connections) {
+      await ctx.db.patch("connections", connection._id, {
+        accessTokenCipher: "",
+        refreshTokenCipher: undefined,
+        tokenExpiresAt: undefined,
+        refreshLockedUntil: undefined,
+        status: "revoked",
+        statusReason: "Owner account deleted.",
+        enabled: false,
+        updatedAt: now,
+      });
+    }
 
     await ctx.db.delete("users", existing._id);
     return null;

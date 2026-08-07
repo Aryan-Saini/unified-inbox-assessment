@@ -40,6 +40,7 @@ export const MOCK_CONNECTIONS: Connection[] = [
     scopes: ["gmail.readonly", "gmail.send"],
     lastUsed: "2m ago",
     enabled: true,
+    isSeed: false,
   },
   {
     id: "conn_gmail_ops",
@@ -51,6 +52,7 @@ export const MOCK_CONNECTIONS: Connection[] = [
     scopes: ["gmail.readonly", "gmail.send"],
     lastUsed: "6h ago",
     enabled: true,
+    isSeed: false,
   },
   {
     id: "conn_slack_hq",
@@ -61,6 +63,7 @@ export const MOCK_CONNECTIONS: Connection[] = [
     scopes: ["search:read", "chat:write", "users:read", "channels:history"],
     lastUsed: "4m ago",
     enabled: true,
+    isSeed: false,
   },
   {
     id: "conn_slack_partners",
@@ -72,6 +75,7 @@ export const MOCK_CONNECTIONS: Connection[] = [
     scopes: ["search:read"],
     lastUsed: "1d ago",
     enabled: true,
+    isSeed: false,
   },
 ];
 

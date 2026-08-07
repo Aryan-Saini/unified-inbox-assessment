@@ -65,6 +65,7 @@ export function useConnections(): UseConnections {
       scopes: row.scopes,
       lastUsed: formatAge(row.lastUsedAt, now),
       enabled: row.enabled,
+      isSeed: row.isSeed,
     }));
   }, [rows, now]);
 
