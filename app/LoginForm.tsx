@@ -6,6 +6,17 @@ import { useSignIn, useSignUp } from "@clerk/nextjs";
 const CODE_LENGTH = 6;
 
 /**
+ * How long any one step may run before the form gives up on it.
+ *
+ * Every await here is Clerk's, and a Clerk call that never settles leaves the
+ * button on "Verifying…" with no way out but a refresh — `run()` only clears
+ * `busy` in its `finally`. `ClerkSetActiveGuard` removes the known cause; this
+ * is the backstop for the rest, and it says so rather than pretending the
+ * sign-in worked.
+ */
+const STEP_TIMEOUT_MS = 8000;
+
+/**
  * Finish authentication with a document navigation rather than Clerk's default
  * Next router transition. Codespaces proxies can make that transition arrive as
  * an invalid Server Action request even though Clerk has already established the
@@ -251,8 +262,22 @@ export function LoginForm() {
     setBusy(true);
     setError(null);
     setNotice(null);
+    let deadline: ReturnType<typeof setTimeout> | undefined;
     try {
-      await action();
+      await Promise.race([
+        action(),
+        new Promise<never>((_, reject) => {
+          deadline = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  "This step didn't finish. Reload the page and try again.",
+                ),
+              ),
+            STEP_TIMEOUT_MS,
+          );
+        }),
+      ]);
     } catch (thrown) {
       fail(
         thrown instanceof Error
@@ -260,6 +285,7 @@ export function LoginForm() {
           : "Something went wrong. Try again.",
       );
     } finally {
+      clearTimeout(deadline);
       setBusy(false);
     }
   }

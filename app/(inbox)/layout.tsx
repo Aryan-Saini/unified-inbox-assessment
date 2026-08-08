@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
+import { ClerkSetActiveGuard } from "../ClerkSetActiveGuard";
 import { ConvexClientProvider } from "../ConvexClientProvider";
 import "../globals.css";
 
@@ -50,9 +51,10 @@ export default function InboxLayout({
       >
         {/* Clerk v7 places ClerkProvider inside <body>, not around <html>. */}
         <ClerkProvider>
-          <ConvexClientProvider>
-            {children}
-          </ConvexClientProvider>
+          {/* Has to sit inside the provider: it wraps a hook the provider
+              installs. See `app/ClerkSetActiveGuard.tsx`. */}
+          <ClerkSetActiveGuard />
+          <ConvexClientProvider>{children}</ConvexClientProvider>
         </ClerkProvider>
       </body>
     </html>
