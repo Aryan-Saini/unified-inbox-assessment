@@ -163,10 +163,11 @@ function parseIpv4(hostname: string): number[] | undefined {
  * - a **private-network** origin is allowed on any port when
  *   `ALLOW_PRIVATE_NETWORK_ORIGINS` is `"true"`, which is what lets a phone on
  *   the same Wi-Fi finish a flow (`isPrivateNetworkHost`). Off by default.
- * - a **GitHub Codespaces** forwarded-port origin is allowed over HTTPS. GitHub
- *   owns the exact `app.github.dev` namespace and authenticates access to private
- *   forwarded ports; accepting it lets an OAuth flow return to its initiating
- *   Codespace instead of falling back to localhost.
+ * - a **GitHub Codespaces** forwarded-port origin is allowed over HTTPS when
+ *   `ALLOW_CODESPACES_ORIGINS` is `"true"`, which lets an OAuth flow return to its
+ *   initiating Codespace instead of falling back to localhost (`isCodespacesHost`).
+ *   GitHub owns the exact `app.github.dev` namespace, but every tenant shares it,
+ *   so this is opt-in and belongs on a dev deployment only. Off by default.
  * - anything else must appear in `APP_BASE_URL` or `APP_ORIGIN_ALLOWLIST`
  *   (comma-separated), so a deployed frontend is registered exactly once.
  *
@@ -189,6 +190,7 @@ export function resolveAppOrigin(proposed: string | undefined): string | undefin
   if (LOOPBACK_HOSTS.has(url.hostname)) return url.origin;
 
   if (
+    process.env.ALLOW_CODESPACES_ORIGINS === "true" &&
     url.protocol === "https:" &&
     url.port === "" &&
     url.username === "" &&

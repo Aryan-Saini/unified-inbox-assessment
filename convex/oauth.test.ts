@@ -25,6 +25,7 @@ const ENV_KEYS = [
   "APP_BASE_URL",
   "APP_ORIGIN_ALLOWLIST",
   "ALLOW_PRIVATE_NETWORK_ORIGINS",
+  "ALLOW_CODESPACES_ORIGINS",
 ] as const;
 
 /** Restore whatever the runner had, so these tests cannot leak into others. */
@@ -152,9 +153,32 @@ describe("resolveAppOrigin — GitHub Codespaces", () => {
   beforeEach(() => {
     process.env.APP_BASE_URL = "http://localhost:3000";
     delete process.env.APP_ORIGIN_ALLOWLIST;
+    process.env.ALLOW_CODESPACES_ORIGINS = "true";
   });
 
-  it("allows an HTTPS forwarded-port origin without configuration", () => {
+  afterEach(() => {
+    delete process.env.ALLOW_CODESPACES_ORIGINS;
+  });
+
+  it("is off unless the flag is exactly \"true\"", () => {
+    // Every Codespaces tenant shares `app.github.dev`, so a deployment that has
+    // not opted in must not return to one.
+    delete process.env.ALLOW_CODESPACES_ORIGINS;
+    expect(
+      resolveAppOrigin(
+        "https://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev",
+      ),
+    ).toBeUndefined();
+
+    process.env.ALLOW_CODESPACES_ORIGINS = "TRUE";
+    expect(
+      resolveAppOrigin(
+        "https://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("allows an HTTPS forwarded-port origin when the flag is set", () => {
     expect(
       resolveAppOrigin(
         "https://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev",
