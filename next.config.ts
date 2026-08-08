@@ -21,13 +21,26 @@ const nextConfig: NextConfig = {
     // (a plain `next dev` in a terminal that didn't inherit them) and wrong
     // whenever the app isn't on port 3000. The wildcard covers the same
     // Codespace on any port, and the literal fallback covers any Codespace at
-    // all — development-only, so a production build never carries it.
+    // all.
+    //
+    // `localhost:3000` is there because the public-host wildcards do not
+    // actually cover every failing request. Captured in the Codespace: the
+    // tunnel sometimes rewrites the browser's `Origin` to `localhost:3000`
+    // while `x-forwarded-host` stays `<name>-3000.app.github.dev` (seen while
+    // the tunnel relay cookie is being refreshed), and Next compares those two
+    // — so no amount of public hostname matches it and the 500 comes back
+    // intermittently. Safe to trust: a browser never lets a foreign page forge
+    // `Origin`, so the header can only say `localhost:3000` if the request
+    // really came from this machine or from the tunnel in front of it.
+    //
+    // The whole fallback block is development-only, so a production build
+    // never carries any of it.
     serverActions: {
       allowedOrigins: [
         ...(codespaceOrigin ? [codespaceOrigin] : []),
         ...(codespacesDomain ? [`*.${codespacesDomain}`] : []),
         ...(process.env.NODE_ENV === "development"
-          ? ["*.app.github.dev"]
+          ? ["*.app.github.dev", "localhost:3000"]
           : []),
       ],
     },
