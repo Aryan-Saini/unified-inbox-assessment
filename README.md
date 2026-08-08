@@ -273,6 +273,7 @@ Add `--prod` to set the same value on the deployed environment.
 | `APP_BASE_URL` | yes | Fallback origin the OAuth callback returns the browser to, e.g. `http://localhost:3000`. The browser proposes its own origin and that wins when allowed. |
 | `APP_ORIGIN_ALLOWLIST` | no | Comma-separated extra origins the callback may return to. Localhost never needs listing. |
 | `ALLOW_PRIVATE_NETWORK_ORIGINS` | no | `"true"` also allows a private-network origin on any port, so a phone on the same Wi-Fi can finish an OAuth flow. `pnpm dev:lan` sets it on dev, leave it unset on deployed. |
+| `ALLOW_CODESPACES_ORIGINS` | no | `"true"` also allows an HTTPS GitHub Codespaces forwarded-port origin (`*.app.github.dev`) as an OAuth return target. Set it only on the dev deployment used from Codespaces, leave it unset on deployed. |
 | `WEB_SEARCH_PROVIDER` | no | `tavily`, or unset for the mock. |
 | `WEB_SEARCH_API_KEY` | no | Key for the chosen provider. Unset means mock. |
 | `ALLOW_FAULT_INJECTION` | no | `"true"` enables the demo failure switches. Inert otherwise. |
@@ -348,10 +349,19 @@ needs Convex authentication: either sign in interactively or provide a dev
 deployment key as the `CONVEX_DEPLOY_KEY` Codespaces secret. Keep it running only
 for the duration of backend development so it can push and watch those changes.
 
-Gmail and Slack OAuth callbacks also need the Codespace origin registered as
-`APP_BASE_URL` or in `APP_ORIGIN_ALLOWLIST`. Changing that backend environment
-setting likewise requires Convex authentication; it is not required just to
-start and inspect the app.
+Gmail and Slack OAuth callbacks also need the Codespace origin accepted by the
+backend: either register it as `APP_BASE_URL` / in `APP_ORIGIN_ALLOWLIST`, or set
+`ALLOW_CODESPACES_ORIGINS` to `true` on the dev deployment, which accepts any
+HTTPS `*.app.github.dev` forwarded-port origin and so survives a new Codespace
+getting a new hostname. It is off by default because that namespace is shared by
+every Codespaces tenant, and it stays unset on the deployed environment.
+
+```bash
+npx convex env set ALLOW_CODESPACES_ORIGINS true
+```
+
+Changing that backend environment setting likewise requires Convex
+authentication; it is not required just to start and inspect the app.
 
 After Convex and Clerk, no third-party signup is needed to see the whole product.
 Web search runs on the labelled deterministic mock so the fan-out has three real

@@ -5,6 +5,18 @@ import { useSignIn, useSignUp } from "@clerk/nextjs";
 
 const CODE_LENGTH = 6;
 
+/**
+ * Finish authentication with a document navigation rather than Clerk's default
+ * Next router transition. Codespaces proxies can make that transition arrive as
+ * an invalid Server Action request even though Clerk has already established the
+ * session, leaving the form stuck on "Verifying…" until the page is refreshed.
+ */
+const navigateAfterAuth = ({
+  decorateUrl,
+}: {
+  decorateUrl: (url: string) => string;
+}) => window.location.assign(decorateUrl("/dashboard"));
+
 type Step =
   | "email"
   | "code"
@@ -93,7 +105,7 @@ export function LoginForm() {
 
     switch (signIn.status) {
       case "complete": {
-        const finalized = await signIn.finalize();
+        const finalized = await signIn.finalize({ navigate: navigateAfterAuth });
         if (finalized.error) failWith(finalized.error);
         return;
       }
@@ -137,7 +149,7 @@ export function LoginForm() {
     }
 
     if (signUp.status === "complete") {
-      const finalized = await signUp.finalize();
+      const finalized = await signUp.finalize({ navigate: navigateAfterAuth });
       if (finalized.error) failWith(finalized.error);
       return;
     }

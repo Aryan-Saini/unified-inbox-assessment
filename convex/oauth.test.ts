@@ -25,6 +25,7 @@ const ENV_KEYS = [
   "APP_BASE_URL",
   "APP_ORIGIN_ALLOWLIST",
   "ALLOW_PRIVATE_NETWORK_ORIGINS",
+  "ALLOW_CODESPACES_ORIGINS",
 ] as const;
 
 /** Restore whatever the runner had, so these tests cannot leak into others. */
@@ -145,6 +146,84 @@ describe("resolveAppOrigin — private network", () => {
       expect(resolveAppOrigin("https://10.0.0")).toBe("https://10.0.0.0");
       expect(resolveAppOrigin("https://192.168.257")).toBe("https://192.168.1.1");
     });
+  });
+});
+
+describe("resolveAppOrigin — GitHub Codespaces", () => {
+  beforeEach(() => {
+    process.env.APP_BASE_URL = "http://localhost:3000";
+    delete process.env.APP_ORIGIN_ALLOWLIST;
+    process.env.ALLOW_CODESPACES_ORIGINS = "true";
+  });
+
+  afterEach(() => {
+    delete process.env.ALLOW_CODESPACES_ORIGINS;
+  });
+
+  it("is off unless the flag is exactly \"true\"", () => {
+    // Every Codespaces tenant shares `app.github.dev`, so a deployment that has
+    // not opted in must not return to one.
+    delete process.env.ALLOW_CODESPACES_ORIGINS;
+    expect(
+      resolveAppOrigin(
+        "https://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev",
+      ),
+    ).toBeUndefined();
+
+    process.env.ALLOW_CODESPACES_ORIGINS = "TRUE";
+    expect(
+      resolveAppOrigin(
+        "https://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("allows an HTTPS forwarded-port origin when the flag is set", () => {
+    expect(
+      resolveAppOrigin(
+        "https://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev",
+      ),
+    ).toBe(
+      "https://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev",
+    );
+  });
+
+  it("returns only the origin", () => {
+    expect(
+      resolveAppOrigin(
+        "https://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev/dashboard?a=1#x",
+      ),
+    ).toBe(
+      "https://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev",
+    );
+  });
+
+  it("refuses insecure, malformed and lookalike Codespaces origins", () => {
+    expect(
+      resolveAppOrigin(
+        "http://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev",
+      ),
+    ).toBeUndefined();
+    expect(
+      resolveAppOrigin(
+        "https://automatic-fortnight-4jq59jwqx9gx3jp9-preview.app.github.dev",
+      ),
+    ).toBeUndefined();
+    expect(
+      resolveAppOrigin(
+        "https://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev.evil.test",
+      ),
+    ).toBeUndefined();
+    expect(
+      resolveAppOrigin(
+        "https://evil.automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev",
+      ),
+    ).toBeUndefined();
+    expect(
+      resolveAppOrigin(
+        "https://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev:8443",
+      ),
+    ).toBeUndefined();
   });
 });
 
