@@ -319,7 +319,18 @@ than by the browser.
 22 image with pnpm via corepack, runs a frozen `pnpm install` on create, and
 forwards port 3000.
 
-Open the repository in a Codespace. If you store
+**[Create a Codespace on `main`](https://codespaces.new/Aryan-Saini/unified-inbox-assessment?ref=main)**
+
+Use that direct link if GitHub does not show the Codespaces option under the
+repository's **Code** button. Then:
+
+1. Sign in to GitHub and click **Create codespace**.
+2. Wait for the automatic dependency installation to finish.
+3. Upload the provided `.env.reviewer` file and rename it to `.env.local`.
+4. Run `pnpm dev` and open forwarded port 3000.
+5. Sign in with the [reviewer account](#reviewer-login).
+
+If you instead store
 `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, and
 `CLERK_JWT_ISSUER_DOMAIN` as repository Codespaces secrets, they are already
 available in the terminal. The devcontainer points the app at the local-dev
