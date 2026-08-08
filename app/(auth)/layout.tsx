@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
+import { ClerkSetActiveGuard } from "../ClerkSetActiveGuard";
 import { ConvexClientProvider } from "../ConvexClientProvider";
 import { Logo } from "../Logo";
 import "../globals.css";
@@ -43,6 +44,9 @@ export default function RootLayout({
       >
         {/* Clerk v7 places ClerkProvider inside <body>, not around <html>. */}
         <ClerkProvider>
+          {/* Has to sit inside the provider: it wraps a hook the provider
+              installs. See `app/ClerkSetActiveGuard.tsx`. */}
+          <ClerkSetActiveGuard />
           <ConvexClientProvider>
             {/* The user row is not upserted here: `/auth` reads nothing from
                 the backend, and a signed-in visitor is redirected to the
