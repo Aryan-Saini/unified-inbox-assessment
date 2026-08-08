@@ -4,7 +4,7 @@ Search Gmail, Slack and the web from one place.
 
 | | |
 | --- | --- |
-| Deployed app | https://unified-inbox-assessment.vercel.app |
+| **Deployed app** | **https://unified-inbox-assessment.vercel.app** — the graded URL, real Gmail and Slack OAuth, on Vercel |
 | Frontend | Next.js 16 (App Router, Turbopack) + Tailwind 4 |
 | Backend, DB, scheduler, cron | Convex |
 | Auth | Clerk for users, `uik_…` API keys for REST |
@@ -17,6 +17,15 @@ Search Gmail, Slack and the web from one place.
 | `/auth` | Sign in and sign up, one email-code flow. Signed out only |
 | `/documentation` | The REST reference, plus markdown and OpenAPI copies for agents. **Public** |
 | `/` | Redirects to whichever of these you belong on |
+
+The Convex backend is what the REST API and the OAuth callbacks live on, so its
+base URL is separate from the app's. There are two, and every `curl` example in
+this README takes one of them:
+
+| Convex deployment | Base URL | Used by |
+| --- | --- | --- |
+| deployed | `https://scintillating-moose-307.convex.site` | The deployed Vercel app above. Use this to exercise the REST API against the submitted deployment |
+| dev | `https://judicious-wildcat-326.convex.site` | Local and Codespaces. It is `NEXT_PUBLIC_CONVEX_SITE_URL` in `.env.local` |
 
 - [Reviewer login](#reviewer-login)
 - [Architecture](#architecture)
@@ -58,10 +67,11 @@ REST API / curl ───┘
 ```
 
 `app/(inbox)/` is just the frontend. To try the `curl` version, create an API key
-under Settings → API keys, then provide the base URL, key, and recipient:
+under Settings → API keys, then provide the base URL, key, and recipient. The
+base URL is either Convex base URL from the table at the top:
 
 ```bash
-UNIFIED_INBOX_BASE_URL=https://<slug>.convex.site \
+UNIFIED_INBOX_BASE_URL=https://scintillating-moose-307.convex.site \
 UNIFIED_INBOX_API_KEY=uik_… \
 UNIFIED_INBOX_RECIPIENT=you@example.com ./docs/api-walkthrough.sh
 ```
@@ -233,8 +243,9 @@ npx convex dev                 # provisions the deployment, writes CONVEX_* into
 pnpm dev                       # in a second terminal
 ```
 
-`pnpm exec convex dev` has to stay running in development, it pushes `convex/`
-on save.
+`pnpm exec convex dev` only has to stay running while you are changing backend
+code, it pushes `convex/` on save. To just run the app against the backend that
+already exists, `pnpm dev` on its own is enough.
 
 Two separate places hold config and mixing them up is the usual cause of a
 confusing failure. `.env.local` is read by **Next.js only**. Everything the
@@ -496,11 +507,12 @@ npx convex env set ALLOW_FAULT_INJECTION true
 
 1. Open Settings → API keys.
 2. Create a key and save it when shown.
-3. Use the Convex site URL as the base URL.
+3. Use the Convex base URL from the table at the top, matching the deployment
+   you made the key on.
 4. Send the key as a bearer token:
 
 ```bash
-API=https://<deployment>.convex.site/api/v1
+API=https://scintillating-moose-307.convex.site/api/v1
 KEY=uik_…
 
 curl -H "Authorization: Bearer $KEY" "$API/connections"
@@ -543,7 +555,7 @@ All errors use:
 Requires `curl`, `python3`, a created API key, and a recipient:
 
 ```bash
-UNIFIED_INBOX_BASE_URL=https://<deployment>.convex.site \
+UNIFIED_INBOX_BASE_URL=https://scintillating-moose-307.convex.site \
 UNIFIED_INBOX_API_KEY=uik_… \
 UNIFIED_INBOX_RECIPIENT=you@example.com ./docs/api-walkthrough.sh
 ```
