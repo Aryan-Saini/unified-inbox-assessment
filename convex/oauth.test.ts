@@ -148,6 +148,61 @@ describe("resolveAppOrigin — private network", () => {
   });
 });
 
+describe("resolveAppOrigin — GitHub Codespaces", () => {
+  beforeEach(() => {
+    process.env.APP_BASE_URL = "http://localhost:3000";
+    delete process.env.APP_ORIGIN_ALLOWLIST;
+  });
+
+  it("allows an HTTPS forwarded-port origin without configuration", () => {
+    expect(
+      resolveAppOrigin(
+        "https://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev",
+      ),
+    ).toBe(
+      "https://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev",
+    );
+  });
+
+  it("returns only the origin", () => {
+    expect(
+      resolveAppOrigin(
+        "https://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev/dashboard?a=1#x",
+      ),
+    ).toBe(
+      "https://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev",
+    );
+  });
+
+  it("refuses insecure, malformed and lookalike Codespaces origins", () => {
+    expect(
+      resolveAppOrigin(
+        "http://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev",
+      ),
+    ).toBeUndefined();
+    expect(
+      resolveAppOrigin(
+        "https://automatic-fortnight-4jq59jwqx9gx3jp9-preview.app.github.dev",
+      ),
+    ).toBeUndefined();
+    expect(
+      resolveAppOrigin(
+        "https://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev.evil.test",
+      ),
+    ).toBeUndefined();
+    expect(
+      resolveAppOrigin(
+        "https://evil.automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev",
+      ),
+    ).toBeUndefined();
+    expect(
+      resolveAppOrigin(
+        "https://automatic-fortnight-4jq59jwqx9gx3jp9-3000.app.github.dev:8443",
+      ),
+    ).toBeUndefined();
+  });
+});
+
 describe("resolveAppOrigin — registered origins", () => {
   beforeEach(() => {
     process.env.APP_BASE_URL = "https://inbox.example";

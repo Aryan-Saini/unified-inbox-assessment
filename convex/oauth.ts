@@ -88,6 +88,15 @@ export function sanitizeReturnTo(returnTo: string | undefined): string {
 /** Hosts that can only ever mean the visitor's own machine. */
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
+/** A GitHub Codespaces forwarded-port hostname, such as
+ * `automatic-fortnight-abc123-3000.app.github.dev`. The final numeric label is
+ * the forwarded port; matching the whole hostname keeps suffix lookalikes out. */
+function isCodespacesHost(hostname: string): boolean {
+  return /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?-\d+\.app\.github\.dev$/.test(
+    hostname,
+  );
+}
+
 /**
  * Hosts that can only mean a machine on the visitor's own network.
  *
@@ -154,6 +163,10 @@ function parseIpv4(hostname: string): number[] | undefined {
  * - a **private-network** origin is allowed on any port when
  *   `ALLOW_PRIVATE_NETWORK_ORIGINS` is `"true"`, which is what lets a phone on
  *   the same Wi-Fi finish a flow (`isPrivateNetworkHost`). Off by default.
+ * - a **GitHub Codespaces** forwarded-port origin is allowed over HTTPS. GitHub
+ *   owns the exact `app.github.dev` namespace and authenticates access to private
+ *   forwarded ports; accepting it lets an OAuth flow return to its initiating
+ *   Codespace instead of falling back to localhost.
  * - anything else must appear in `APP_BASE_URL` or `APP_ORIGIN_ALLOWLIST`
  *   (comma-separated), so a deployed frontend is registered exactly once.
  *
@@ -174,6 +187,16 @@ export function resolveAppOrigin(proposed: string | undefined): string | undefin
   if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
 
   if (LOOPBACK_HOSTS.has(url.hostname)) return url.origin;
+
+  if (
+    url.protocol === "https:" &&
+    url.port === "" &&
+    url.username === "" &&
+    url.password === "" &&
+    isCodespacesHost(url.hostname)
+  ) {
+    return url.origin;
+  }
 
   if (
     process.env.ALLOW_PRIVATE_NETWORK_ORIGINS === "true" &&
