@@ -5,6 +5,7 @@ Search Gmail, Slack and the web from one place.
 | | |
 | --- | --- |
 | **Deployed app** | **https://unified-inbox-assessment.vercel.app** — the graded URL, real Gmail and Slack OAuth, on Vercel |
+| **Demo video** | **https://www.youtube.com/watch?v=lyPEjSdJe1U** — a walkthrough of the product |
 | Frontend | Next.js 16 (App Router, Turbopack) + Tailwind 4 |
 | Backend, DB, scheduler, cron | Convex |
 | Auth | Clerk for users, `uik_…` API keys for REST |
